@@ -18,14 +18,15 @@ El comportamiento está definido en [DESIGN.md](./docs/DESIGN.md).
 
 ## Empezar
 
-Requisitos: Java 25, Rust, Node 22 y Podman o Docker. Desde la raíz, una terminal por línea:
+Requisitos: Java 25, Rust, Node 22 y Podman o Docker. Desde la raíz, una terminal por línea (antes,
+una vez: `(cd ui && cp .env.example .env && npm ci)`):
 
 ```bash
-(cd xhandler/engine && cargo run)                    # motor
-(cd xhandler/engine && cargo run --bin sunat-fake)   # SUNAT simulada
-./mvnw -f xhandler quarkus:dev -pl app               # xhandler-service
-./mvnw quarkus:dev -pl searchpe                      # searchpe
-(cd ui && cp .env.example .env && npm ci && npm run start:dev)
+(cd xhandler/engine && cargo run)                   # motor             :8090
+(cd xhandler/engine && cargo run --bin sunat-fake)  # SUNAT simulada    :8099
+(cd xhandler && ../mvnw quarkus:dev -pl app)        # xhandler-service  :8080
+(cd searchpe && ../mvnw quarkus:dev)                # searchpe          :8081
+(cd ui && npm run start:dev)                        # UI                :3000
 ```
 
 Abre http://localhost:3000 e ingresa como `olga` / `olga`. Detalles en

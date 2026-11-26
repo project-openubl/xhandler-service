@@ -15,14 +15,20 @@ How to run the platform on your machine. For conventions, tests and CI, read
 
 ## Start the app
 
-From the repository root, one terminal per line:
+Once, to set up the UI:
 
 ```bash
-(cd xhandler/engine && cargo run)                    # engine on :8090
-(cd xhandler/engine && cargo run --bin sunat-fake)   # SUNAT fake on :8099
-./mvnw -f xhandler quarkus:dev -pl app               # xhandler-service on :8080
-./mvnw quarkus:dev -pl searchpe                      # searchpe on :8081
-(cd ui && cp .env.example .env && npm ci && npm run start:dev)
+(cd ui && cp .env.example .env && npm ci)
+```
+
+Then from the repository root, one terminal per line:
+
+```bash
+(cd xhandler/engine && cargo run)                   # engine            :8090
+(cd xhandler/engine && cargo run --bin sunat-fake)  # SUNAT fake        :8099
+(cd xhandler && ../mvnw quarkus:dev -pl app)        # xhandler-service  :8080
+(cd searchpe && ../mvnw quarkus:dev)                # searchpe          :8081
+(cd ui && npm run start:dev)                        # UI                :3000
 ```
 
 Open http://localhost:3000 and log in as `olga` / `olga`.
