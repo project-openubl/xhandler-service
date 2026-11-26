@@ -44,7 +44,6 @@ public class BasicUserDto {
     private String password;
 
     @ValidPermission
-    @Valid
     @NotEmpty
     private Set<String> permissions;
 

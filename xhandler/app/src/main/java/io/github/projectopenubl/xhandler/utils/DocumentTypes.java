@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.utils;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 
 /** Maps xbuilder kinds to SUNAT's catalog 01 (DESIGN.md §1.3). */
@@ -12,9 +12,9 @@ public final class DocumentTypes {
     public static String tipoComprobante(String kind, JsonNode spec) {
         return switch (kind) {
             case "Invoice" -> {
-                String tipo = spec.path("tipo_comprobante").asText("");
+                String tipo = spec.path("tipo_comprobante").asString("");
                 if (tipo.isEmpty()) {
-                    tipo = spec.path("serie_numero").asText("").startsWith("B") ? "03" : "01";
+                    tipo = spec.path("serie_numero").asString("").startsWith("B") ? "03" : "01";
                 }
                 if (!tipo.equals("01") && !tipo.equals("03")) {
                     throw ApiException.invalid("invalid_document", "tipo_comprobante debe ser 01 (factura) o 03 (boleta).", null);
@@ -24,7 +24,7 @@ public final class DocumentTypes {
             case "CreditNote" -> "07";
             case "DebitNote" -> "08";
             case "DespatchAdvice" -> {
-                String tipo = spec.path("tipo_comprobante").asText("09");
+                String tipo = spec.path("tipo_comprobante").asString("09");
                 if (!tipo.equals("09") && !tipo.equals("31")) {
                     throw ApiException.invalid("invalid_document", "tipo_comprobante debe ser 09 (remitente) o 31 (transportista).", null);
                 }
@@ -43,7 +43,7 @@ public final class DocumentTypes {
         for (String field : new String[] {"cliente", "destinatario", "proveedor_receptor"}) {
             JsonNode node = spec.path(field).path("nombre");
             if (!node.isMissingNode() && !node.isNull()) {
-                return node.asText();
+                return node.asString();
             }
         }
         return null;

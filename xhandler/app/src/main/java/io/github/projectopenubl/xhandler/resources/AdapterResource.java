@@ -55,10 +55,10 @@ public class AdapterResource {
     private final EmitManager emit;
     private final AdapterTokenProvider adapterTokens;
     private final AuditManager auditor;
-    private final com.fasterxml.jackson.databind.ObjectMapper json;
+    private final tools.jackson.databind.ObjectMapper json;
 
     public AdapterResource(TenantAccess access, UblUploadManager ubl, EmitManager emit, AdapterTokenProvider adapterTokens, AuditManager auditor,
-            com.fasterxml.jackson.databind.ObjectMapper json, CompanyManager companyManager) {
+            tools.jackson.databind.ObjectMapper json, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.access = access;
         this.ubl = ubl;

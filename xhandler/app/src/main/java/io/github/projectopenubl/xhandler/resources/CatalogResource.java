@@ -2,8 +2,8 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.representations.idm.EntryRepresentation;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Constraints;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -21,7 +21,6 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -144,18 +143,18 @@ public class CatalogResource {
             throw ApiException.invalid("invalid_request", "Envíe los datos del registro.", null);
         }
         for (String field : REQUIRED.get(kind)) {
-            if (!data.hasNonNull(field) || data.get(field).asText().isBlank()) {
+            if (!data.hasNonNull(field) || data.get(field).asString().isBlank()) {
                 throw ApiException.invalid("invalid_request", "Falta el campo " + field + ".", null);
             }
         }
         String key = KEY.get(kind).isEmpty()
                 ? (id != null ? id.toString() : Ids.newId().toString())
-                : String.join(":", KEY.get(kind).stream().map(f -> data.get(f).asText().strip().toUpperCase(java.util.Locale.ROOT)).toList());
+                : String.join(":", KEY.get(kind).stream().map(f -> data.get(f).asString().strip().toUpperCase(java.util.Locale.ROOT)).toList());
         UUID entryId = id != null ? id : Ids.newId();
         try {
             if (id == null) {
                 catalogProvider.addEntry(entryId, tenantId, companyId, kind, key, data.toString(),
-                        data.hasNonNull("device_id") ? data.get("device_id").asText() : null);
+                        data.hasNonNull("device_id") ? data.get("device_id").asString() : null);
             } else {
                 catalogProvider.updateEntry(id, key, data.toString());
             }
@@ -180,11 +179,7 @@ public class CatalogResource {
     }
 
     private EntryRepresentation entry(CatalogProvider.CatalogRow r) {
-        try {
-            return new EntryRepresentation(r.id(), r.kind(), r.key(), json.readTree(r.data()), r.createdAt(), r.updatedAt());
-        } catch (IOException e) {
-            throw new java.io.UncheckedIOException(e);
-        }
+        return new EntryRepresentation(r.id(), r.kind(), r.key(), json.readTree(r.data()), r.createdAt(), r.updatedAt());
     }
 
     /** Customers and drivers are people's data: reads are audited (§3.4). */

@@ -65,11 +65,11 @@ public class JpaPsePlatformProvider implements PsePlatformProvider {
 
     @Override
     public void saveReport(String period, long accepted, long rejected, BigDecimal rate) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.pse_report (period, accepted, rejected, rate) VALUES (:p, :a, :r, :rate)
                         ON CONFLICT (period) DO UPDATE SET accepted = excluded.accepted, rejected = excluded.rejected,
                             rate = excluded.rate, computed_at = now()""")
                 .setParameter("p", period).setParameter("a", accepted).setParameter("r", rejected)
-                .setParameter("rate", rate).executeUpdate();
+                .setParameter("rate", rate).execute();
     }
 }

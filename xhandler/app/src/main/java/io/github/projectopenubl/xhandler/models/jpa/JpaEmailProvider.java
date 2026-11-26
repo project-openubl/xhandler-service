@@ -36,26 +36,26 @@ public class JpaEmailProvider implements EmailProvider {
 
     @Override
     public boolean deleteEmailSuppression(String address) {
-        int removed = em.createNativeQuery("DELETE FROM xhandler.email_suppression WHERE address = :a")
-                .setParameter("a", normalize(address)).executeUpdate();
+        int removed = em.createNativeStatement("DELETE FROM xhandler.email_suppression WHERE address = :a")
+                .setParameter("a", normalize(address)).execute();
         return removed != 0;
     }
 
     @Override
     public void suppressEmail(UUID tenantId, String address, String reason) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.email_suppression (tenant_id, address, reason) VALUES (:t, :a, :r)
                         ON CONFLICT (tenant_id, address) DO UPDATE SET reason = excluded.reason""")
-                .setParameter("t", tenantId).setParameter("a", normalize(address)).setParameter("r", reason).executeUpdate();
+                .setParameter("t", tenantId).setParameter("a", normalize(address)).setParameter("r", reason).execute();
     }
 
     @Override
     public void addSenderDomain(UUID id, UUID tenantId, String domain, String verificationToken) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.sender_domain (id, tenant_id, domain, verification_token) VALUES (:id, :t, :d, :token)
                         ON CONFLICT (tenant_id, domain) DO NOTHING""")
                 .setParameter("id", id).setParameter("t", tenantId).setParameter("d", domain)
-                .setParameter("token", verificationToken).executeUpdate();
+                .setParameter("token", verificationToken).execute();
     }
 
     @Override
@@ -80,8 +80,8 @@ public class JpaEmailProvider implements EmailProvider {
 
     @Override
     public void markSenderDomainVerified(String domain) {
-        em.createNativeQuery("UPDATE xhandler.sender_domain SET verified_at = coalesce(verified_at, now()) WHERE domain = :d")
-                .setParameter("d", domain).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.sender_domain SET verified_at = coalesce(verified_at, now()) WHERE domain = :d")
+                .setParameter("d", domain).execute();
     }
 
     @Override
@@ -98,7 +98,7 @@ public class JpaEmailProvider implements EmailProvider {
 
     @Override
     public void addEmailDelivery(UUID id, UUID tenantId, UUID documentId, String recipient, String result, String detail) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.delivery (id, tenant_id, document_id, channel, recipient, result, detail)
                         VALUES (:id, :tenant, :document, 'email', :recipient, :result, :detail)""")
                 .setParameter("id", id)
@@ -107,7 +107,7 @@ public class JpaEmailProvider implements EmailProvider {
                 .setParameter("recipient", recipient)
                 .setParameter("result", result)
                 .setParameter("detail", detail)
-                .executeUpdate();
+                .execute();
     }
 
     static String normalize(String address) {

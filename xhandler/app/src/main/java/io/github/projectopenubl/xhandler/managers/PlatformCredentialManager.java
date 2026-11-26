@@ -2,20 +2,20 @@ package io.github.projectopenubl.xhandler.managers;
 
 import io.github.projectopenubl.xhandler.keys.SecretBox;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import jakarta.enterprise.context.ApplicationScoped;
 import io.github.projectopenubl.xhandler.models.PlatformSecretProvider;
 import jakarta.transaction.Transactional;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import org.jboss.logging.Logger;
+import tools.jackson.core.JacksonException;
 
 /**
  * The platform's own credentials (DESIGN.md §7.1): the pool of PSE SOL users, the OSE's SUNAT
@@ -46,7 +46,7 @@ public class PlatformCredentialManager {
         SecretBox.Sealed sealed;
         try {
             sealed = box.seal(json.writeValueAsBytes(fields), context(id, purpose));
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
         platformSecretProvider.addPlatformCredential(id, purpose, label, sealed.ciphertext(), sealed.wrappedDataKey(), sealed.masterKeyId());
@@ -85,7 +85,7 @@ public class PlatformCredentialManager {
         try {
             return json.readValue(box.open(new SecretBox.Sealed(r.ciphertext(), r.wrappedDataKey(), r.masterKeyId()), context(r.id(), purpose)),
                     new TypeReference<>() {});
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }

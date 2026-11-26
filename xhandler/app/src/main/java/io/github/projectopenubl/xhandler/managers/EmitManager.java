@@ -16,10 +16,9 @@ import io.github.projectopenubl.xhandler.utils.Deadlines;
 import io.github.projectopenubl.xhandler.utils.DocumentTypes;
 import io.github.projectopenubl.xhandler.utils.Qr;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
@@ -46,6 +45,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import tools.jackson.core.JacksonException;
 
 /**
  * Emit (DESIGN.md §11.1): build, number, validate and sign inside one short transaction, reply
@@ -307,8 +307,8 @@ public class EmitManager {
             // Before any number or signature: a losing concurrent issue stops here (§11.10)
             draft.guard().run();
         }
-        ObjectNode document = request.document().deepCopy();
-        String kind = document.get("kind").asText();
+        ObjectNode document = (ObjectNode) request.document().deepCopy();
+        String kind = document.get("kind").asString();
         ObjectNode spec = (ObjectNode) document.get("spec");
         String tipo = DocumentTypes.tipoComprobante(kind, spec);
         String sunatEnv = company.getSunatEnv();
@@ -421,7 +421,7 @@ public class EmitManager {
         BigDecimal rate;
         if (spec.hasNonNull("tipo_cambio")) {
             try {
-                rate = new BigDecimal(spec.get("tipo_cambio").asText());
+                rate = new BigDecimal(spec.get("tipo_cambio").asString());
             } catch (NumberFormatException e) {
                 throw ApiException.invalid("invalid_document", "tipo_cambio debe ser un número.", null);
             }
@@ -452,7 +452,7 @@ public class EmitManager {
         }
         JsonNode forma = spec.path("forma_pago");
         boolean credito = forma.path("cuotas").isArray() && !forma.path("cuotas").isEmpty()
-                || "credito".equalsIgnoreCase(forma.path("tipo").asText(""));
+                || "credito".equalsIgnoreCase(forma.path("tipo").asString(""));
         return credito ? "credito" : "contado";
     }
 
@@ -468,7 +468,7 @@ public class EmitManager {
         }
         LocalDate fecha;
         try {
-            fecha = LocalDate.parse(spec.get("fecha_emision").asText());
+            fecha = LocalDate.parse(spec.get("fecha_emision").asString());
         } catch (java.time.format.DateTimeParseException e) {
             throw ApiException.invalid("invalid_document", "fecha_emision debe tener el formato AAAA-MM-DD.", null);
         }
@@ -490,13 +490,13 @@ public class EmitManager {
             return request.serie();
         }
         if (spec.hasNonNull("serie_numero")) {
-            String given = spec.get("serie_numero").asText();
+            String given = spec.get("serie_numero").asString();
             int dash = given.indexOf('-');
             return dash > 0 ? given.substring(0, dash) : given;
         }
         String prefix = null;
         if ("07".equals(tipo) || "08".equals(tipo)) {
-            String affected = spec.path("comprobante_afectado_serie_numero").asText("");
+            String affected = spec.path("comprobante_afectado_serie_numero").asString("");
             prefix = affected.startsWith("B") ? "B" : "F";
         } else if ("01".equals(tipo)) {
             prefix = "F";
@@ -510,7 +510,7 @@ public class EmitManager {
         ObjectNode proveedor = spec.hasNonNull("proveedor") && spec.get("proveedor").isObject()
                 ? (ObjectNode) spec.get("proveedor")
                 : spec.putObject("proveedor");
-        if (proveedor.hasNonNull("ruc") && !company.getRuc().equals(proveedor.get("ruc").asText())) {
+        if (proveedor.hasNonNull("ruc") && !company.getRuc().equals(proveedor.get("ruc").asString())) {
             throw ApiException.invalid("invalid_document", "El RUC del proveedor no coincide con el de la empresa.", null);
         }
         proveedor.put("ruc", company.getRuc());
@@ -521,12 +521,12 @@ public class EmitManager {
 
     /** The document a note affects, if it was issued here (same company and environment). */
     private UUID affectedDocument(UUID companyId, String sunatEnv, ObjectNode spec) {
-        String affected = spec.path("comprobante_afectado_serie_numero").asText(null);
+        String affected = spec.path("comprobante_afectado_serie_numero").asString(null);
         if (affected == null || !affected.contains("-")) {
             return null;
         }
         String serie = affected.substring(0, affected.indexOf('-'));
-        String tipoAfectado = spec.path("comprobante_afectado_tipo").asText(serie.startsWith("B") ? "03" : "01");
+        String tipoAfectado = spec.path("comprobante_afectado_tipo").asString(serie.startsWith("B") ? "03" : "01");
         long numero;
         try {
             numero = Long.parseLong(affected.substring(affected.indexOf('-') + 1));
@@ -541,7 +541,7 @@ public class EmitManager {
     private byte[] bytes(JsonNode node) {
         try {
             return json.writeValueAsBytes(node);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }
@@ -551,16 +551,16 @@ public class EmitManager {
         try {
             JsonNode canonical = canonical(json.valueToTree(request));
             return FileStore.sha256((scope + ":" + json.writeValueAsString(canonical)).getBytes(StandardCharsets.UTF_8));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }
 
     public static JsonNode canonical(JsonNode node) {
         if (node.isObject()) {
-            ObjectNode sorted = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+            ObjectNode sorted = tools.jackson.databind.node.JsonNodeFactory.instance.objectNode();
             java.util.List<String> names = new java.util.ArrayList<>();
-            node.fieldNames().forEachRemaining(names::add);
+            node.propertyNames().iterator().forEachRemaining(names::add);
             java.util.Collections.sort(names);
             for (String name : names) {
                 sorted.set(name, canonical(node.get(name)));
@@ -568,7 +568,7 @@ public class EmitManager {
             return sorted;
         }
         if (node.isArray()) {
-            com.fasterxml.jackson.databind.node.ArrayNode array = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.arrayNode();
+            tools.jackson.databind.node.ArrayNode array = tools.jackson.databind.node.JsonNodeFactory.instance.arrayNode();
             node.forEach(item -> array.add(canonical(item)));
             return array;
         }

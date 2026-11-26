@@ -49,9 +49,9 @@ public class JpaPlatformProvider implements PlatformProvider {
 
     @Override
     public void setPlatformSetting(String key, String value) {
-        em.createNativeQuery("INSERT INTO xhandler.platform_setting (key, value) VALUES (:k, :v) "
+        em.createNativeStatement("INSERT INTO xhandler.platform_setting (key, value) VALUES (:k, :v) "
                         + "ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = now()")
-                .setParameter("k", key).setParameter("v", value).executeUpdate();
+                .setParameter("k", key).setParameter("v", value).execute();
     }
 
     @Override
@@ -83,9 +83,9 @@ public class JpaPlatformProvider implements PlatformProvider {
     }
 
     private int updateEndpoint(String id, String assignment) {
-        return em.createNativeQuery("UPDATE xhandler.sunat_endpoint SET " + assignment + ", updated_at = now() WHERE id = :id")
+        return em.createNativeStatement("UPDATE xhandler.sunat_endpoint SET " + assignment + ", updated_at = now() WHERE id = :id")
                 .setParameter("id", id)
-                .executeUpdate();
+                .execute();
     }
 
     @Override

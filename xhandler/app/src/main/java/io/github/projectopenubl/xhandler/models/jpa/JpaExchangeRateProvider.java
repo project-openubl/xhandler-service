@@ -33,7 +33,7 @@ public class JpaExchangeRateProvider implements ExchangeRateProvider {
 
     @Override
     public void putRate(LocalDate day, BigDecimal compra, BigDecimal venta, String source) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.exchange_rate (day, compra, venta, source) VALUES (:day, :compra, :venta, :source)
                         ON CONFLICT (day) DO UPDATE SET compra = excluded.compra, venta = excluded.venta, source = excluded.source,
                             fetched_at = now()""")
@@ -41,7 +41,7 @@ public class JpaExchangeRateProvider implements ExchangeRateProvider {
                 .setParameter("compra", compra)
                 .setParameter("venta", venta)
                 .setParameter("source", source)
-                .executeUpdate();
+                .execute();
     }
 
 }

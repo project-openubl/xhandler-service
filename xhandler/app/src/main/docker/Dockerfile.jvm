@@ -1,6 +1,6 @@
 # App image. Build the app first: ./mvnw package -DskipTests
 # then: docker build -f app/src/main/docker/Dockerfile.jvm -t xhandler-service app
-FROM registry.access.redhat.com/ubi9/openjdk-25-runtime:1.24
+FROM registry.access.redhat.com/ubi10/openjdk-25-runtime:1.24
 
 ENV LANGUAGE='en_US:en'
 

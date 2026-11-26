@@ -315,9 +315,9 @@ class EmitTest {
         // A's key looks abandoned (A is stuck); B takes it over
         io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            io.quarkus.hibernate.orm.panache.Panache.getEntityManager().createNativeQuery(
+            io.quarkus.hibernate.orm.panache.Panache.getEntityManager().createNativeStatement(
                             "UPDATE xhandler.idempotency_key SET created_at = now() - interval '5 minutes' WHERE key = :key")
-                    .setParameter("key", key).executeUpdate();
+                    .setParameter("key", key).execute();
         });
         IdempotencyManager.Begun b = idempotency.begin(tenant, key, "h");
         org.junit.jupiter.api.Assertions.assertNotEquals(a.claim(), b.claim());

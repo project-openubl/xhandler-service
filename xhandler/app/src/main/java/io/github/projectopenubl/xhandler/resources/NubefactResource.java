@@ -10,8 +10,8 @@ import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.utils.NubefactAdapter;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.managers.EmitManager;
@@ -77,7 +77,7 @@ public class NubefactResource {
     @POST
     public Response call(@PathParam("companyId") UUID companyId, @HeaderParam("Authorization") String authorization, JsonNode request) {
         Client client = authenticate(companyId, authorization);
-        String operacion = request == null ? "" : request.path("operacion").asText("generar_comprobante");
+        String operacion = request == null ? "" : request.path("operacion").asString("generar_comprobante");
         try {
             return dispatch(client, operacion, request);
         } catch (java.time.format.DateTimeParseException e) {
@@ -94,8 +94,8 @@ public class NubefactResource {
             case "generar_anulacion" -> annul(client, request);
             case "consultar_anulacion" -> {
                 JsonNode view = find(client, request);
-                yield Response.ok(Map.of("numero", view.path("numero").asLong(), "anulado", "voided".equals(view.path("status").asText()),
-                        "estado_xhandler", view.path("status").asText())).build();
+                yield Response.ok(Map.of("numero", view.path("numero").asLong(), "anulado", "voided".equals(view.path("status").asString()),
+                        "estado_xhandler", view.path("status").asString())).build();
             }
             default -> throw ApiException.invalid("invalid_request", "operacion desconocida: " + operacion, null);
         };
@@ -115,15 +115,15 @@ public class NubefactResource {
     private Response annul(Client client, JsonNode request) {
         JsonNode view = find(client, request);
         // The token voids only what it emitted, not documents issued through the UI or the API
-        if (!"adapter".equals(view.path("origin").asText()) || !"nubefact".equals(view.path("labels").path("adapter").asText())) {
+        if (!"adapter".equals(view.path("origin").asString()) || !"nubefact".equals(view.path("labels").path("adapter").asString())) {
             throw ApiException.conflict("not_an_adapter_document", "El comprobante no fue emitido por la API compatible con Nubefact.");
         }
-        String motivo = request.path("motivo").asText("Anulación");
-        DocumentModel voidingDocument = voiding.voidDocumentAsPlatform(client.tenantId(), UUID.fromString(view.path("id").asText()),
+        String motivo = request.path("motivo").asString("Anulación");
+        DocumentModel voidingDocument = voiding.voidDocumentAsPlatform(client.tenantId(), UUID.fromString(view.path("id").asString()),
                 new VoidRequestRepresentation(motivo, true, null), UUID.randomUUID().toString());
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(client.tenantId());
-            documentEventProvider.addDocumentEvent(documentProvider.getDocument(UUID.fromString(view.path("id").asText())).orElse(null), null,
+            documentEventProvider.addDocumentEvent(documentProvider.getDocument(UUID.fromString(view.path("id").asString())).orElse(null), null,
                     "void requested by Nubefact token " + client.tokenId() + " (" + client.label() + ")", "token:" + client.tokenId(), null);
         });
         return Response.ok(Map.of("numero", view.path("numero").asLong(), "enlace", "", "sunat_ticket_numero", "",
@@ -132,7 +132,7 @@ public class NubefactResource {
 
     private JsonNode find(Client client, JsonNode request) {
         String tipo = NubefactAdapter.tipo(request);
-        String serie = request.path("serie").asText();
+        String serie = request.path("serie").asString();
         long numero = request.path("numero").asLong();
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(client.tenantId());

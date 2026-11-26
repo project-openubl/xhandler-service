@@ -7,7 +7,8 @@ import io.github.projectopenubl.xhandler.representations.idm.ExitRepresentation;
 import io.github.projectopenubl.xhandler.jobs.handlers.TenantExportJob;
 import io.github.projectopenubl.xhandler.models.TenantExitProvider;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
@@ -35,6 +36,7 @@ import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
+import tools.jackson.core.JacksonException;
 
 /**
  * A tenant leaving (DESIGN.md §13): a full export first — XML, CDR, PDF and metadata of every
@@ -172,8 +174,8 @@ public class TenantExit {
             return List.of();
         }
         try {
-            return new ObjectMapper().readValue(parts, new com.fasterxml.jackson.core.type.TypeReference<>() {});
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            return JsonMapper.builderWithJackson2Defaults().build().readValue(parts, new tools.jackson.core.type.TypeReference<>() {});
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }

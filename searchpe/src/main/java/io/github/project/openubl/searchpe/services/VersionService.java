@@ -123,11 +123,11 @@ public class VersionService {
         String deletePartitionQuery = String.format(DELETE_PARTITION_SQL, versionId);
         String deleteLegacyIndexQuery = String.format(DELETE_LEGACY_INDEX_SQL, versionId);
         VersionEntity.getEntityManager()
-                .createNativeQuery(deletePartitionQuery)
-                .executeUpdate();
+                .createNativeStatement(deletePartitionQuery)
+                .execute();
         VersionEntity.getEntityManager()
-                .createNativeQuery(deleteLegacyIndexQuery)
-                .executeUpdate();
+                .createNativeStatement(deleteLegacyIndexQuery)
+                .execute();
 
         ContribuyenteEntity.delete("id.versionId", versionId);
         VersionEntity.delete("id", versionId);

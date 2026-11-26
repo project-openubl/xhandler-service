@@ -31,7 +31,7 @@ public class NotificationEmailJob implements JobHandler {
 
     @Override
     public Map<String, Object> run(JobContext context) {
-        String to = context.args().path("to").asText();
+        String to = context.args().path("to").asString();
         boolean suppressed = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(context.tenantId());
             return emailProvider.isEmailSuppressed(to);
@@ -39,8 +39,8 @@ public class NotificationEmailJob implements JobHandler {
         if (suppressed) {
             return Map.of("skipped", to);
         }
-        String title = context.args().path("title").asText();
-        String body = context.args().path("body").asText();
+        String title = context.args().path("title").asString();
+        String body = context.args().path("body").asString();
         String html = "<p>" + escape(body) + "</p><p style=\"color:#666\">Notificación de xhandler. Configure sus avisos en la consola.</p>";
         sender.sendPlatform(new EmailSender.Message(null, null, List.of(to), List.of(), title, html, List.of()));
         return Map.of("to", to);

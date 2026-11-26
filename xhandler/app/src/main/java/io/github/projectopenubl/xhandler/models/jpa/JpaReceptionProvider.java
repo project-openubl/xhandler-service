@@ -23,7 +23,7 @@ public class JpaReceptionProvider implements ReceptionProvider {
 
     @Override
     public void addReception(NewReception r) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.reception (id, tenant_id, company_id, supplier_ruc, tipo_comprobante, serie, numero, fecha_emision,
                             moneda, total, digest_value, xml_ref, pdf_ref, cdr_ref, amounts, affected_serie_numero, affected_tipo)
                         VALUES (:id, :t, :c, :ruc, :tipo, :serie, :numero, :fecha, :moneda, :total, :digest, :xml, :pdf, :cdr,
@@ -40,7 +40,7 @@ public class JpaReceptionProvider implements ReceptionProvider {
                 .setParameter("xml", r.xmlRef())
                 .setParameter("pdf", r.pdfRef())
                 .setParameter("cdr", r.cdrRef())
-                .executeUpdate();
+                .execute();
         em.flush();
     }
 
@@ -108,10 +108,10 @@ public class JpaReceptionProvider implements ReceptionProvider {
 
     @Override
     public void stampValidity(UUID id, String state) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         UPDATE xhandler.reception SET validity_state = coalesce(:s, validity_state), validity_checked_at = now(), updated_at = now()
                         WHERE id = :id""")
-                .setParameter("s", state).setParameter("id", id).executeUpdate();
+                .setParameter("s", state).setParameter("id", id).execute();
     }
 
     private static LocalDate date(Object value) {
@@ -135,14 +135,14 @@ public class JpaReceptionProvider implements ReceptionProvider {
 
     @Override
     public void setReceptionAmounts(UUID receptionId, String amountsJson) {
-        em.createNativeQuery("UPDATE xhandler.reception SET amounts = cast(:a AS jsonb) WHERE id = :id AND amounts IS NULL")
-                .setParameter("a", amountsJson).setParameter("id", receptionId).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.reception SET amounts = cast(:a AS jsonb) WHERE id = :id AND amounts IS NULL")
+                .setParameter("a", amountsJson).setParameter("id", receptionId).execute();
     }
 
     @Override
     public void markReceptionAmountsUnreadable(UUID receptionId) {
-        em.createNativeQuery(
+        em.createNativeStatement(
                         "UPDATE xhandler.reception SET amounts = cast('{\"_error\": \"unreadable\"}' AS jsonb) WHERE id = :id AND amounts IS NULL")
-                .setParameter("id", receptionId).executeUpdate();
+                .setParameter("id", receptionId).execute();
     }
 }

@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.xml;
 
+import tools.jackson.databind.json.JsonMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
@@ -151,14 +152,14 @@ public class EngineStub implements QuarkusTestResourceLifecycleManager {
             case "/v1/validate" -> respond(exchange, 200, "{\"valid\":true,\"errors\":[],\"observations\":[]}");
             case "/v1/sign" -> {
                 // Echoes the document with a signature, so the signed XML keeps its serie-número
-                String xml = JSON.readTree(body).path("xml").asText() + "<ds:Signature/>";
+                String xml = JSON.readTree(body).path("xml").asString() + "<ds:Signature/>";
                 respond(exchange, 200, JSON.writeValueAsString(java.util.Map.of("xml", xml, "digest_value", "digest-" + Math.abs(xml.hashCode()))));
             }
-            case "/v1/inspect" -> respond(exchange, 200, inspect(JSON.readTree(body).path("xml").asText()));
+            case "/v1/inspect" -> respond(exchange, 200, inspect(JSON.readTree(body).path("xml").asString()));
             // data_to_sign = base64("data-to-sign")
             case "/v1/sign/prepare" -> respond(exchange, 200, "{\"data_to_sign\":\"ZGF0YS10by1zaWdu\",\"digest_value\":\"digest-123\"}");
             case "/v1/sign/finalize" -> {
-                String xml = JSON.readTree(body).path("xml").asText();
+                String xml = JSON.readTree(body).path("xml").asString();
                 String signed = xml.startsWith("<Invoice/>") || xml.isEmpty() ? "<Invoice signed/>" : xml + "<ds:Signature/>";
                 respond(exchange, 200, JSON.writeValueAsString(java.util.Map.of("xml", signed, "digest_value", "digest-123")));
             }
@@ -175,7 +176,7 @@ public class EngineStub implements QuarkusTestResourceLifecycleManager {
                     "{\"state\":\"ok\",\"ticket_state\":\"pending\",\"description\":\"En proceso\",\"files\":[]}");
             case "/v1/conformity" -> respond(exchange, 200, "{\"state\":\"ok\",\"conformity\":\"pending\",\"description\":\"Pendiente\"}");
             case "/v1/cdr" -> {
-                String id = between(JSON.readTree(body).path("xml").asText(), "<cbc:ID>", "</cbc:ID>", "?");
+                String id = between(JSON.readTree(body).path("xml").asString(), "<cbc:ID>", "</cbc:ID>", "?");
                 respond(exchange, 200, JSON.writeValueAsString(java.util.Map.of("xml",
                         "<ApplicationResponse><cbc:ResponseCode>0</cbc:ResponseCode><cbc:Reference>" + id + "</cbc:Reference></ApplicationResponse>")));
             }
@@ -185,27 +186,27 @@ public class EngineStub implements QuarkusTestResourceLifecycleManager {
         }
     }
 
-    static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+    static final tools.jackson.databind.ObjectMapper JSON = new JsonMapper();
 
     /** {@code <Kind><cbc:ID>serie-numero</cbc:ID></Kind>}; enriched JSON is the document itself. */
     private static void build(HttpExchange exchange, String body) throws IOException {
         var document = JSON.readTree(body).path("document");
         var spec = document.path("spec");
-        String kind = document.path("kind").asText();
+        String kind = document.path("kind").asString();
         String id;
         if (kind.equals("SummaryDocuments") || kind.equals("VoidedDocuments") || kind.equals("Reversion")) {
             String prefix = kind.equals("SummaryDocuments") ? "RC" : kind.equals("VoidedDocuments") ? "RA" : "RR";
-            id = prefix + "-" + spec.path("fecha_emision").asText().replace("-", "") + "-" + spec.path("numero").asText();
+            id = prefix + "-" + spec.path("fecha_emision").asString().replace("-", "") + "-" + spec.path("numero").asString();
         } else if (spec.hasNonNull("serie_numero")) {
-            id = spec.get("serie_numero").asText();
+            id = spec.get("serie_numero").asString();
         } else {
             respond(exchange, 422, "{\"kind\":\"invalid_document\",\"message\":\"missing field `serie_numero`\"}");
             return;
         }
         var cliente = spec.path("cliente");
-        String xml = "<" + kind + "><cbc:ID>" + id + "</cbc:ID><ruc>" + spec.path("proveedor").path("ruc").asText() + "</ruc>"
-                + "<moneda>" + spec.path("moneda").asText("PEN") + "</moneda>"
-                + "<cliente>" + cliente.path("tipo_documento_identidad").asText("6") + "|" + cliente.path("numero_documento_identidad").asText("")
+        String xml = "<" + kind + "><cbc:ID>" + id + "</cbc:ID><ruc>" + spec.path("proveedor").path("ruc").asString() + "</ruc>"
+                + "<moneda>" + spec.path("moneda").asString("PEN") + "</moneda>"
+                + "<cliente>" + cliente.path("tipo_documento_identidad").asString("6") + "|" + cliente.path("numero_documento_identidad").asString("")
                 + "</cliente></" + kind + ">";
         var answer = JSON.createObjectNode();
         answer.put("xml", xml);

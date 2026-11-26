@@ -4,8 +4,7 @@ import io.github.projectopenubl.xhandler.models.CredentialProvider;
 import io.github.projectopenubl.xhandler.keys.SecretBox;
 import io.github.projectopenubl.xhandler.models.CredentialModel;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
@@ -15,6 +14,7 @@ import jakarta.transaction.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
+import tools.jackson.core.JacksonException;
 
 /** Stores and reads company secrets. Every read of a secret is audited. */
 @ApplicationScoped
@@ -63,15 +63,15 @@ public class CredentialManager {
     private byte[] toJson(Map<String, String> fields) {
         try {
             return json.writeValueAsBytes(fields);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }
 
     private Map<String, String> fromJson(byte[] bytes) {
         try {
-            return json.readValue(new String(bytes, StandardCharsets.UTF_8), new com.fasterxml.jackson.core.type.TypeReference<>() {});
-        } catch (JsonProcessingException e) {
+            return json.readValue(new String(bytes, StandardCharsets.UTF_8), new tools.jackson.core.type.TypeReference<>() {});
+        } catch (JacksonException e) {
             throw new ApiException(500, "corrupt_secret", "Error interno al leer una credencial.");
         }
     }

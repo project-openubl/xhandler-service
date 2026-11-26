@@ -32,7 +32,7 @@ public class BasicUserService {
         BasicUserEntity user = new BasicUserEntity();
         user.fullName = dto.getFullName();
         user.username = dto.getUsername();
-        user.password = BcryptUtil.bcryptHash(dto.getPassword());
+        user.password = BcryptUtil.bcryptHash(dto.getPassword().toCharArray());
         user.permissions = String.join(",", dto.getPermissions());
         user.persist();
         return user;
@@ -42,7 +42,7 @@ public class BasicUserService {
         entity.fullName = dto.getFullName();
         entity.username = dto.getUsername();
         if (dto.getPassword() != null) {
-            entity.password = BcryptUtil.bcryptHash(dto.getPassword());
+            entity.password = BcryptUtil.bcryptHash(dto.getPassword().toCharArray());
         }
         if (dto.getPermissions() != null) {
             entity.permissions = String.join(",", dto.getPermissions());
@@ -52,7 +52,7 @@ public class BasicUserService {
     }
 
     public void changePassword(BasicUserEntity entity, BasicUserPasswordChangeDto dto) {
-        entity.password = BcryptUtil.bcryptHash(dto.getNewPassword());
+        entity.password = BcryptUtil.bcryptHash(dto.getNewPassword().toCharArray());
         entity.persist();
     }
 

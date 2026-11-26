@@ -2,8 +2,8 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.EntitlementManager;
 import io.github.projectopenubl.xhandler.jobs.handlers.SelfInvoicingJob;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.jobs.JobStore;
 import io.github.projectopenubl.xhandler.models.BillingProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -56,12 +56,12 @@ public class LagoWebhookResource {
             throw new ApiException(401, "invalid_signature", "Firma inválida.");
         }
         JsonNode event = json.readTree(body);
-        String type = event.path("webhook_type").asText();
+        String type = event.path("webhook_type").asString();
         if (type.startsWith("subscription.")) {
             // Plans follow Lago's subscriptions as they change; the periodic sync is the safety net
             JsonNode subscription = event.path("subscription");
-            UUID tenant = tenantId(subscription.path("external_customer_id").asText());
-            String plan = "terminated".equals(subscription.path("status").asText()) ? "free" : subscription.path("plan_code").asText();
+            UUID tenant = tenantId(subscription.path("external_customer_id").asString());
+            String plan = "terminated".equals(subscription.path("status").asString()) ? "free" : subscription.path("plan_code").asString();
             QuarkusTransaction.requiringNew().run(() -> {
                 access.enterAsPlatform(tenant);
                 if (entitlements.known(plan)) {
@@ -74,8 +74,8 @@ public class LagoWebhookResource {
             return Response.noContent().build();
         }
         JsonNode invoice = event.path("invoice");
-        String lagoId = invoice.path("lago_id").asText();
-        UUID tenant = tenantId(invoice.path("customer").path("external_id").asText());
+        String lagoId = invoice.path("lago_id").asString();
+        UUID tenant = tenantId(invoice.path("customer").path("external_id").asString());
         QuarkusTransaction.requiringNew().run(() -> {
             if (billingProvider.addLagoInvoice(lagoId, tenant)) {
                 jobs.enqueuePlatform(SelfInvoicingJob.NAME, 4, Map.of("lago_invoice_id", lagoId, "tenant_id", tenant.toString(),

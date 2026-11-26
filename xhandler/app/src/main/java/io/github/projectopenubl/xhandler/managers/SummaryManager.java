@@ -8,10 +8,10 @@ import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
@@ -23,8 +23,6 @@ import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -230,15 +228,15 @@ public class SummaryManager {
         comprobante.put("tipo_comprobante", line.getTipoComprobante());
         comprobante.put("serie_numero", line.serieNumero());
         if (spec.hasNonNull("moneda")) {
-            comprobante.put("moneda", spec.get("moneda").asText());
+            comprobante.put("moneda", spec.get("moneda").asString());
         }
         ObjectNode cliente = comprobante.putObject("cliente");
-        cliente.put("numero_documento_identidad", spec.path("cliente").path("numero_documento_identidad").asText("0"));
-        cliente.put("tipo_documento_identidad", spec.path("cliente").path("tipo_documento_identidad").asText("0"));
+        cliente.put("numero_documento_identidad", spec.path("cliente").path("numero_documento_identidad").asString("0"));
+        cliente.put("tipo_documento_identidad", spec.path("cliente").path("tipo_documento_identidad").asString("0"));
         if (spec.hasNonNull("comprobante_afectado_serie_numero")) {
             ObjectNode afectado = comprobante.putObject("comprobante_afectado");
-            afectado.put("tipo_comprobante", spec.path("comprobante_afectado_tipo").asText("03"));
-            afectado.put("serie_numero", spec.get("comprobante_afectado_serie_numero").asText());
+            afectado.put("tipo_comprobante", spec.path("comprobante_afectado_tipo").asString("03"));
+            afectado.put("serie_numero", spec.get("comprobante_afectado_serie_numero").asString());
         }
         ObjectNode valorVenta = comprobante.putObject("valor_venta");
         valorVenta.set("importe_total", spec.path("total_importe").path("importe"));
@@ -257,11 +255,7 @@ public class SummaryManager {
     private JsonNode enriched(DocumentModel document) {
         DocumentFileModel file = documentFileProvider.getDocumentFile(document.getId(), "enriched").orElseThrow(() ->
                 new IllegalStateException("document " + document.getId() + " has no enriched JSON"));
-        try {
-            return json.readTree(files.get(file.getStorageKey()));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return json.readTree(files.get(file.getStorageKey()));
     }
 
     private static void copy(JsonNode from, String field, ObjectNode to, String target) {
@@ -278,10 +272,6 @@ public class SummaryManager {
     }
 
     private byte[] bytes(JsonNode node) {
-        try {
-            return json.writeValueAsBytes(node);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return json.writeValueAsBytes(node);
     }
 }

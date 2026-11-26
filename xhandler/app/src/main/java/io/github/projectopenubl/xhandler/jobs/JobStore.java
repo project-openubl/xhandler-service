@@ -1,8 +1,7 @@
 package io.github.projectopenubl.xhandler.jobs;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import jakarta.transaction.Transactional;
@@ -11,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import tools.jackson.core.JacksonException;
 
 /**
  * The job system's database operations, all through the SECURITY DEFINER functions of V4 (they
@@ -128,7 +128,7 @@ public class JobStore {
         }
         try {
             return json.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException(e);
         }
     }
@@ -136,7 +136,7 @@ public class JobStore {
     private JsonNode parse(String value) {
         try {
             return json.readTree(value == null ? "{}" : value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }

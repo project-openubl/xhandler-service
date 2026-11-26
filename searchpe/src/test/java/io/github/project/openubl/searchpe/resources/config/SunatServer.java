@@ -43,7 +43,7 @@ public class SunatServer implements QuarkusTestResourceLifecycleManager {
 
     @Override
     public Map<String, String> start() {
-        sunat = new MockServerContainer(DockerImageName.parse("mockserver/mockserver:9.3.0"));
+        sunat = new MockServerContainer(DockerImageName.parse("mockserver/mockserver:9.4.0"));
         sunat.start();
 
         final String fileName = "padron_reducido_ruc.zip";

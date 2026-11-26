@@ -3,8 +3,10 @@ package io.github.projectopenubl.xhandler.utils;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -15,7 +17,7 @@ import org.junit.jupiter.api.Test;
 /** Golden files of the input adapters (DESIGN.md §15.2): input → native xbuilder JSON. */
 class AdapterGoldenTest {
 
-    static final ObjectMapper JSON = new ObjectMapper();
+    static final ObjectMapper JSON = new JsonMapper();
 
     static JsonNode golden(String name) throws IOException {
         return JSON.readTree(Files.readString(Path.of("src/test/resources/adapters", name)));
@@ -28,11 +30,11 @@ class AdapterGoldenTest {
 
     static JsonNode normalize(JsonNode node) {
         if (node.isNumber()) {
-            return JSON.getNodeFactory().numberNode(new BigDecimal(node.asText()).stripTrailingZeros());
+            return JSON.getNodeFactory().numberNode(new BigDecimal(node.asString()).stripTrailingZeros());
         }
         if (node.isObject()) {
             var copy = JSON.createObjectNode();
-            node.fields().forEachRemaining(e -> copy.set(e.getKey(), normalize(e.getValue())));
+            node.properties().iterator().forEachRemaining(e -> copy.set(e.getKey(), normalize(e.getValue())));
             return copy;
         }
         if (node.isArray()) {
@@ -86,8 +88,8 @@ class AdapterGoldenTest {
                  {"descripcion":"b","cantidad":1,"valor_unitario":1,"tipo_de_igv":16},
                  {"descripcion":"c","cantidad":1,"valor_unitario":1,"tipo_de_igv":17}]}""");
         JsonNode detalles = NubefactAdapter.convert(request).document().path("spec").path("detalles");
-        assertEquals("20", detalles.get(0).path("igv_tipo").asText());
-        assertEquals("40", detalles.get(1).path("igv_tipo").asText());
-        assertEquals("21", detalles.get(2).path("igv_tipo").asText());
+        assertEquals("20", detalles.get(0).path("igv_tipo").asString());
+        assertEquals("40", detalles.get(1).path("igv_tipo").asString());
+        assertEquals("21", detalles.get(2).path("igv_tipo").asString());
     }
 }

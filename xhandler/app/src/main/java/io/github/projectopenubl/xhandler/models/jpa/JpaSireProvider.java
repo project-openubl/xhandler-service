@@ -28,11 +28,11 @@ public class JpaSireProvider implements SireProvider {
 
     @Override
     public int addPeriod(UUID id, UUID tenantId, UUID companyId, String sunatEnv, String book, String period, String requestedBy) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         INSERT INTO xhandler.sire_period (id, tenant_id, company_id, sunat_env, book, period, status, requested_by)
                         VALUES (:id, :t, :c, :env, :b, :p, 'requested', :by) ON CONFLICT (company_id, sunat_env, book, period) DO NOTHING""")
                 .setParameter("id", id).setParameter("t", tenantId).setParameter("c", companyId).setParameter("env", sunatEnv)
-                .setParameter("b", book).setParameter("p", period).setParameter("by", requestedBy).executeUpdate();
+                .setParameter("b", book).setParameter("p", period).setParameter("by", requestedBy).execute();
     }
 
     @Override
@@ -46,11 +46,11 @@ public class JpaSireProvider implements SireProvider {
 
     @Override
     public int restartPeriod(UUID id, String requestedBy) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.sire_period SET status = 'requested', proposal_ticket = NULL, proposal_ref = NULL, reconciliation = NULL,
                             detail = NULL, resume_status = NULL, poll_attempts = 0, next_poll_at = now(), requested_by = :by, updated_at = now()
                         WHERE id = :id""")
-                .setParameter("by", requestedBy).setParameter("id", id).executeUpdate();
+                .setParameter("by", requestedBy).setParameter("id", id).execute();
     }
 
     @Override
@@ -69,10 +69,10 @@ public class JpaSireProvider implements SireProvider {
 
     @Override
     public int markSubmitting(UUID id) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.sire_period SET status = 'submitting', submitting_since = now(), replacement_ticket = NULL, detail = NULL,
                             poll_attempts = 0, next_poll_at = now(), updated_at = now() WHERE id = :id""")
-                .setParameter("id", id).executeUpdate();
+                .setParameter("id", id).execute();
     }
 
     @Override
@@ -134,32 +134,32 @@ public class JpaSireProvider implements SireProvider {
         if (ticketColumn != null) {
             sql.append(" AND ").append(ticketColumn).append(" IS NOT DISTINCT FROM :ticket");
         }
-        var query = em.createNativeQuery(sql.toString()).setParameter("to", to).setParameter("id", id).setParameter("from", from);
+        var query = em.createNativeStatement(sql.toString()).setParameter("to", to).setParameter("id", id).setParameter("from", from);
         if (ticketColumn != null) {
             query.setParameter("ticket", ticket);
         }
         columns.forEach(query::setParameter);
-        return query.executeUpdate();
+        return query.execute();
     }
 
     @Override
     public int resumeAfterCredentials(UUID companyId) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.sire_period
                         SET status = coalesce(resume_status, 'requested'), resume_status = NULL, poll_attempts = 0, next_poll_at = now(),
                             proposal_ticket = CASE WHEN coalesce(resume_status, 'requested') = 'requested' THEN NULL ELSE proposal_ticket END,
                             detail = NULL, updated_at = now()
-                        WHERE company_id = :c AND status = 'credentials'""").setParameter("c", companyId).executeUpdate();
+                        WHERE company_id = :c AND status = 'credentials'""").setParameter("c", companyId).execute();
     }
 
     @Override
     public int claimProposal(UUID id, String claim) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.sire_period SET proposal_ticket = :claim, updated_at = now()
                         WHERE id = :id AND status = 'requested'
                           AND (proposal_ticket IS NULL OR proposal_ticket = ''
                                OR (proposal_ticket LIKE 'claim:%' AND updated_at < now() - interval '10 minutes'))""")
-                .setParameter("claim", claim).setParameter("id", id).executeUpdate();
+                .setParameter("claim", claim).setParameter("id", id).execute();
     }
 
     @Override
@@ -177,18 +177,18 @@ public class JpaSireProvider implements SireProvider {
 
     @Override
     public int addDeadlineNotice(UUID tenantId, UUID companyId, String period) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         INSERT INTO xhandler.sire_deadline_notice (tenant_id, company_id, period) VALUES (:t, :c, :p)
                         ON CONFLICT (company_id, period) DO NOTHING""")
-                .setParameter("t", tenantId).setParameter("c", companyId).setParameter("p", period).executeUpdate();
+                .setParameter("t", tenantId).setParameter("c", companyId).setParameter("p", period).execute();
     }
 
     @Override
     public void putCalendarEntry(String period, int rucLastDigit, LocalDate dueDate) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.sire_calendar (period, ruc_last_digit, due_date) VALUES (:p, :d, :due)
                         ON CONFLICT (period, ruc_last_digit) DO UPDATE SET due_date = excluded.due_date""")
-                .setParameter("p", period).setParameter("d", (short) rucLastDigit).setParameter("due", dueDate).executeUpdate();
+                .setParameter("p", period).setParameter("d", (short) rucLastDigit).setParameter("due", dueDate).execute();
     }
 
     @Override

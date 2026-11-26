@@ -24,8 +24,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.Temporal;
-import jakarta.persistence.TemporalType;
 import jakarta.persistence.Version;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -49,12 +47,10 @@ public class VersionEntity extends PanacheEntityBase {
     public Long id;
 
     @NotNull
-    @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "created_at")
     public Date createdAt;
 
     @NotNull
-    @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "updated_at")
     public Date updatedAt;
 

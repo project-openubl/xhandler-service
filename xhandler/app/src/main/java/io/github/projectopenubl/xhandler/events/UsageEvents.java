@@ -9,6 +9,7 @@ import io.github.projectopenubl.xhandler.models.BillingProvider;
 import jakarta.transaction.Transactional;
 import java.util.Map;
 import java.util.UUID;
+import tools.jackson.core.JacksonException;
 
 /**
  * Usage for billing (DESIGN.md §14): written to {@code usage_event_outbox} in the business
@@ -18,9 +19,9 @@ import java.util.UUID;
 public class UsageEvents {
 
     private final BillingProvider billingProvider;
-    private final com.fasterxml.jackson.databind.ObjectMapper json;
+    private final tools.jackson.databind.ObjectMapper json;
 
-    public UsageEvents(BillingProvider billingProvider, com.fasterxml.jackson.databind.ObjectMapper json) {
+    public UsageEvents(BillingProvider billingProvider, tools.jackson.databind.ObjectMapper json) {
         this.billingProvider = billingProvider;
         this.json = json;
     }
@@ -37,7 +38,7 @@ public class UsageEvents {
     public void record(UUID tenantId, String type, Map<String, Object> properties) {
         try {
             billingProvider.addUsageEvent(Ids.newId(), tenantId, type, json.writeValueAsString(properties));
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }

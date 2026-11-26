@@ -13,6 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.handlers.RetentionPurge;
+
+import tools.jackson.databind.json.JsonMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -59,7 +61,7 @@ class DataProtectionTest {
     }
 
     static JobContext context(String name) {
-        return new JobContext(UUID.randomUUID(), null, name, 1, new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode(), null, () -> false);
+        return new JobContext(UUID.randomUUID(), null, name, 1, new JsonMapper().createObjectNode(), null, () -> false);
     }
 
     /** Users have one tenant each; more come through a partner, with alice as owner. */
@@ -85,9 +87,9 @@ class DataProtectionTest {
     void sql(String statement, Map<String, Object> params) {
         QuarkusTransaction.requiringNew().run(() -> {
             em.createNativeQuery("SELECT set_config('app.tenant_id', :t, true)").setParameter("t", params.get("t").toString()).getSingleResult();
-            var query = em.createNativeQuery(statement);
+            var query = em.createNativeStatement(statement);
             params.forEach(query::setParameter);
-            query.executeUpdate();
+            query.execute();
         });
     }
 

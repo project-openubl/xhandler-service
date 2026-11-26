@@ -173,7 +173,7 @@ public class DocumentResource {
             @Content(mediaType = "application/xml", schema = @Schema(type = SchemaType.STRING, format = "binary")),
             @Content(mediaType = "application/zip", schema = @Schema(type = SchemaType.STRING, format = "binary")),
             @Content(mediaType = "application/pdf", schema = @Schema(type = SchemaType.STRING, format = "binary")),
-            @Content(mediaType = "application/json", schema = @Schema(implementation = com.fasterxml.jackson.databind.JsonNode.class))
+            @Content(mediaType = "application/json", schema = @Schema(implementation = tools.jackson.databind.JsonNode.class))
     })
     @Operation(operationId = "downloadDocumentFile")
     public Response file(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId,

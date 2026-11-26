@@ -1,8 +1,9 @@
 package io.github.projectopenubl.xhandler.admin.cli;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 import java.net.URI;
 import java.security.SecureRandom;
 import java.util.LinkedHashMap;
@@ -45,7 +46,9 @@ import picocli.CommandLine.Parameters;
         })
 public class XhandlerAdmin {
 
-    static final ObjectMapper JSON = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    static final ObjectMapper JSON = JsonMapper.builder()
+            .enable(SerializationFeature.INDENT_OUTPUT)
+            .build();
 
     @Option(names = "--url", defaultValue = "${env:XHANDLER_URL:-http://localhost:8080}", description = "Service URL")
     String url;
@@ -275,7 +278,7 @@ public class XhandlerAdmin {
                 throw new AdminClient.CliException("no user " + username + " in realm " + realm);
             }
             String password = randomPassword();
-            keycloak.put("/admin/realms/" + realm + "/users/" + users.get(0).path("id").asText() + "/reset-password",
+            keycloak.put("/admin/realms/" + realm + "/users/" + users.get(0).path("id").asString() + "/reset-password",
                     Map.of("type", "password", "value", password, "temporary", true));
             System.out.println("Temporary password for " + username + ": " + password);
             return 0;

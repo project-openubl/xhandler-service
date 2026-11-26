@@ -40,11 +40,11 @@ public class JpaMetricsProvider implements MetricsProvider {
 
     @Override
     public void saveSnapshotValue(String name, double value) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.ops_snapshot (name, value, at) VALUES (:n, :v, now())
                         ON CONFLICT (name) DO UPDATE SET value = excluded.value, at = excluded.at""")
                 .setParameter("n", name).setParameter("v", value)
-                .executeUpdate();
+                .execute();
     }
 
     private static double number(Object value) {

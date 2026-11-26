@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.clients;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.net.URI;
@@ -71,8 +71,8 @@ public class LagoClient {
         }
         JsonNode subscriptions = json.readTree(response.body()).path("subscriptions");
         for (JsonNode subscription : subscriptions) {
-            if ("active".equals(subscription.path("status").asText())) {
-                return Optional.of(subscription.path("plan_code").asText());
+            if ("active".equals(subscription.path("status").asString())) {
+                return Optional.of(subscription.path("plan_code").asString());
             }
         }
         return Optional.empty();

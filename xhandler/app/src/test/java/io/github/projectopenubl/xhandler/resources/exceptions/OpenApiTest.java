@@ -7,8 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -33,7 +33,7 @@ class OpenApiTest {
     void load() throws Exception {
         String body = given().accept("application/json").get("/q/openapi?format=json")
                 .then().statusCode(200).extract().asString();
-        spec = new ObjectMapper().readTree(body);
+        spec = new JsonMapper().readTree(body);
     }
 
     private List<Map.Entry<String, JsonNode>> operations() {
@@ -52,8 +52,8 @@ class OpenApiTest {
         for (Map.Entry<String, JsonNode> op : operations()) {
             JsonNode id = op.getValue().get("operationId");
             assertNotNull(id, op.getKey() + " needs @Operation(operationId = ...)");
-            assertTrue(OPERATION_ID.matcher(id.asText()).matches(), op.getKey() + ": " + id.asText());
-            assertTrue(seen.add(id.asText()), "duplicate operationId " + id.asText());
+            assertTrue(OPERATION_ID.matcher(id.asString()).matches(), op.getKey() + ": " + id.asString());
+            assertTrue(seen.add(id.asString()), "duplicate operationId " + id.asString());
         }
     }
 
@@ -68,8 +68,8 @@ class OpenApiTest {
                 assertEquals("[{\"bearer\":[]}]", String.valueOf(security), op.getKey());
             }
         }
-        assertEquals("bearer", spec.at("/components/securitySchemes/bearer/scheme").asText());
-        spec.get("paths").fieldNames().forEachRemaining(
+        assertEquals("bearer", spec.at("/components/securitySchemes/bearer/scheme").asString());
+        spec.get("paths").propertyNames().iterator().forEachRemaining(
                 path -> assertFalse(path.startsWith("/api/admin/"), "the admin API stays out of the document: " + path));
     }
 
@@ -79,7 +79,7 @@ class OpenApiTest {
         for (Map.Entry<String, JsonNode> op : operations()) {
             if (op.getKey().contains(" /api/")) {
                 assertEquals("#/components/schemas/ApiError",
-                        op.getValue().at("/responses/4XX/content/application~1json/schema/$ref").asText(), op.getKey());
+                        op.getValue().at("/responses/4XX/content/application~1json/schema/$ref").asString(), op.getKey());
             }
         }
     }
@@ -97,13 +97,13 @@ class OpenApiTest {
     void raw_responses_document_their_real_status_and_body() {
         // 201 with a body, and no default 200 left behind
         JsonNode createTenant = operation("createTenant").get("responses");
-        assertEquals("#/components/schemas/TenantView", createTenant.at("/201/content/application~1json/schema/$ref").asText());
+        assertEquals("#/components/schemas/TenantView", createTenant.at("/201/content/application~1json/schema/$ref").asString());
         assertFalse(createTenant.has("200"), "createTenant: " + createTenant);
         // An untyped Map replaced by a record, with the wire's snake_case names
         assertEquals(Set.of("id", "name", "partner_id"), names(spec.at("/components/schemas/PartnerTenant/properties")));
         // 202 plus the job's body
         JsonNode createReport = operation("createReport").get("responses");
-        assertEquals("#/components/schemas/ReportView", createReport.at("/202/content/application~1json/schema/$ref").asText());
+        assertEquals("#/components/schemas/ReportView", createReport.at("/202/content/application~1json/schema/$ref").asString());
         assertFalse(createReport.has("200"), "createReport: " + createReport);
         // 204 without content
         JsonNode deleteWebhook = operation("deleteWebhook").get("responses");
@@ -113,15 +113,15 @@ class OpenApiTest {
         // A binary download with its real media types
         JsonNode file = operation("downloadDocumentFile").at("/responses/200/content");
         for (String type : List.of("application~1xml", "application~1zip", "application~1pdf")) {
-            assertEquals("string", file.at("/" + type + "/schema/type").asText(), type);
-            assertEquals("binary", file.at("/" + type + "/schema/format").asText(), type);
+            assertEquals("string", file.at("/" + type + "/schema/type").asString(), type);
+            assertEquals("binary", file.at("/" + type + "/schema/format").asString(), type);
         }
         // Emit: every status it answers, each with its body; the filter's error responses stay
         for (String id : List.of("emitDocument", "emitSfsDocument")) {
             JsonNode responses = operation(id).get("responses");
-            assertEquals("#/components/schemas/DocumentView", responses.at("/201/content/application~1json/schema/$ref").asText(), id);
+            assertEquals("#/components/schemas/DocumentView", responses.at("/201/content/application~1json/schema/$ref").asString(), id);
             for (String code : List.of("402", "409", "422", "503", "4XX", "5XX")) {
-                assertEquals("#/components/schemas/ApiError", responses.at("/" + code + "/content/application~1json/schema/$ref").asText(),
+                assertEquals("#/components/schemas/ApiError", responses.at("/" + code + "/content/application~1json/schema/$ref").asString(),
                         id + " " + code);
             }
             assertFalse(responses.has("200"), id + ": " + responses);
@@ -143,9 +143,9 @@ class OpenApiTest {
                 Map.entry("updateMember", "MemberView"),
                 Map.entry("updateSeries", "SeriesView"));
         expected.forEach((id, schema) -> assertEquals("#/components/schemas/" + schema,
-                operation(id).at("/responses/200/content/application~1json/schema/$ref").asText(), id));
+                operation(id).at("/responses/200/content/application~1json/schema/$ref").asString(), id));
         assertEquals("#/components/schemas/AdapterTokenView",
-                operation("listAdapterTokens").at("/responses/200/content/application~1json/schema/items/$ref").asText());
+                operation("listAdapterTokens").at("/responses/200/content/application~1json/schema/items/$ref").asString());
         assertEquals(Set.of("usage", "billing_ruc", "billing_name", "billing_email"), names(spec.at("/components/schemas/BillingView/properties")));
         assertEquals(Set.of("status", "delete_after"), names(spec.at("/components/schemas/ExitView/properties")));
         assertEquals(Set.of("company_id", "emission_mode"), names(spec.at("/components/schemas/RevokedView/properties")));
@@ -174,7 +174,7 @@ class OpenApiTest {
     private JsonNode operation(String operationId) {
         return operations().stream()
                 .map(Map.Entry::getValue)
-                .filter(op -> operationId.equals(op.path("operationId").asText()))
+                .filter(op -> operationId.equals(op.path("operationId").asString()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no operation " + operationId));
     }
@@ -197,7 +197,7 @@ class OpenApiTest {
 
     private static Set<String> names(JsonNode object) {
         Set<String> names = new HashSet<>();
-        object.fieldNames().forEachRemaining(names::add);
+        object.propertyNames().iterator().forEachRemaining(names::add);
         return names;
     }
 }

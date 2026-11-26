@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 
@@ -20,6 +20,6 @@ public record JobContext(
         if (value == null || value.isNull()) {
             throw new IllegalArgumentException("job " + id + " has no " + field);
         }
-        return UUID.fromString(value.asText());
+        return UUID.fromString(value.asString());
     }
 }

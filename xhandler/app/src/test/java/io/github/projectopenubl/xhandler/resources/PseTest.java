@@ -8,7 +8,8 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.github.projectopenubl.xhandler.keys.TestCertificates;
 import io.quarkus.test.common.QuarkusTestResource;
@@ -88,9 +89,9 @@ class PseTest {
         String id = as("alice").body(invoice()).post(base + "/documents").then().statusCode(201).extract().path("id");
         await().atMost(Duration.ofSeconds(20)).until(() -> "accepted".equals(
                 as("alice").get("/api/v1/tenants/" + tenant + "/documents/" + id).then().extract().path("status")));
-        var finalize = new ObjectMapper().readTree(EngineStub.lastBody("/v1/sign/finalize"));
+        var finalize = new JsonMapper().readTree(EngineStub.lastBody("/v1/sign/finalize"));
         X509Certificate signer = (X509Certificate) CertificateFactory.getInstance("X.509")
-                .generateCertificate(new ByteArrayInputStream(Base64.getDecoder().decode(finalize.get("certificate").asText())));
+                .generateCertificate(new ByteArrayInputStream(Base64.getDecoder().decode(finalize.get("certificate").asString())));
         assertTrue(signer.getSubjectX500Principal().getName().contains(platformRuc), "signed with the platform's PSE certificate");
         assertTrue(EngineStub.lastBody("/v1/send").contains(user), "sent with the platform's SOL user");
 

@@ -21,7 +21,7 @@ public class JpaAccessLinkProvider implements AccessLinkProvider {
 
     @Override
     public void addAccessLink(UUID id, UUID tenantId, UUID documentId, String tokenHash, Instant expiresAt) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.access_token (id, tenant_id, document_id, token_hash, expires_at)
                         VALUES (:id, :tenant, :document, :hash, :expires)""")
                 .setParameter("id", id)
@@ -29,7 +29,7 @@ public class JpaAccessLinkProvider implements AccessLinkProvider {
                 .setParameter("document", documentId)
                 .setParameter("hash", tokenHash)
                 .setParameter("expires", expiresAt)
-                .executeUpdate();
+                .execute();
     }
 
     @Override

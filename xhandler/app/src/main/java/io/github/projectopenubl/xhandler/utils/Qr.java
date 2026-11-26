@@ -2,7 +2,7 @@ package io.github.projectopenubl.xhandler.utils;
 
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 
 /**
@@ -28,7 +28,7 @@ public final class Qr {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return null;
         }
-        return new BigDecimal(node.asText());
+        return new BigDecimal(node.asString());
     }
 
     private static String amount(BigDecimal value) {

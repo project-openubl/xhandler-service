@@ -22,11 +22,11 @@ public class JpaPlatformSecretProvider implements PlatformSecretProvider {
 
     @Override
     public void addPlatformCredential(UUID id, String purpose, String label, byte[] ciphertext, byte[] wrappedDataKey, String masterKeyId) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.platform_credential (id, purpose, label, ciphertext, wrapped_data_key, master_key_id)
                         VALUES (:id, :p, :l, :c, :w, :m)""")
                 .setParameter("id", id).setParameter("p", purpose).setParameter("l", label).setParameter("c", ciphertext)
-                .setParameter("w", wrappedDataKey).setParameter("m", masterKeyId).executeUpdate();
+                .setParameter("w", wrappedDataKey).setParameter("m", masterKeyId).execute();
     }
 
     @Override
@@ -39,8 +39,8 @@ public class JpaPlatformSecretProvider implements PlatformSecretProvider {
 
     @Override
     public boolean setPlatformCredentialActive(UUID id, boolean active) {
-        return em.createNativeQuery("UPDATE xhandler.platform_credential SET active = :a, updated_at = now() WHERE id = :id")
-                .setParameter("a", active).setParameter("id", id).executeUpdate() == 1;
+        return em.createNativeStatement("UPDATE xhandler.platform_credential SET active = :a, updated_at = now() WHERE id = :id")
+                .setParameter("a", active).setParameter("id", id).execute() == 1;
     }
 
     @Override
@@ -82,9 +82,9 @@ public class JpaPlatformSecretProvider implements PlatformSecretProvider {
 
     @Override
     public void setPlatformCredentialWrappedKey(UUID id, byte[] wrappedDataKey, String masterKeyId) {
-        em.createNativeQuery("UPDATE xhandler.platform_credential SET wrapped_data_key = :w, master_key_id = :m, updated_at = now() WHERE id = :id")
+        em.createNativeStatement("UPDATE xhandler.platform_credential SET wrapped_data_key = :w, master_key_id = :m, updated_at = now() WHERE id = :id")
                 .setParameter("w", wrappedDataKey).setParameter("m", masterKeyId).setParameter("id", id)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
@@ -109,14 +109,14 @@ public class JpaPlatformSecretProvider implements PlatformSecretProvider {
 
     @Override
     public void replaceActivePlatformKey(String purpose) {
-        em.createNativeQuery("UPDATE xhandler.platform_key SET status = 'replaced' WHERE purpose = :p AND status = 'active'")
-                .setParameter("p", purpose).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.platform_key SET status = 'replaced' WHERE purpose = :p AND status = 'active'")
+                .setParameter("p", purpose).execute();
     }
 
     @Override
     public void addPlatformKey(UUID id, String purpose, String keyRef, byte[] certificate, String subject, String ruc, Instant validFrom,
             Instant validUntil) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.platform_key (id, purpose, key_ref, certificate, subject, ruc, valid_from, valid_until)
                         VALUES (:id, :p, :ref, :cert, :subject, :ruc, :from, :until)""")
                 .setParameter("id", id).setParameter("p", purpose).setParameter("ref", keyRef)
@@ -125,7 +125,7 @@ public class JpaPlatformSecretProvider implements PlatformSecretProvider {
                 .setParameter("ruc", ruc)
                 .setParameter("from", validFrom)
                 .setParameter("until", validUntil)
-                .executeUpdate();
+                .execute();
     }
 
     @Override

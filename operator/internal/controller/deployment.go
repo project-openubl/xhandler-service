@@ -108,8 +108,8 @@ func newServerConfig(cr *v1alpha1.Searchpe) *serverConfig {
 	}
 
 	if tlsEnabled(cr) {
-		c.value("QUARKUS_HTTP_SSL_CERTIFICATE_FILE", certificatesDir+"/tls.crt")
-		c.value("QUARKUS_HTTP_SSL_CERTIFICATE_KEY_FILE", certificatesDir+"/tls.key")
+		c.value("QUARKUS_HTTP_SSL_CERTIFICATE_FILES", certificatesDir+"/tls.crt")
+		c.value("QUARKUS_HTTP_SSL_CERTIFICATE_KEY_FILES", certificatesDir+"/tls.key")
 		c.value("QUARKUS_HTTP_INSECURE_REQUESTS", "redirect")
 		c.volume(corev1ac.Volume().
 			WithName("searchpe-tls-certificates").

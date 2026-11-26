@@ -14,6 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.projectopenubl.xhandler.Api;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
+
+import tools.jackson.databind.json.JsonMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -156,7 +158,7 @@ class OseTest {
         assertTrue(status.contains("<statusCode>0004</statusCode>"), status);
 
         // Forwarded to SUNAT with its CDR, within the hour
-        forwarder.run(new JobContext(UUID.randomUUID(), null, "ose.forward", 1, new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode(),
+        forwarder.run(new JobContext(UUID.randomUUID(), null, "ose.forward", 1, new JsonMapper().createObjectNode(),
                 null, () -> false));
         assertFalse(EngineStub.requests("/v1/ose/forward", name).isEmpty());
         String forward = QuarkusTransaction.requiringNew().call(() -> (String) em.createNativeQuery(
@@ -194,7 +196,7 @@ class OseTest {
         sendBill(second, zip(Map.of(second + ".xml", xml("F005-2", true, "")))).then().statusCode(200);
         // SUNAT refuses the OSE's own user: not the documents' fault
         EngineStub.on("/v1/ose/forward", body -> EngineStub.Reply.ok("{\"status\":\"blocked\",\"code\":\"0102\",\"description\":\"Usuario o contraseña incorrectos\"}"));
-        forwarder.run(new JobContext(UUID.randomUUID(), null, "ose.forward", 1, new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode(),
+        forwarder.run(new JobContext(UUID.randomUUID(), null, "ose.forward", 1, new JsonMapper().createObjectNode(),
                 null, () -> false));
         List<String> states = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery(
                         "SELECT forward_status FROM xhandler.ose_submission WHERE name IN (:a, :b) AND result = 'cdr'")
@@ -204,11 +206,11 @@ class OseTest {
         // Old forwarded submissions go, with their files
         EngineStub.reset();
         String xmlRef = QuarkusTransaction.requiringNew().call(() -> {
-            em.createNativeQuery("UPDATE xhandler.ose_submission SET forward_status = 'forwarded', purge_after = now() - interval '1 day' WHERE name = :n")
-                    .setParameter("n", first).executeUpdate();
+            em.createNativeStatement("UPDATE xhandler.ose_submission SET forward_status = 'forwarded', purge_after = now() - interval '1 day' WHERE name = :n")
+                    .setParameter("n", first).execute();
             return (String) em.createNativeQuery("SELECT xml_ref FROM xhandler.ose_submission WHERE name = :n").setParameter("n", first).getSingleResult();
         });
-        purge.run(new JobContext(UUID.randomUUID(), null, "ose.purge", 1, new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode(),
+        purge.run(new JobContext(UUID.randomUUID(), null, "ose.purge", 1, new JsonMapper().createObjectNode(),
                 null, () -> false));
         assertEquals(0L, (long) QuarkusTransaction.requiringNew().call(() -> ((Number) em.createNativeQuery(
                 "SELECT count(*) FROM xhandler.ose_submission WHERE name = :n").setParameter("n", first).getSingleResult()).longValue()));

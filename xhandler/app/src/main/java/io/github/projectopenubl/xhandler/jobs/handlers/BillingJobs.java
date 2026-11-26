@@ -32,9 +32,9 @@ public final class BillingJobs {
 
         private final BillingProvider billingProvider;
         private final LagoClient lago;
-        private final com.fasterxml.jackson.databind.ObjectMapper json;
+        private final tools.jackson.databind.ObjectMapper json;
 
-        public UsageDelivery(BillingProvider billingProvider, LagoClient lago, com.fasterxml.jackson.databind.ObjectMapper json) {
+        public UsageDelivery(BillingProvider billingProvider, LagoClient lago, tools.jackson.databind.ObjectMapper json) {
             this.billingProvider = billingProvider;
             this.lago = lago;
             this.json = json;
@@ -61,7 +61,7 @@ public final class BillingJobs {
                 List<Map<String, Object>> events = new ArrayList<>();
                 for (Event e : batch) {
                     Map<String, Object> properties = new LinkedHashMap<>(json.readValue(e.properties(),
-                            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}));
+                            new tools.jackson.core.type.TypeReference<Map<String, Object>>() {}));
                     properties.put("quantity", e.quantity());
                     events.add(Map.of("transaction_id", e.id().toString(), "external_subscription_id", e.tenant().toString(),
                             "code", e.type().replace('.', '_'), "timestamp", e.at().getEpochSecond(), "properties", properties));

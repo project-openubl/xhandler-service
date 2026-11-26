@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.xml;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.ProcessingException;
 import java.util.Base64;

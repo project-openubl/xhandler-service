@@ -1,6 +1,8 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
@@ -32,7 +34,7 @@ import org.jboss.logging.Logger;
 public class TenantExportJob implements JobHandler {
     public static final String NAME = "tenants.export";
     static final int PART_DOCUMENTS = 300;
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = JsonMapper.builderWithJackson2Defaults().build();
 
     private final TenantAccess access;
     private final TenantExitProvider exits;

@@ -1,8 +1,7 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -17,6 +16,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import tools.jackson.core.JacksonException;
 
 /**
  * {@code Idempotency-Key} on creates (DESIGN.md §11.1). The first request inserts the key in its
@@ -88,7 +88,7 @@ public class IdempotencyManager {
         try {
             JsonNode canonical = EmitManager.canonical(json.valueToTree(body));
             return FileStore.sha256((kind + ":" + path + ":" + json.writeValueAsString(canonical)).getBytes(StandardCharsets.UTF_8));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }
@@ -146,7 +146,7 @@ public class IdempotencyManager {
     private String write(Object body) {
         try {
             return json.writeValueAsString(body);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }

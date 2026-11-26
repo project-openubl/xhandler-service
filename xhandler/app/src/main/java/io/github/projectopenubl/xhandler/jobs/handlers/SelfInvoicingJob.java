@@ -1,8 +1,8 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.representations.idm.EmitRequestRepresentation;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
@@ -60,9 +60,9 @@ public class SelfInvoicingJob implements JobHandler {
 
     @Override
     public Map<String, Object> run(JobContext context) throws Exception {
-        String lagoId = context.args().path("lago_invoice_id").asText();
-        UUID customer = UUID.fromString(context.args().path("tenant_id").asText());
-        JsonNode invoice = json.readTree(context.args().path("invoice").asText());
+        String lagoId = context.args().path("lago_invoice_id").asString();
+        UUID customer = UUID.fromString(context.args().path("tenant_id").asString());
+        JsonNode invoice = json.readTree(context.args().path("invoice").asString());
         record Issuer(UUID tenant, UUID company) {}
         Issuer issuer = QuarkusTransaction.requiringNew().call(() -> {
             Map<String, String> settings = billingProvider.getPlatformSettings(SelfInvoicingManager.ISSUER_TENANT, SelfInvoicingManager.ISSUER_COMPANY);
@@ -92,7 +92,7 @@ public class SelfInvoicingJob implements JobHandler {
         Map<String, Object> spec = new HashMap<>();
         boolean factura = buyer.ruc() != null;
         spec.put("tipo_comprobante", factura ? "01" : "03");
-        spec.put("moneda", invoice.path("currency").asText("PEN"));
+        spec.put("moneda", invoice.path("currency").asString("PEN"));
         spec.put("cliente", factura
                 ? Map.of("tipo_documento_identidad", "6", "numero_documento_identidad", buyer.ruc(), "nombre", buyer.name())
                 : Map.of("tipo_documento_identidad", "0", "numero_documento_identidad", "-", "nombre", buyer.name()));
@@ -111,7 +111,7 @@ public class SelfInvoicingJob implements JobHandler {
             for (JsonNode fee : invoice.path("fees")) {
                 long cents = fee.path("amount_cents").asLong();
                 if (cents > 0) {
-                    detalles.add(Map.of("descripcion", fee.path("item").path("name").asText("Suscripción xhandler"), "cantidad", 1,
+                    detalles.add(Map.of("descripcion", fee.path("item").path("name").asString("Suscripción xhandler"), "cantidad", 1,
                             "precio", BigDecimal.valueOf(cents).movePointLeft(2)));
                 }
             }
@@ -133,12 +133,12 @@ public class SelfInvoicingJob implements JobHandler {
                     + " is above S/ 700: a boleta must identify the buyer");
         }
         spec.put("detalles", detalles);
-        spec.put("observaciones", "Factura Lago " + invoice.path("number").asText(lagoId));
+        spec.put("observaciones", "Factura Lago " + invoice.path("number").asString(lagoId));
         EmitManager.Emitted emitted = emit.emitAsPlatform(issuer.tenant(), issuer.company(), "lago:" + lagoId,
                 new EmitRequestRepresentation(json.valueToTree(Map.of("kind", "Invoice", "spec", spec)), null, false,
                         Map.of("lago_invoice", lagoId, "tenant_id", customer.toString())),
                 context.correlationId());
-        UUID documentId = UUID.fromString(emitted.body().path("id").asText());
+        UUID documentId = UUID.fromString(emitted.body().path("id").asString());
         QuarkusTransaction.requiringNew().run(() -> {
             billingProvider.setLagoInvoiceDocument(lagoId, documentId);
             if (buyer.email() != null) {
@@ -148,6 +148,6 @@ public class SelfInvoicingJob implements JobHandler {
                         "cc", List.of(), "include_cdr", false), List.of(), context.correlationId());
             }
         });
-        return Map.of("document_id", documentId.toString(), "serie_numero", emitted.body().path("serie_numero").asText());
+        return Map.of("document_id", documentId.toString(), "serie_numero", emitted.body().path("serie_numero").asString());
     }
 }
