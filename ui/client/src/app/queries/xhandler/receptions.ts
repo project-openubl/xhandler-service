@@ -207,21 +207,10 @@ export interface IReceptionUpload {
   cdr?: File;
 }
 
-/** The upload as multipart form data, one part per file the user chose. */
-export const receptionFormData = (upload: IReceptionUpload): FormData => {
-  const data = new FormData();
-  for (const kind of RECEPTION_FILE_KINDS) {
-    const file = upload[kind];
-    if (file) data.append(kind, file, file.name);
-  }
-  return data;
-};
-
 /**
  * `POST …/companies/{id}/receptions` (operator, multipart `xml`, `pdf`, `cdr`): stores a
  * supplier's document issued to the company and checks it with SUNAT; `201` with the
- * reception, `409` when it was already received. The spec declares the body form-urlencoded
- * (the resource has no `@Consumes`), so the parts are serialized here as multipart.
+ * reception, `409` when it was already received.
  */
 export const useReceptionUploadMutation = (
   companyId: string,
@@ -239,9 +228,6 @@ export const useReceptionUploadMutation = (
         await receiveDocument({
           path: { tenantId, companyId },
           body: upload,
-          bodySerializer: () => receptionFormData(upload),
-          // The browser sets the multipart boundary for FormData bodies.
-          headers: { "Content-Type": "multipart/form-data" },
           throwOnError: true,
         })
       ).data,
