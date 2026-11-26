@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
-import io.github.projectopenubl.xhandler.utils.Times;
+import io.github.projectopenubl.xhandler.models.SireProvider;
 import io.github.projectopenubl.xhandler.jobs.handlers.SireJobs;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,7 +19,6 @@ import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -30,6 +29,7 @@ import jakarta.ws.rs.core.Response;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
@@ -67,17 +67,18 @@ public class SireResource {
 
     private final TenantAccess access;
     private final Jobs jobs;
-    private final EntityManager em;
+    private final SireProvider sireProvider;
     private final FileStore files;
     private final Auditor auditor;
     private final RegisterRows registers;
 
-    public SireResource(TenantAccess access, Jobs jobs, EntityManager em, FileStore files, Auditor auditor, RegisterRows registers, CompanyManager companyManager) {
+    public SireResource(TenantAccess access, Jobs jobs, SireProvider sireProvider, FileStore files, Auditor auditor, RegisterRows registers,
+            CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.registers = registers;
         this.access = access;
         this.jobs = jobs;
-        this.em = em;
+        this.sireProvider = sireProvider;
         this.files = files;
         this.auditor = auditor;
     }
@@ -104,18 +105,11 @@ public class SireResource {
         if ("beta".equals(company.getSunatEnv())) {
             throw ApiException.conflict("sire_not_available", "SUNAT no tiene ambiente de pruebas para SIRE.");
         }
-        int created = em.createNativeQuery("""
-                        INSERT INTO xhandler.sire_period (id, tenant_id, company_id, sunat_env, book, period, status, requested_by)
-                        VALUES (:id, :t, :c, :env, :b, :p, 'requested', :by) ON CONFLICT (company_id, sunat_env, book, period) DO NOTHING""")
-                .setParameter("id", Ids.newId()).setParameter("t", tenantId).setParameter("c", companyId).setParameter("env", company.getSunatEnv())
-                .setParameter("b", book).setParameter("p", period).setParameter("by", scope.actor().auditName()).executeUpdate();
-        Object[] existing = (Object[]) em.createNativeQuery("""
-                        SELECT id, status FROM xhandler.sire_period WHERE company_id = :c AND sunat_env = :env AND book = :b AND period = :p FOR UPDATE""")
-                .setParameter("c", companyId).setParameter("env", company.getSunatEnv()).setParameter("b", book).setParameter("p", period)
-                .getSingleResult();
-        UUID id = (UUID) existing[0];
+        int created = sireProvider.addPeriod(Ids.newId(), tenantId, companyId, company.getSunatEnv(), book, period, scope.actor().auditName());
+        SireProvider.PeriodState existing = sireProvider.getPeriodStateForUpdate(companyId, company.getSunatEnv(), book, period);
+        UUID id = existing.id();
         if (created == 0) {
-            String status = (String) existing[1];
+            String status = existing.status();
             if ("submitting".equals(status) || "submitted".equals(status)) {
                 throw ApiException.conflict("sire_in_progress", "El reemplazo está en proceso en SUNAT; espere su resultado.");
             }
@@ -129,11 +123,7 @@ public class SireResource {
                     throw ApiException.forbidden();
                 }
             }
-            em.createNativeQuery("""
-                            UPDATE xhandler.sire_period SET status = 'requested', proposal_ticket = NULL, proposal_ref = NULL, reconciliation = NULL,
-                                detail = NULL, resume_status = NULL, poll_attempts = 0, next_poll_at = now(), requested_by = :by, updated_at = now()
-                            WHERE id = :id""")
-                    .setParameter("by", scope.actor().auditName()).setParameter("id", id).executeUpdate();
+            sireProvider.restartPeriod(id, scope.actor().auditName());
         }
         jobs.enqueue(scope, SireJobs.Request.NAME, 3, Map.of("sire_period_id", id.toString()), List.of("sire:" + id), null);
         auditor.record(scope, "sire.proposal_requested", "company", companyId, Map.of("book", book, "period", period));
@@ -155,19 +145,18 @@ public class SireResource {
         UUID id = find(companyId, company.getSunatEnv(), book, period);
         boolean acknowledge = request != null && Boolean.TRUE.equals(request.acknowledgeDifferences());
         boolean confirmed = request != null && Boolean.TRUE.equals(request.confirmNotReceived());
-        Object[] row = (Object[]) em.createNativeQuery("SELECT status, cast(reconciliation AS text) FROM xhandler.sire_period WHERE id = :id FOR UPDATE")
-                .setParameter("id", id).getSingleResult();
-        String status = (String) row[0];
+        SireProvider.ReplaceState row = sireProvider.getReplaceStateForUpdate(id);
+        String status = row.status();
         if ("unknown".equals(status) && !confirmed) {
             throw ApiException.conflict("sire_unknown",
                     "No sabemos si SUNAT recibió el último reemplazo. Verifique en SUNAT Operaciones en Línea y confirme que no lo recibió.");
         }
-        if (row[1] == null || !List.of("proposal_ready", "error", "unknown").contains(status)) {
+        if (row.reconciliation() == null || !List.of("proposal_ready", "error", "unknown").contains(status)) {
             throw ApiException.conflict("sire_proposal_missing", "Solicite primero la propuesta de SUNAT y revise la conciliación.");
         }
         boolean matches;
         try {
-            matches = JSON.readTree((String) row[1]).path("matches").asBoolean(false);
+            matches = JSON.readTree(row.reconciliation()).path("matches").asBoolean(false);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
@@ -187,10 +176,7 @@ public class SireResource {
             throw ApiException.conflict("amounts_pending",
                     missing + " comprobantes aún no tienen el desglose de impuestos; se completa en unos minutos.");
         }
-        em.createNativeQuery("""
-                        UPDATE xhandler.sire_period SET status = 'submitting', submitting_since = now(), replacement_ticket = NULL, detail = NULL,
-                            poll_attempts = 0, next_poll_at = now(), updated_at = now() WHERE id = :id""")
-                .setParameter("id", id).executeUpdate();
+        sireProvider.markSubmitting(id);
         jobs.enqueue(scope, SireJobs.Replace.NAME, 3, Map.of("sire_period_id", id.toString()), List.of("sire:" + id), null);
         auditor.record(scope, "sire.replacement_submitted", "company", companyId, Map.of("book", book, "period", period,
                 "acknowledged_differences", String.valueOf(!matches), "confirmed_not_received", String.valueOf(confirmed)));
@@ -223,16 +209,9 @@ public class SireResource {
         CompanyModel company = companyManager.getCompany(companyId);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, book, period, sunat_env, status, detail, proposal_ref IS NOT NULL, replacement_ref IS NOT NULL, created_at,
-                               updated_at
-                        FROM xhandler.sire_period WHERE company_id = :c AND sunat_env = :env AND (CAST(:b AS text) IS NULL OR book = :b)
-                        ORDER BY period DESC, book LIMIT :l OFFSET :o""")
-                .setParameter("c", companyId).setParameter("env", company.getSunatEnv()).setParameter("b", book).setParameter("l", size)
-                .setParameter("o", start).getResultList();
-        return new Page<>(rows.stream().map(r -> new SirePeriodSummary((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], (String) r[4],
-                (String) r[5], (Boolean) r[6], (Boolean) r[7], Times.toInstant(r[8]), Times.toInstant(r[9]))).toList(), size, start);
+        return new Page<>(sireProvider.getPeriods(companyId, company.getSunatEnv(), book, size, start).stream()
+                .map(r -> new SirePeriodSummary(r.id(), r.book(), r.period(), r.sunatEnv(), r.status(), r.detail(), r.proposalFile(),
+                        r.replacementFile(), r.createdAt(), r.updatedAt())).toList(), size, start);
     }
 
     /** SUNAT's proposal ({@code proposal}) or the submitted replacement ({@code replacement}), as SUNAT's ZIP. */
@@ -249,41 +228,32 @@ public class SireResource {
         TenantScope scope = access.enter(tenantId, Role.VIEWER);
         CompanyModel company = companyManager.getCompany(companyId);
         UUID id = find(companyId, company.getSunatEnv(), book, period);
-        String column = switch (kind) {
-            case "proposal" -> "proposal_ref";
-            case "replacement" -> "replacement_ref";
+        Optional<String> ref = switch (kind) {
+            case "proposal" -> sireProvider.getProposalRef(id);
+            case "replacement" -> sireProvider.getReplacementRef(id);
             default -> throw ApiException.notFound();
         };
-        List<?> ref = em.createNativeQuery("SELECT " + column + " FROM xhandler.sire_period WHERE id = :id").setParameter("id", id).getResultList();
-        if (ref.isEmpty() || ref.get(0) == null) {
+        if (ref.isEmpty()) {
             throw ApiException.notFound();
         }
         auditor.record(scope, "sire.file_read", "company", companyId, Map.of("book", book, "period", period, "kind", kind));
-        return Response.ok(files.get((String) ref.get(0))).type("application/zip")
+        return Response.ok(files.get(ref.get())).type("application/zip")
                 .header("Content-Disposition", "attachment; filename=\"sire-" + book + "-" + period + "-" + kind + ".zip\"").build();
     }
 
     private UUID find(UUID companyId, String sunatEnv, String book, String period) {
-        List<?> found = em.createNativeQuery("SELECT id FROM xhandler.sire_period WHERE company_id = :c AND sunat_env = :env AND book = :b AND period = :p")
-                .setParameter("c", companyId).setParameter("env", sunatEnv).setParameter("b", book).setParameter("p", period).getResultList();
-        if (found.isEmpty()) {
-            throw ApiException.notFound();
-        }
-        return (UUID) found.get(0);
+        return sireProvider.getPeriodId(companyId, sunatEnv, book, period).orElseThrow(ApiException::notFound);
     }
 
     private SirePeriodView view(UUID id) {
-        Object[] r = (Object[]) em.createNativeQuery("""
-                        SELECT id, book, period, sunat_env, status, detail, cast(reconciliation AS text), proposal_ref IS NOT NULL,
-                               replacement_ref IS NOT NULL, created_at, updated_at
-                        FROM xhandler.sire_period WHERE id = :id""").setParameter("id", id).getSingleResult();
+        SireProvider.PeriodView r = sireProvider.getPeriodView(id);
         JsonNode reconciliation;
         try {
-            reconciliation = r[6] == null ? null : JSON.readTree((String) r[6]);
+            reconciliation = r.reconciliation() == null ? null : JSON.readTree(r.reconciliation());
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
-        return new SirePeriodView((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], (String) r[4], (String) r[5], reconciliation,
-                (Boolean) r[7], (Boolean) r[8], Times.toInstant(r[9]), Times.toInstant(r[10]));
+        return new SirePeriodView(r.id(), r.book(), r.period(), r.sunatEnv(), r.status(), r.detail(), reconciliation,
+                r.proposalFile(), r.replacementFile(), r.createdAt(), r.updatedAt());
     }
 }

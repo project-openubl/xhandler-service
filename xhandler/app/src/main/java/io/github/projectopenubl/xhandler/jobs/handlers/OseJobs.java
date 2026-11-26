@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
-import io.github.projectopenubl.xhandler.utils.Times;
+import io.github.projectopenubl.xhandler.models.OseProvider;
 import io.github.projectopenubl.xhandler.clients.OseClients;
 import io.github.projectopenubl.xhandler.managers.OseIntake;
 import io.github.projectopenubl.xhandler.utils.ZipGuard;
@@ -73,7 +73,7 @@ public final class OseJobs {
         static final Duration WARN_AFTER = Duration.ofMinutes(45);
         static final int PARALLEL = 8;
 
-        private final jakarta.persistence.EntityManager em;
+        private final OseProvider oseProvider;
         private final Engine engine;
         private final FileStore files;
         private final PlatformCredentials credentials;
@@ -81,10 +81,10 @@ public final class OseJobs {
         private final String environment;
         private final Optional<String> url;
 
-        public Forwarder(jakarta.persistence.EntityManager em, Engine engine, FileStore files, PlatformCredentials credentials,
+        public Forwarder(OseProvider oseProvider, Engine engine, FileStore files, PlatformCredentials credentials,
                 MeterRegistry metrics, @ConfigProperty(name = "xhandler.ose.environment", defaultValue = "fake") String environment,
                 @ConfigProperty(name = "xhandler.ose.forward-url") Optional<String> url) {
-            this.em = em;
+            this.oseProvider = oseProvider;
             this.engine = engine;
             this.files = files;
             this.credentials = credentials;
@@ -99,10 +99,7 @@ public final class OseJobs {
 
         double oldestPending() {
             try {
-                List<?> age = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery("""
-                                SELECT extract(epoch FROM now() - min(cdr_issued_at)) FROM xhandler.ose_submission
-                                WHERE forward_status IN ('pending', 'blocked')""").getResultList());
-                return age.isEmpty() || age.get(0) == null ? 0.0 : ((Number) age.get(0)).doubleValue();
+                return QuarkusTransaction.requiringNew().call(oseProvider::getOldestForwardSeconds);
             } catch (RuntimeException e) {
                 return Double.NaN;
             }
@@ -119,9 +116,7 @@ public final class OseJobs {
         public Map<String, Object> run(JobContext context) {
             Instant deadline = Instant.now().plus(BUDGET);
             // Blocked rows come back every 10 minutes: once the cause is fixed they flow again
-            QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery("""
-                            UPDATE xhandler.ose_submission SET forward_status = 'pending'
-                            WHERE forward_status = 'blocked' AND next_attempt_at <= now()""").executeUpdate());
+            QuarkusTransaction.requiringNew().run(oseProvider::unblockDueForwards);
             EngineModels.Environment env = switch (environment) {
                 case "production" -> EngineModels.Environment.PRODUCTION;
                 case "beta" -> EngineModels.Environment.BETA;
@@ -192,39 +187,19 @@ public final class OseJobs {
 
         private List<Due> lease() {
             UUID lease = UUID.randomUUID();
-            return QuarkusTransaction.requiringNew().call(() -> {
-                @SuppressWarnings("unchecked")
-                List<Object[]> rows = em.createNativeQuery("""
-                                WITH due AS (
-                                    SELECT id FROM xhandler.ose_submission
-                                    WHERE forward_status = 'pending' AND next_attempt_at <= now()
-                                    ORDER BY cdr_issued_at LIMIT 50 FOR UPDATE SKIP LOCKED)
-                                UPDATE xhandler.ose_submission s SET next_attempt_at = now() + interval '2 minutes', forward_lease = :lease
-                                FROM due WHERE s.id = due.id
-                                RETURNING s.id, s.name, s.tipo, s.xml_ref, s.cdr_ref, s.cdr_issued_at, s.forward_attempts""")
-                        .setParameter("lease", lease).getResultList();
-                return rows.stream().map(r -> new Due((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], (String) r[4],
-                        Times.toInstant(r[5]), ((Number) r[6]).intValue(), lease)).toList();
-            });
+            return QuarkusTransaction.requiringNew().call(() -> oseProvider.leaseForwards(lease).stream()
+                    .map(r -> new Due(r.id(), r.name(), r.tipo(), r.xmlRef(), r.cdrRef(), r.cdrIssuedAt(), r.attempts(), lease)).toList());
         }
 
         /** Gives a leased row back at once (the run stopped before sending it). */
         private void release(List<Due> due) {
             for (Due d : due) {
-                QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery("""
-                                UPDATE xhandler.ose_submission SET next_attempt_at = now(), forward_lease = NULL
-                                WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                        .setParameter("id", d.id()).setParameter("lease", d.lease()).executeUpdate());
+                QuarkusTransaction.requiringNew().run(() -> oseProvider.releaseForward(d.id(), d.lease()));
             }
         }
 
         private void retry(Due d, String error) {
-            QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery("""
-                            UPDATE xhandler.ose_submission SET forward_attempts = forward_attempts + 1, last_error = :e,
-                                next_attempt_at = now() + cast(:wait AS interval)
-                            WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                    .setParameter("e", truncate(error)).setParameter("wait", backoff(d.attempts() + 1)).setParameter("id", d.id())
-                    .setParameter("lease", d.lease()).executeUpdate());
+            QuarkusTransaction.requiringNew().run(() -> oseProvider.retryForward(d.id(), d.lease(), truncate(error), backoff(d.attempts() + 1)));
         }
 
         private String forward(Due d, EngineModels.Environment env, EngineModels.OseCredentials creds) {
@@ -241,27 +216,10 @@ public final class OseJobs {
             EngineModels.OseForwardResponse outcome = response;
             String detail = ((outcome.code() == null ? "" : outcome.code()) + " " + (outcome.description() == null ? "" : outcome.description())).strip();
             int changed = QuarkusTransaction.requiringNew().call(() -> switch (outcome.status()) {
-                case "accepted" -> em.createNativeQuery("""
-                                UPDATE xhandler.ose_submission SET forward_status = 'forwarded', forwarded_at = now(), sunat_ack = :ack,
-                                    forward_attempts = forward_attempts + 1, next_attempt_at = NULL, last_error = NULL
-                                WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                        .setParameter("ack", truncate(detail)).setParameter("id", d.id()).setParameter("lease", d.lease()).executeUpdate();
-                case "rejected" -> em.createNativeQuery("""
-                                UPDATE xhandler.ose_submission SET forward_status = 'rejected', forward_attempts = forward_attempts + 1,
-                                    next_attempt_at = NULL, last_error = :e
-                                WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                        .setParameter("e", truncate(detail)).setParameter("id", d.id()).setParameter("lease", d.lease()).executeUpdate();
-                case "blocked" -> em.createNativeQuery("""
-                                UPDATE xhandler.ose_submission SET forward_status = 'blocked', forward_attempts = forward_attempts + 1,
-                                    next_attempt_at = now() + interval '10 minutes', last_error = :e
-                                WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                        .setParameter("e", truncate(detail)).setParameter("id", d.id()).setParameter("lease", d.lease()).executeUpdate();
-                default -> em.createNativeQuery("""
-                                UPDATE xhandler.ose_submission SET forward_attempts = forward_attempts + 1, last_error = :e,
-                                    next_attempt_at = now() + cast(:wait AS interval)
-                                WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                        .setParameter("e", truncate(detail)).setParameter("wait", backoff(d.attempts() + 1)).setParameter("id", d.id())
-                        .setParameter("lease", d.lease()).executeUpdate();
+                case "accepted" -> oseProvider.markForwarded(d.id(), d.lease(), truncate(detail));
+                case "rejected" -> oseProvider.markForwardRejected(d.id(), d.lease(), truncate(detail));
+                case "blocked" -> oseProvider.markForwardBlocked(d.id(), d.lease(), truncate(detail));
+                default -> oseProvider.retryForward(d.id(), d.lease(), truncate(detail), backoff(d.attempts() + 1));
             });
             if (changed == 0) {
                 // Another run took the row over (its lease expired): its outcome stands
@@ -300,11 +258,11 @@ public final class OseJobs {
      */
     @ApplicationScoped
     public static class Purge implements JobHandler {
-        private final jakarta.persistence.EntityManager em;
+        private final OseProvider oseProvider;
         private final FileStore files;
 
-        public Purge(jakarta.persistence.EntityManager em, FileStore files) {
-            this.em = em;
+        public Purge(OseProvider oseProvider, FileStore files) {
+            this.oseProvider = oseProvider;
             this.files = files;
         }
 
@@ -316,16 +274,12 @@ public final class OseJobs {
         @Override
         public Map<String, Object> run(JobContext context) {
             List<String> orphaned = QuarkusTransaction.requiringNew().call(() -> {
-                @SuppressWarnings("unchecked")
-                List<Object[]> gone = em.createNativeQuery("""
-                                DELETE FROM xhandler.ose_submission
-                                WHERE purge_after < now() AND (result = 'inconsistency' OR forward_status = 'forwarded')
-                                RETURNING xml_ref, cdr_ref""").getResultList();
+                List<OseProvider.PurgedFiles> gone = oseProvider.deletePurgeableSubmissions();
                 List<String> refs = new ArrayList<>();
-                for (Object[] r : gone) {
-                    for (Object ref : r) {
+                for (OseProvider.PurgedFiles r : gone) {
+                    for (String ref : new String[] {r.xmlRef(), r.cdrRef()}) {
                         if (ref != null && !refs.contains(ref)) {
-                            refs.add((String) ref);
+                            refs.add(ref);
                         }
                     }
                 }
@@ -333,11 +287,7 @@ public final class OseJobs {
                     return List.<String>of();
                 }
                 // A second statement: it sees the deletion above (a CTE would not)
-                @SuppressWarnings("unchecked")
-                List<String> still = em.createNativeQuery("""
-                                SELECT ref FROM unnest(cast(:refs AS text[])) ref
-                                WHERE EXISTS (SELECT 1 FROM xhandler.ose_submission s WHERE s.xml_ref = ref OR s.cdr_ref = ref)""")
-                        .setParameter("refs", refs.toArray(String[]::new)).getResultList();
+                List<String> still = oseProvider.getReferencedFiles(refs);
                 refs.removeAll(still);
                 return refs;
             });

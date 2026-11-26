@@ -15,7 +15,7 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.SireProvider;
 import jakarta.transaction.Transactional;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -49,7 +49,7 @@ public class SireService {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Logger LOG = Logger.getLogger(SireService.class);
 
-    private final EntityManager em;
+    private final SireProvider sireProvider;
     private final TenantAccess access;
     private final Engine engine;
     private final CredentialService credentials;
@@ -57,10 +57,10 @@ public class SireService {
     private final RegisterRows registers;
     private final Notifications notifications;
 
-    public SireService(EntityManager em, TenantAccess access, Engine engine, CredentialService credentials, FileStore files,
+    public SireService(SireProvider sireProvider, TenantAccess access, Engine engine, CredentialService credentials, FileStore files,
             RegisterRows registers, Notifications notifications, CompanyProvider companyProvider) {
         this.companyProvider = companyProvider;
-        this.em = em;
+        this.sireProvider = sireProvider;
         this.access = access;
         this.engine = engine;
         this.credentials = credentials;
@@ -78,11 +78,9 @@ public class SireService {
             String replacementTicket, int attempts) {}
 
     private Period load(UUID id) {
-        Object[] r = (Object[]) em.createNativeQuery("""
-                        SELECT id, company_id, sunat_env, book, period, status, proposal_ticket, replacement_ticket, poll_attempts
-                        FROM xhandler.sire_period WHERE id = :id""").setParameter("id", id).getSingleResult();
-        return new Period((UUID) r[0], (UUID) r[1], (String) r[2], (String) r[3], (String) r[4], (String) r[5], (String) r[6], (String) r[7],
-                ((Number) r[8]).intValue());
+        SireProvider.Period r = sireProvider.getPeriod(id);
+        return new Period(r.id(), r.companyId(), r.sunatEnv(), r.book(), r.period(), r.status(), r.proposalTicket(), r.replacementTicket(),
+                r.attempts());
     }
 
     private Optional<EngineModels.ApiCredentials> apiCredentials(TenantScope scope, CompanyModel company, String purpose) {
@@ -97,25 +95,7 @@ public class SireService {
     private boolean transition(UUID tenantId, UUID id, String from, String ticketColumn, String ticket, String to, Map<String, Object> columns) {
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            StringBuilder sql = new StringBuilder("UPDATE xhandler.sire_period SET status = :to, updated_at = now()");
-            for (String column : columns.keySet()) {
-                sql.append(", ").append(column).append(" = ");
-                sql.append(switch (column) {
-                    case "reconciliation" -> "cast(:" + column + " AS jsonb)";
-                    case "next_poll_at" -> "now() + cast(:" + column + " AS interval)";
-                    default -> ":" + column;
-                });
-            }
-            sql.append(" WHERE id = :id AND status = :from");
-            if (ticketColumn != null) {
-                sql.append(" AND ").append(ticketColumn).append(" IS NOT DISTINCT FROM :ticket");
-            }
-            var query = em.createNativeQuery(sql.toString()).setParameter("to", to).setParameter("id", id).setParameter("from", from);
-            if (ticketColumn != null) {
-                query.setParameter("ticket", ticket);
-            }
-            columns.forEach(query::setParameter);
-            return query.executeUpdate() == 1;
+            return sireProvider.transitionPeriod(id, from, ticketColumn, ticket, to, columns) == 1;
         });
     }
 
@@ -151,12 +131,7 @@ public class SireService {
     /** After the company's SIRE credentials change: periods waiting for them resume (in the caller's transaction). */
     @Transactional(Transactional.TxType.MANDATORY)
     public int resumeAfterCredentials(UUID companyId) {
-        return em.createNativeQuery("""
-                        UPDATE xhandler.sire_period
-                        SET status = coalesce(resume_status, 'requested'), resume_status = NULL, poll_attempts = 0, next_poll_at = now(),
-                            proposal_ticket = CASE WHEN coalesce(resume_status, 'requested') = 'requested' THEN NULL ELSE proposal_ticket END,
-                            detail = NULL, updated_at = now()
-                        WHERE company_id = :c AND status = 'credentials'""").setParameter("c", companyId).executeUpdate();
+        return sireProvider.resumeAfterCredentials(companyId);
     }
 
     /** Asks SUNAT for the proposal of a period in {@code requested} without a ticket; one caller at a time. */
@@ -165,12 +140,7 @@ public class SireService {
         record Call(Period period, CompanyModel company, EngineModels.ApiCredentials creds) {}
         Call call = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(tenantId);
-            int claimed = em.createNativeQuery("""
-                            UPDATE xhandler.sire_period SET proposal_ticket = :claim, updated_at = now()
-                            WHERE id = :id AND status = 'requested'
-                              AND (proposal_ticket IS NULL OR proposal_ticket = ''
-                                   OR (proposal_ticket LIKE 'claim:%' AND updated_at < now() - interval '10 minutes'))""")
-                    .setParameter("claim", claim).setParameter("id", id).executeUpdate();
+            int claimed = sireProvider.claimProposal(id, claim);
             if (claimed == 0) {
                 return null;
             }
