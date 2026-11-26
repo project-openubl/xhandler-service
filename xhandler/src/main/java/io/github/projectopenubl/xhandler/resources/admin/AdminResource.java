@@ -1,71 +1,92 @@
 package io.github.projectopenubl.xhandler.resources.admin;
 
-import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.MigrationRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.JobStateRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.EndpointUpdateRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.EndpointRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.DocumentStateRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.CountRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.BulkRetryRepresentation;
-import io.github.projectopenubl.xhandler.models.MaintenanceProvider;
-import io.github.projectopenubl.xhandler.models.JobQueueProvider;
-import io.github.projectopenubl.xhandler.models.EmailProvider;
-import io.github.projectopenubl.xhandler.models.TenantProvider;
-import io.github.projectopenubl.xhandler.models.CompanyProvider;
-import io.github.projectopenubl.xhandler.models.PlatformProvider;
-import io.github.projectopenubl.xhandler.security.PlatformAdmin;
-
-import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.managers.DocumentControlManager;
 import io.github.projectopenubl.xhandler.jobs.JobStore;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
+import io.github.projectopenubl.xhandler.managers.DocumentControlManager;
+import io.github.projectopenubl.xhandler.managers.EntitlementManager;
 import io.github.projectopenubl.xhandler.managers.KeyRotationManager;
-import io.github.projectopenubl.xhandler.security.Actor;
-import io.github.projectopenubl.xhandler.security.Role;
+import io.github.projectopenubl.xhandler.managers.SelfInvoicingManager;
+import io.github.projectopenubl.xhandler.models.BillingProvider;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
+import io.github.projectopenubl.xhandler.models.EmailProvider;
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
+import io.github.projectopenubl.xhandler.models.MaintenanceProvider;
+import io.github.projectopenubl.xhandler.models.PlatformProvider;
 import io.github.projectopenubl.xhandler.models.TenantModel;
+import io.github.projectopenubl.xhandler.models.TenantProvider;
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.BulkRetryRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.CountRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.DocumentStateRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EndpointRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EndpointUpdateRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.JobStateRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.MigrationRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.PlanRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.AdminCompanyRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.AdminPartnerRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.AdminTenantRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.BillingIssuerRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.CompanyOseObligatedRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.CompanySendingRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.EmailSuppressionRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.JobSummaryRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.KeyRotationRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.NewPartnerRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.OseObligatedRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.PartitionsRepairedRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.PartnerCreatedRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.PartnerMemberAssignmentRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.PartnerMemberRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.PartnerMemberRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.PlanAssignmentRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.TenantPlanRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.admin.TenantSendingRepresentation;
+import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
+import io.github.projectopenubl.xhandler.security.Actor;
+import io.github.projectopenubl.xhandler.security.PlatformAdmin;
+import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
-import io.github.projectopenubl.xhandler.managers.AuditManager;
+import io.github.projectopenubl.xhandler.utils.Deadlines;
+import io.github.projectopenubl.xhandler.utils.Ids;
 import jakarta.transaction.Transactional;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Response;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.extensions.Extension;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 
 /**
  * Platform administration for operators (DESIGN.md §15, §24.1; docs/runbooks). Every call needs the
  * {@code platform-admin} role; actions on tenant data are written to that tenant's audit log.
+ * Documented in the admin OpenAPI document only ({@link AdminOpenApi#PROFILE}).
  */
+@Extension(name = AdminOpenApi.PROFILE_EXTENSION, value = "")
 @Path("/api/admin/v1")
 public class AdminResource {
 
     private final ModelToRepresentation modelToRepresentation;
-
     private final MaintenanceProvider maintenanceProvider;
-
     private final JobQueueProvider jobQueueProvider;
-
     private final EmailProvider emailProvider;
-
     private final TenantProvider tenantProvider;
-
     private final CompanyProvider companyProvider;
-
-    /** Platform-level admin actions (not tied to one tenant's audit log) go to this logger. */
-
-
-
-
-
-
-
-
+    private final BillingProvider billingProvider;
     private final PlatformAdmin admin;
     private final TenantAccess access;
     private final DocumentControlManager control;
@@ -73,16 +94,19 @@ public class AdminResource {
     private final KeyRotationManager rotation;
     private final AuditManager auditor;
     private final PlatformProvider platform;
-    private final io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements;
+    private final EntitlementManager entitlements;
 
     public AdminResource(PlatformAdmin admin, TenantAccess access, DocumentControlManager control, JobStore jobs, KeyRotationManager rotation,
-            AuditManager auditor, PlatformProvider platform, io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider, EmailProvider emailProvider, JobQueueProvider jobQueueProvider, MaintenanceProvider maintenanceProvider, ModelToRepresentation modelToRepresentation) {
+            AuditManager auditor, PlatformProvider platform, EntitlementManager entitlements, CompanyProvider companyProvider,
+            TenantProvider tenantProvider, EmailProvider emailProvider, JobQueueProvider jobQueueProvider, MaintenanceProvider maintenanceProvider,
+            ModelToRepresentation modelToRepresentation, BillingProvider billingProvider) {
         this.modelToRepresentation = modelToRepresentation;
         this.maintenanceProvider = maintenanceProvider;
         this.jobQueueProvider = jobQueueProvider;
         this.emailProvider = emailProvider;
         this.tenantProvider = tenantProvider;
         this.companyProvider = companyProvider;
+        this.billingProvider = billingProvider;
         this.entitlements = entitlements;
         this.admin = admin;
         this.access = access;
@@ -95,6 +119,7 @@ public class AdminResource {
 
     // --- documents (requeue-document, retry, hold, release) ---------------------
 
+    @Operation(operationId = "adminRetryDocument", summary = "Reintenta un documento de cualquier organización")
     @POST
     @Path("/documents/{id}/retry")
     @Transactional
@@ -102,6 +127,7 @@ public class AdminResource {
         return modelToRepresentation.toStateRepresentation(control.retry(openDocumentTenant(id), id));
     }
 
+    @Operation(operationId = "adminHoldDocument", summary = "Retiene un documento de cualquier organización")
     @POST
     @Path("/documents/{id}/hold")
     @Transactional
@@ -109,6 +135,7 @@ public class AdminResource {
         return modelToRepresentation.toStateRepresentation(control.hold(openDocumentTenant(id), id));
     }
 
+    @Operation(operationId = "adminReleaseDocument", summary = "Libera un documento retenido")
     @POST
     @Path("/documents/{id}/release")
     @Transactional
@@ -116,6 +143,7 @@ public class AdminResource {
         return modelToRepresentation.toStateRepresentation(control.release(openDocumentTenant(id), id));
     }
 
+    @Operation(operationId = "adminRetryTenantDocuments", summary = "Reintenta en bloque los documentos de una organización que cumplan el filtro")
     @POST
     @Path("/tenants/{tenantId}/retry")
     @Transactional
@@ -125,128 +153,213 @@ public class AdminResource {
         return new CountRepresentation(control.retryWhere(scope, f.companyId(), f.status(), f.from(), f.to()));
     }
 
+    // --- tenants of the platform (§1.2): account metadata, never documents ----------
+
+    @Operation(operationId = "adminListTenants", summary = "Organizaciones de la plataforma, las más nuevas primero (filtro por nombre o id)")
+    @GET
+    @Path("/tenants")
+    @Transactional
+    public PageRepresentation<AdminTenantRepresentation> tenants(@QueryParam("q") String q, @QueryParam("limit") Integer limit,
+            @QueryParam("offset") Integer offset) {
+        admin.require();
+        int size = PageRepresentation.limit(limit);
+        int from = PageRepresentation.offset(offset);
+        String query = q == null ? null : q.strip();
+        return new PageRepresentation<>(platform.getTenants(query, size, from).stream().map(AdminResource::tenant).toList(), size, from);
+    }
+
+    @Operation(operationId = "adminGetTenant", summary = "Una organización de la plataforma")
+    @GET
+    @Path("/tenants/{tenantId}")
+    @Transactional
+    public AdminTenantRepresentation tenant(@PathParam("tenantId") UUID tenantId) {
+        admin.require();
+        return tenant(platform.getTenant(tenantId).orElseThrow(ApiException::notFound));
+    }
+
+    /** The companies of a tenant, to hold them or set their OSE obligation; the read is in the tenant's audit log. */
+    @Operation(operationId = "adminListTenantCompanies", summary = "Empresas de una organización (queda en su auditoría)")
+    @GET
+    @Path("/tenants/{tenantId}/companies")
+    @Transactional
+    public List<AdminCompanyRepresentation> tenantCompanies(@PathParam("tenantId") UUID tenantId) {
+        TenantScope scope = openTenant(tenantId);
+        List<AdminCompanyRepresentation> companies = companyProvider.getCompanies(0, 1000).stream()
+                .map(c -> new AdminCompanyRepresentation(c.getId(), c.getRuc(), c.getRazonSocial(), c.getSunatEnv(), c.getEmissionMode(),
+                        c.getSubmissionRoute(), c.getRucVerifiedAt(), c.isSendingPaused(), c.isOseObligated()))
+                .toList();
+        auditor.record(scope, "tenant.companies_listed", "tenant", tenantId);
+        return companies;
+    }
+
     // --- holds per tenant and company ---------------------------------------------
 
+    @Operation(operationId = "adminHoldTenantSending", summary = "Pausa los envíos a SUNAT de una organización")
     @POST
     @Path("/tenants/{tenantId}/hold")
     @Transactional
-    public Map<String, Object> holdTenant(@PathParam("tenantId") UUID tenantId) {
+    public TenantSendingRepresentation holdTenant(@PathParam("tenantId") UUID tenantId) {
         return pauseTenant(tenantId, true);
     }
 
+    @Operation(operationId = "adminReleaseTenantSending", summary = "Reanuda los envíos a SUNAT de una organización")
     @POST
     @Path("/tenants/{tenantId}/release")
     @Transactional
-    public Map<String, Object> releaseTenant(@PathParam("tenantId") UUID tenantId) {
+    public TenantSendingRepresentation releaseTenant(@PathParam("tenantId") UUID tenantId) {
         return pauseTenant(tenantId, false);
     }
 
+    @Operation(operationId = "adminHoldCompanySending", summary = "Pausa los envíos a SUNAT de una empresa")
     @POST
     @Path("/tenants/{tenantId}/companies/{companyId}/hold")
     @Transactional
-    public Map<String, Object> holdCompany(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
+    public CompanySendingRepresentation holdCompany(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         return pauseCompany(tenantId, companyId, true);
     }
 
+    @Operation(operationId = "adminReleaseCompanySending", summary = "Reanuda los envíos a SUNAT de una empresa")
     @POST
     @Path("/tenants/{tenantId}/companies/{companyId}/release")
     @Transactional
-    public Map<String, Object> releaseCompany(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
+    public CompanySendingRepresentation releaseCompany(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         return pauseCompany(tenantId, companyId, false);
     }
 
     /** The OSE obligation is a regulatory status set by the platform (§3.2), not by the tenant. */
+    @Operation(operationId = "adminSetCompanyOseObligated", summary = "Marca si una empresa está obligada a enviar por un OSE")
     @PUT
     @Path("/tenants/{tenantId}/companies/{companyId}/ose-obligated")
     @Transactional
-    public Map<String, Object> oseObligated(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
-            Map<String, Boolean> body) {
+    public CompanyOseObligatedRepresentation oseObligated(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+            OseObligatedRequestRepresentation body) {
         TenantScope scope = openTenant(tenantId);
         CompanyModel company = companyProvider.getCompanyForUpdate(companyId).orElse(null);
         if (company == null) {
             throw ApiException.notFound();
         }
-        if (body == null || !body.containsKey("ose_obligated") || body.get("ose_obligated") == null) {
+        if (body == null || body.oseObligated() == null) {
             throw ApiException.invalid("invalid_request", "Indique ose_obligated (true o false).", null);
         }
-        boolean value = body.get("ose_obligated");
+        boolean value = body.oseObligated();
         company.setOseObligated(value);
         auditor.record(scope, "company.ose_obligated", "company", companyId, Map.of("value", value));
-        return Map.of("company_id", companyId, "ose_obligated", value);
+        return new CompanyOseObligatedRepresentation(companyId, value);
     }
 
     /** Bounce processing (§26.5): the platform's email provider reports hard bounces and complaints. */
+    @Operation(operationId = "adminSuppressEmail", summary = "Suprime un correo de una organización (rebote o queja)")
     @POST
     @Path("/tenants/{tenantId}/email-suppressions")
     @Transactional
-    public Map<String, Object> suppressEmail(@PathParam("tenantId") UUID tenantId, Map<String, String> body) {
+    public EmailSuppressionRepresentation suppressEmail(@PathParam("tenantId") UUID tenantId, EmailSuppressionRepresentation body) {
         TenantScope scope = openTenant(tenantId);
-        String address = body == null ? null : body.get("address");
+        String address = body == null ? null : body.address();
         if (address == null || !address.contains("@")) {
             throw ApiException.invalid("invalid_request", "Indique el correo.", null);
         }
-        String reason = body.getOrDefault("reason", "hard_bounce");
+        String reason = body.reason() == null ? "hard_bounce" : body.reason();
         emailProvider.suppressEmail(tenantId, address, reason);
         auditor.record(scope, "email.suppressed", "email", null, Map.of("address", address, "reason", reason));
-        return Map.of("address", address, "reason", reason);
+        return new EmailSuppressionRepresentation(address, reason);
     }
 
     // --- partners and plans (§1.2, §14) ---------------------------------------------
 
+    @Operation(operationId = "adminListPartners", summary = "Socios de la plataforma con sus miembros y organizaciones")
+    @GET
+    @Path("/partners")
+    @Transactional
+    public List<AdminPartnerRepresentation> partners() {
+        admin.require();
+        return platform.getPartners().stream()
+                .map(p -> new AdminPartnerRepresentation(p.id(), p.name(), p.status(), p.createdAt(), p.members(), p.tenants()))
+                .toList();
+    }
+
+    @Operation(operationId = "adminCreatePartner", summary = "Crea un socio")
     @POST
     @Path("/partners")
     @Transactional
-    public Map<String, Object> createPartner(Map<String, String> body) {
-        admin.require();
-        String name = body == null ? null : body.get("name");
+    public PartnerCreatedRepresentation createPartner(NewPartnerRepresentation body) {
+        String who = admin.require();
+        String name = body == null ? null : body.name();
         if (name == null || name.isBlank()) {
             throw ApiException.invalid("invalid_request", "Indique el nombre del partner.", null);
         }
-        UUID id = io.github.projectopenubl.xhandler.utils.Ids.newId();
+        UUID id = Ids.newId();
         platform.createPartner(id, name.strip());
-        AdminLog.PLATFORM_AUDIT.infof("admin %s created partner %s (%s)", admin.require(), id, name.strip());
-        return Map.of("id", id, "name", name.strip());
+        AdminLog.PLATFORM_AUDIT.infof("admin %s created partner %s (%s)", who, id, name.strip());
+        return new PartnerCreatedRepresentation(id, name.strip());
     }
 
+    @Operation(operationId = "adminListPartnerMembers", summary = "Miembros de un socio")
+    @GET
+    @Path("/partners/{partnerId}/members")
+    @Transactional
+    public List<PartnerMemberRepresentation> partnerMembers(@PathParam("partnerId") UUID partnerId) {
+        admin.require();
+        if (!platform.existsPartner(partnerId)) {
+            throw ApiException.notFound();
+        }
+        return platform.getPartnerMembers(partnerId).stream()
+                .map(m -> new PartnerMemberRepresentation(m.kind(), m.subject(), m.role(), m.createdAt()))
+                .toList();
+    }
+
+    @Operation(operationId = "adminSetPartnerMember", summary = "Agrega o cambia el rol de un miembro de un socio")
     @PUT
     @Path("/partners/{partnerId}/members")
     @Transactional
-    public Map<String, Object> partnerMember(@PathParam("partnerId") UUID partnerId, Map<String, String> body) {
-        admin.require();
-        String kind = body == null ? null : body.getOrDefault("kind", "user");
-        String subject = body == null ? null : body.get("subject");
-        String role = body == null ? null : body.getOrDefault("role", "admin");
-        if (subject == null || !java.util.Set.of("user", "client").contains(kind) || !java.util.Set.of("admin", "viewer").contains(role)) {
+    public PartnerMemberAssignmentRepresentation partnerMember(@PathParam("partnerId") UUID partnerId, PartnerMemberRequestRepresentation body) {
+        String who = admin.require();
+        String kind = body == null ? null : body.kind() == null ? "user" : body.kind();
+        String subject = body == null ? null : body.subject();
+        String role = body == null ? null : body.role() == null ? "admin" : body.role();
+        if (subject == null || !Set.of("user", "client").contains(kind) || !Set.of("admin", "viewer").contains(role)) {
             throw ApiException.invalid("invalid_request", "Indique subject, kind (user|client) y role (admin|viewer).", null);
         }
         if (!platform.setPartnerMember(partnerId, kind, subject, role)) {
             throw ApiException.notFound();
         }
-        AdminLog.PLATFORM_AUDIT.infof("admin %s set %s:%s as %s of partner %s", admin.require(), kind, subject, role, partnerId);
-        return Map.of("partner_id", partnerId, "kind", kind, "subject", subject, "role", role);
+        AdminLog.PLATFORM_AUDIT.infof("admin %s set %s:%s as %s of partner %s", who, kind, subject, role, partnerId);
+        return new PartnerMemberAssignmentRepresentation(partnerId, kind, subject, role);
     }
 
-    @jakarta.ws.rs.DELETE
+    @Operation(operationId = "adminRemovePartnerMember", summary = "Quita un miembro de un socio")
+    @APIResponse(responseCode = "204", description = "Miembro quitado.")
+    @DELETE
     @Path("/partners/{partnerId}/members/{kind}/{subject}")
     @Transactional
-    public jakarta.ws.rs.core.Response removePartnerMember(@PathParam("partnerId") UUID partnerId, @PathParam("kind") String kind,
+    public Response removePartnerMember(@PathParam("partnerId") UUID partnerId, @PathParam("kind") String kind,
             @PathParam("subject") String subject) {
         String who = admin.require();
         if (!platform.removePartnerMember(partnerId, kind, subject)) {
             throw ApiException.notFound();
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s removed %s:%s from partner %s", who, kind, subject, partnerId);
-        return jakarta.ws.rs.core.Response.noContent().build();
+        return Response.noContent().build();
     }
 
-    /** The company that issues the platform's own invoices (self-invoicing, §14). */
+    /** The company that issues the platform's own invoices (self-invoicing, §14); both null until set. */
+    @Operation(operationId = "adminGetBillingIssuer", summary = "Empresa que emite las facturas de la plataforma")
+    @GET
+    @Path("/billing/issuer")
+    @Transactional
+    public BillingIssuerRepresentation getBillingIssuer() {
+        admin.require();
+        Map<String, String> settings = billingProvider.getPlatformSettings(SelfInvoicingManager.ISSUER_TENANT, SelfInvoicingManager.ISSUER_COMPANY);
+        return new BillingIssuerRepresentation(settings.get(SelfInvoicingManager.ISSUER_TENANT), settings.get(SelfInvoicingManager.ISSUER_COMPANY));
+    }
+
+    @Operation(operationId = "adminSetBillingIssuer", summary = "Cambia la empresa que emite las facturas de la plataforma")
     @PUT
     @Path("/billing/issuer")
     @Transactional
-    public Map<String, Object> billingIssuer(Map<String, String> body) {
-        admin.require();
-        String tenant = body == null ? null : body.get("tenant_id");
-        String company = body == null ? null : body.get("company_id");
+    public BillingIssuerRepresentation billingIssuer(BillingIssuerRepresentation body) {
+        String who = admin.require();
+        String tenant = body == null ? null : body.tenantId();
+        String company = body == null ? null : body.companyId();
         if (tenant == null || company == null) {
             throw ApiException.invalid("invalid_request", "Indique tenant_id y company_id.", null);
         }
@@ -262,31 +375,41 @@ public class AdminResource {
         if (companyProvider.getCompany(companyId).orElse(null) == null) {
             throw ApiException.notFound();
         }
-        AdminLog.PLATFORM_AUDIT.infof("admin %s set the billing issuer to company %s of tenant %s", admin.require(), companyId, tenantId);
-        for (Map.Entry<String, String> e : Map.of(io.github.projectopenubl.xhandler.managers.SelfInvoicingManager.ISSUER_TENANT, tenant,
-                io.github.projectopenubl.xhandler.managers.SelfInvoicingManager.ISSUER_COMPANY, company).entrySet()) {
-            platform.setPlatformSetting(e.getKey(), e.getValue());
-        }
-        return Map.of("tenant_id", tenant, "company_id", company);
+        AdminLog.PLATFORM_AUDIT.infof("admin %s set the billing issuer to company %s of tenant %s", who, companyId, tenantId);
+        platform.setPlatformSetting(SelfInvoicingManager.ISSUER_TENANT, tenant);
+        platform.setPlatformSetting(SelfInvoicingManager.ISSUER_COMPANY, company);
+        return new BillingIssuerRepresentation(tenant, company);
+    }
+
+    @Operation(operationId = "adminListPlans", summary = "Planes del servicio")
+    @GET
+    @Path("/plans")
+    @Transactional
+    public List<PlanRepresentation> plans() {
+        admin.require();
+        return billingProvider.getPlans().stream().map(r -> new PlanRepresentation(r.code(), r.name(), r.productionPerMonth(), r.betaPerDay(),
+                r.sandboxPerDay(), Boolean.TRUE.equals(r.customSmtp()), Boolean.TRUE.equals(r.webhooks()))).toList();
     }
 
     /** Sets a tenant's plan by hand (contracts outside Lago); Lago syncs don't overwrite it. */
+    @Operation(operationId = "adminSetTenantPlan", summary = "Asigna a mano el plan de una organización")
     @PUT
     @Path("/tenants/{tenantId}/plan")
     @Transactional
-    public Map<String, Object> plan(@PathParam("tenantId") UUID tenantId, Map<String, String> body) {
+    public TenantPlanRepresentation plan(@PathParam("tenantId") UUID tenantId, PlanAssignmentRepresentation body) {
         TenantScope scope = openTenant(tenantId);
-        String code = body == null ? null : body.get("plan");
+        String code = body == null ? null : body.plan();
         if (code == null) {
             throw ApiException.invalid("invalid_request", "Indique el plan.", null);
         }
         entitlements.setPlan(tenantId, code, "admin");
         auditor.record(scope, "tenant.plan_set", "tenant", tenantId, Map.of("plan", code));
-        return Map.of("tenant_id", tenantId, "plan", code);
+        return new TenantPlanRepresentation(tenantId, code);
     }
 
     // --- endpoints (endpoint-status, hold/release per endpoint) ---------------------
 
+    @Operation(operationId = "adminListEndpoints", summary = "Servicios de SUNAT: breaker, límite y pausa")
     @GET
     @Path("/endpoints")
     @Transactional
@@ -295,6 +418,7 @@ public class AdminResource {
         return platform.getEndpoints().stream().map(AdminResource::endpoint).toList();
     }
 
+    @Operation(operationId = "adminHoldEndpoint", summary = "Pausa un servicio de SUNAT")
     @POST
     @Path("/endpoints/{id}/hold")
     @Transactional
@@ -303,6 +427,7 @@ public class AdminResource {
         return endpointUpdated(id, platform.setEndpointPaused(id, true));
     }
 
+    @Operation(operationId = "adminReleaseEndpoint", summary = "Reanuda un servicio de SUNAT")
     @POST
     @Path("/endpoints/{id}/release")
     @Transactional
@@ -311,6 +436,7 @@ public class AdminResource {
         return endpointUpdated(id, platform.setEndpointPaused(id, false));
     }
 
+    @Operation(operationId = "adminUpdateEndpoint", summary = "Cambia el límite de envíos simultáneos de un servicio de SUNAT")
     @PUT
     @Path("/endpoints/{id}")
     @Transactional
@@ -324,6 +450,17 @@ public class AdminResource {
 
     // --- jobs (cancel-job, purge-jobs) ------------------------------------------------
 
+    @Operation(operationId = "adminGetJob", summary = "Un trabajo de cualquier organización")
+    @GET
+    @Path("/jobs/{id}")
+    @Transactional
+    public JobSummaryRepresentation job(@PathParam("id") UUID id) {
+        admin.require();
+        PlatformProvider.JobSummary r = platform.getJobSummary(id).orElseThrow(ApiException::notFound);
+        return new JobSummaryRepresentation(id, r.name(), r.state(), r.worker(), r.error());
+    }
+
+    @Operation(operationId = "adminCancelJob", summary = "Cancela un trabajo de cualquier organización")
     @POST
     @Path("/jobs/{id}/cancel")
     @Transactional
@@ -334,23 +471,27 @@ public class AdminResource {
         return new JobStateRepresentation(id, state);
     }
 
+    @Operation(operationId = "adminPurgeJobs", summary = "Borra los trabajos terminados más antiguos que older_than_hours (7 días por defecto)")
     @POST
     @Path("/jobs/purge")
     @Transactional
-    public CountRepresentation purgeJobs(@jakarta.ws.rs.QueryParam("older_than_hours") Integer hours) {
+    public CountRepresentation purgeJobs(@QueryParam("older_than_hours") Integer hours) {
         admin.require();
-        return new CountRepresentation(jobs.purge(java.time.Duration.ofHours(hours == null ? 24 * 7 : Math.max(1, hours))));
+        return new CountRepresentation(jobs.purge(Duration.ofHours(hours == null ? 24 * 7 : Math.max(1, hours))));
     }
 
     // --- keys and migrations (rotate-keys, migration-status) --------------------------
 
+    @Operation(operationId = "adminRotateKeys", summary = "Re-cifra todos los secretos y llaves con la llave maestra actual")
     @POST
     @Path("/keys/rotate")
-    public KeyRotationManager.Result rotateKeys() {
+    public KeyRotationRepresentation rotateKeys() {
         admin.require();
-        return rotation.rewrapAll();
+        KeyRotationManager.Result result = rotation.rewrapAll();
+        return new KeyRotationRepresentation(result.tenants(), result.credentials(), result.signingKeys());
     }
 
+    @Operation(operationId = "adminListMigrations", summary = "Migraciones de la base de datos aplicadas")
     @GET
     @Path("/migrations")
     @Transactional
@@ -363,17 +504,19 @@ public class AdminResource {
     // --- data repair -------------------------------------------------------------------
 
     /** Creates missing partitions now (normally a daily schedule). */
+    @Operation(operationId = "adminRepairPartitions", summary = "Crea ahora las particiones que falten")
     @POST
     @Path("/repair/partitions")
     @Transactional
-    public Map<String, Object> repairPartitions() {
+    public PartitionsRepairedRepresentation repairPartitions() {
         admin.require();
-        LocalDate today = io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima();
+        LocalDate today = Deadlines.todayInLima();
         maintenanceProvider.ensurePartitions(today);
-        return Map.of("day", today.toString());
+        return new PartitionsRepairedRepresentation(today.toString());
     }
 
     /** Makes due again any non-definitive document no automatic attempt would pick up. */
+    @Operation(operationId = "adminRequeueStuckDocuments", summary = "Vuelve a programar los documentos atascados")
     @POST
     @Path("/repair/requeue-stuck")
     @Transactional
@@ -382,21 +525,6 @@ public class AdminResource {
         int n = platform.requeueStuckDocuments();
         notifyReconcile();
         return new CountRepresentation(n);
-    }
-
-    @GET
-    @Path("/jobs/{id}")
-    @Transactional
-    public Map<String, Object> job(@PathParam("id") UUID id) {
-        admin.require();
-        PlatformProvider.JobSummary r = platform.getJobSummary(id).orElseThrow(ApiException::notFound);
-        Map<String, Object> view = new java.util.LinkedHashMap<>();
-        view.put("id", id);
-        view.put("name", r.name());
-        view.put("state", r.state());
-        view.put("worker", r.worker());
-        view.put("error", r.error());
-        return view;
     }
 
     // ---------------------------------------------------------------------------------
@@ -419,16 +547,16 @@ public class AdminResource {
         return new TenantScope(tenantId, new Actor("admin", adminName.substring("admin:".length()), false, false), Role.PLATFORM);
     }
 
-    private Map<String, Object> pauseTenant(UUID tenantId, boolean paused) {
+    private TenantSendingRepresentation pauseTenant(UUID tenantId, boolean paused) {
         TenantScope scope = openTenant(tenantId);
-        TenantModel tenant = tenantProvider.getTenantForUpdate(tenantId).orElse(null);
+        TenantModel tenant = tenantProvider.getTenantForUpdate(tenantId).orElseThrow(ApiException::notFound);
         tenant.setSendingPaused(paused);
         auditor.record(scope, paused ? "tenant.sending_held" : "tenant.sending_released", "tenant", tenantId);
         notifyReconcile();
-        return Map.of("tenant_id", tenantId, "sending_paused", paused);
+        return new TenantSendingRepresentation(tenantId, paused);
     }
 
-    private Map<String, Object> pauseCompany(UUID tenantId, UUID companyId, boolean paused) {
+    private CompanySendingRepresentation pauseCompany(UUID tenantId, UUID companyId, boolean paused) {
         TenantScope scope = openTenant(tenantId);
         CompanyModel company = companyProvider.getCompanyForUpdate(companyId).orElse(null);
         if (company == null) {
@@ -437,7 +565,7 @@ public class AdminResource {
         company.setSendingPaused(paused);
         auditor.record(scope, paused ? "company.sending_held" : "company.sending_released", "company", companyId);
         notifyReconcile();
-        return Map.of("company_id", companyId, "sending_paused", paused);
+        return new CompanySendingRepresentation(companyId, paused);
     }
 
     /** After an endpoint update ({@code admin.require()} already called): 404 when unknown, else wakes the reconciler. */
@@ -457,4 +585,8 @@ public class AdminResource {
         return new EndpointRepresentation(r.id(), r.breakerState(), r.breakerUntil(), r.concurrencyCap(), r.paused());
     }
 
+    private static AdminTenantRepresentation tenant(PlatformProvider.TenantRow t) {
+        return new AdminTenantRepresentation(t.id(), t.name(), t.plan(), t.planSource(), t.status(), t.partnerId(), t.partnerName(), t.createdBy(),
+                t.createdAt(), t.sendingPaused(), t.auditHold(), t.archivePlan(), t.deleteAfter(), t.companies());
+    }
 }

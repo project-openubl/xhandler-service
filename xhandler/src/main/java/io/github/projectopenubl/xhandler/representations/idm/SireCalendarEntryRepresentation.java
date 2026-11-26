@@ -7,6 +7,6 @@ import jakarta.validation.constraints.Pattern;
 import java.time.LocalDate;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
-@Schema(name = "Entry")
+@Schema(name = "SireCalendarEntry")
 public record SireCalendarEntryRepresentation(@NotNull @Pattern(regexp = "\\d{4}(0[1-9]|1[0-2])") String period, @Min(0) @Max(9) int rucLastDigit,
         @NotNull LocalDate dueDate) {}

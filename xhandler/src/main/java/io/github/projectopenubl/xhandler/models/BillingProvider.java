@@ -29,6 +29,9 @@ public interface BillingProvider {
 
     Optional<PlanRow> getPlan(String code);
 
+    /** Every plan, cheapest first (free, starter, ...). */
+    List<PlanRow> getPlans();
+
     /** The {@code free} plan, which always exists. */
     PlanRow getFreePlan();
 
