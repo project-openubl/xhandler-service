@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import jakarta.inject.Inject;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 
@@ -15,7 +17,7 @@ import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
@@ -27,6 +29,9 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 @QuarkusTestResource(EngineStub.class)
 class TenancyTest {
+
+    @Inject
+    CompanyProvider companyProvider;
 
     @Test
     void anonymous_requests_are_rejected() {
@@ -69,7 +74,7 @@ class TenancyTest {
         createCompany("alice", tenant, randomRuc());
 
         // Row-level security fails closed: no tenant set, no rows, even though companies exist
-        long visible = QuarkusTransaction.requiringNew().call(() -> CompanyEntity.count());
+        long visible = QuarkusTransaction.requiringNew().call(() -> companyProvider.countCompanies());
         assertEquals(0, visible);
     }
 
@@ -87,18 +92,18 @@ class TenancyTest {
 
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(alices);
-            org.junit.jupiter.api.Assertions.assertNull(CompanyEntity.findById(bobsCompany));
+            org.junit.jupiter.api.Assertions.assertNull(companyProvider.getCompany(bobsCompany).orElse(null));
         });
         // Writing a row for another tenant violates the policy's WITH CHECK
         RuntimeException e = org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, () ->
                 QuarkusTransaction.requiringNew().run(() -> {
                     access.enterAsPlatform(alices);
-                    CompanyEntity c = new CompanyEntity();
-                    c.setId(io.github.projectopenubl.xhandler.utils.Ids.newId());
+                    CompanyModel c = companyProvider.newCompany(io.github.projectopenubl.xhandler.utils.Ids.newId());
                     c.setTenantId(bobs);
                     c.setRuc(randomRuc());
                     c.setRazonSocial("Intrusa");
-                    c.persistAndFlush();
+                    companyProvider.persist(c);
+                    companyProvider.flush();
                 }));
         assertTrue(rootMessage(e).contains("row-level security"), rootMessage(e));
     }

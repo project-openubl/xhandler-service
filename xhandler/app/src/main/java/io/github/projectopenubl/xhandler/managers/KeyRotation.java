@@ -1,10 +1,12 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.SigningKeyProvider;
+import io.github.projectopenubl.xhandler.models.CredentialProvider;
 import io.github.projectopenubl.xhandler.keys.SecretBox;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CredentialEntity;
+import io.github.projectopenubl.xhandler.models.CredentialModel;
 
 import io.github.projectopenubl.xhandler.keys.KeyVault;
-import io.github.projectopenubl.xhandler.models.jpa.entities.SigningKeyEntity;
+import io.github.projectopenubl.xhandler.models.SigningKeyModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
@@ -21,6 +23,10 @@ import org.jboss.logging.Logger;
 @ApplicationScoped
 public class KeyRotation {
 
+    private final SigningKeyProvider signingKeyProvider;
+
+    private final CredentialProvider credentialProvider;
+
     private static final Logger LOG = Logger.getLogger(KeyRotation.class);
 
     public record Result(int tenants, int credentials, int signingKeys) {}
@@ -30,7 +36,9 @@ public class KeyRotation {
     private final SecretBox box;
     private final KeyVault vault;
 
-    public KeyRotation(EntityManager em, TenantAccess access, SecretBox box, KeyVault vault) {
+    public KeyRotation(EntityManager em, TenantAccess access, SecretBox box, KeyVault vault, CredentialProvider credentialProvider, SigningKeyProvider signingKeyProvider) {
+        this.signingKeyProvider = signingKeyProvider;
+        this.credentialProvider = credentialProvider;
         this.em = em;
         this.access = access;
         this.box = box;
@@ -93,17 +101,13 @@ public class KeyRotation {
         access.enterAsPlatform(tenantId);
         String current = vault.currentMasterKeyId();
         // Locked, so a concurrent update of the secret can't be overwritten with the old ciphertext
-        List<CredentialEntity> credentials = CredentialEntity.<CredentialEntity>find("masterKeyId <> ?1", current)
-                .withLock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
-                .list();
-        for (CredentialEntity credential : credentials) {
+        List<CredentialModel> credentials = credentialProvider.getCredentialsToRewrapForUpdate(current);
+        for (CredentialModel credential : credentials) {
             credential.seal(box.rewrap(credential.sealed()));
         }
         int keys = 0;
         // Every key, not only active ones: replaced keys stay readable for retention
-        for (SigningKeyEntity key : SigningKeyEntity.<SigningKeyEntity>find("from SigningKeyEntity")
-                .withLock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
-                .list()) {
+        for (SigningKeyModel key : signingKeyProvider.getSigningKeysForUpdate()) {
             String rewrapped = vault.rewrapPrivateKey(key.getKeyRef());
             if (!rewrapped.equals(key.getKeyRef())) {
                 key.setKeyRef(rewrapped);

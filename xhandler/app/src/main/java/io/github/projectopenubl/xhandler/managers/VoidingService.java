@@ -1,13 +1,18 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.TenantModel;
+import io.github.projectopenubl.xhandler.models.TenantProvider;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -34,6 +39,14 @@ import java.util.UUID;
 @ApplicationScoped
 public class VoidingService {
 
+    private final TenantProvider tenantProvider;
+
+    private final DocumentProvider documentProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
+    private final CompanyProvider companyProvider;
+
     /** A void request. {@code reversalCommunicatedAt} is required for percepciones and retenciones. */
     public record VoidRequest(String motivo, Boolean notDelivered, LocalDate reversalCommunicatedAt) {}
 
@@ -44,7 +57,11 @@ public class VoidingService {
     private final Event<DocumentStatusChanged> statusChanged;
 
     public VoidingService(TenantAccess access, Summaries summaries, Auditor auditor, EntityManager em,
-            Event<DocumentStatusChanged> statusChanged) {
+            Event<DocumentStatusChanged> statusChanged, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider, TenantProvider tenantProvider) {
+        this.tenantProvider = tenantProvider;
+        this.documentProvider = documentProvider;
+        this.documentEventProvider = documentEventProvider;
+        this.companyProvider = companyProvider;
         this.access = access;
         this.summaries = summaries;
         this.auditor = auditor;
@@ -56,14 +73,14 @@ public class VoidingService {
      * Cancels a void whose RA/RC/RR is stuck in exception (not in flight): the original goes back to
      * its previous status. A rejected voiding does this by itself.
      */
-    public DocumentEntity cancelVoid(UUID tenantId, UUID documentId) {
+    public DocumentModel cancelVoid(UUID tenantId, UUID documentId) {
         return QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-            DocumentEntity original = DocumentEntity.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
+            DocumentModel original = documentProvider.getDocumentForUpdate(documentId).orElse(null);
             if (original == null) {
                 throw ApiException.notFound();
             }
-            DocumentEntity voiding = original.getVoidedByDocumentId() == null ? null : DocumentEntity.findById(original.getVoidedByDocumentId());
+            DocumentModel voiding = original.getVoidedByDocumentId() == null ? null : documentProvider.getDocument(original.getVoidedByDocumentId()).orElse(null);
             if (!"voiding".equals(original.getStatus()) || voiding == null || !"exception".equals(voiding.getStatus())) {
                 throw ApiException.conflict("void_not_cancelable", "Solo se cancela una anulación cuyo resumen quedó con error.");
             }
@@ -72,7 +89,7 @@ public class VoidingService {
             original.setStatusBeforeVoiding(null);
             original.setVoidedByDocumentId(null);
             original.setUpdatedAt(Instant.now());
-            DocumentEventEntity.record(original, null, "voiding " + voiding.serieNumero() + " canceled", scope.actor().auditName(), null);
+            documentEventProvider.addDocumentEvent(original, null, "voiding " + voiding.serieNumero() + " canceled", scope.actor().auditName(), null);
             auditor.record(scope, "document.void_canceled", "document", original.getId());
             statusChanged.fire(new DocumentStatusChanged(original, previous, null));
             return original;
@@ -80,37 +97,37 @@ public class VoidingService {
     }
 
     /** Creates the RA/RC/RR and moves the original to voiding. Returns the voiding document. */
-    public DocumentEntity voidDocument(UUID tenantId, UUID documentId, VoidRequest request, String correlationId) {
+    public DocumentModel voidDocument(UUID tenantId, UUID documentId, VoidRequest request, String correlationId) {
         return QuarkusTransaction.requiringNew().call(() -> voidInTransaction(tenantId, documentId, request, correlationId, false));
     }
 
     /** The same, for an already-authenticated adapter client (Nubefact-compatible API). */
-    public DocumentEntity voidDocumentAsPlatform(UUID tenantId, UUID documentId, VoidRequest request, String correlationId) {
+    public DocumentModel voidDocumentAsPlatform(UUID tenantId, UUID documentId, VoidRequest request, String correlationId) {
         return QuarkusTransaction.requiringNew().call(() -> voidInTransaction(tenantId, documentId, request, correlationId, true));
     }
 
-    private DocumentEntity voidInTransaction(UUID tenantId, UUID documentId, VoidRequest request, String correlationId, boolean platform) {
+    private DocumentModel voidInTransaction(UUID tenantId, UUID documentId, VoidRequest request, String correlationId, boolean platform) {
         TenantScope scope = platform ? access.enterAsPlatform(tenantId) : access.enter(tenantId, Role.OPERATOR);
-        DocumentEntity original = DocumentEntity.findById(documentId);
+        DocumentModel original = documentProvider.getDocument(documentId).orElse(null);
         if (original == null) {
             throw ApiException.notFound();
         }
         // Lock order (§10.8 rule 4): company → daily counter → documents
-        CompanyEntity company = CompanyEntity.findById(original.getCompanyId(), LockModeType.PESSIMISTIC_READ);
-        io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity tenant = io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity.findById(tenantId);
+        CompanyModel company = companyProvider.getCompanyForShare(original.getCompanyId()).orElse(null);
+        TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
         if (tenant != null && "exited".equals(tenant.getStatus())) {
             throw ApiException.conflict("tenant_exited", "La organización dejó la plataforma: no puede anular comprobantes.");
         }
         check(original, request);
         String motivo = request.motivo().strip();
         LocalDate fecha = original.getFechaEmision();
-        DocumentEntity voiding;
+        DocumentModel voiding;
         if (original.isGuia()) {
             throw ApiException.conflict("void_in_sol_only", "Las guías de remisión solo se dan de baja en SUNAT Operaciones en Línea (SOL).");
         } else if ("20".equals(original.getTipoComprobante()) || "40".equals(original.getTipoComprobante())) {
             // A later RR of the same type and day replaces the earlier one at SUNAT (RS 117-2017 art.
             // 38): each RR carries every reversal of that type, day and issue date made so far
-            List<DocumentEntity> lines = new java.util.ArrayList<>(sameDayReversals(original));
+            List<DocumentModel> lines = new java.util.ArrayList<>(sameDayReversals(original));
             lines.add(original);
             voiding = summaries.resumenReversiones(scope, company, original.getSunatEnv(), fecha, lines, motivo, correlationId);
             voiding.setDeadlineAt(Deadlines.endOfDay(request.reversalCommunicatedAt().plusDays(7)));
@@ -139,8 +156,8 @@ public class VoidingService {
             // Rolls back the summary too: its number is not consumed
             throw ApiException.conflict("document_changed", "El documento cambió mientras se procesaba la anulación. Intente nuevamente.");
         }
-        em.refresh(original);
-        DocumentEventEntity.record(original, null, "voiding requested (" + voiding.serieNumero() + "): " + motivo, scope.actor().auditName(),
+        documentProvider.refresh(original);
+        documentEventProvider.addDocumentEvent(original, null, "voiding requested (" + voiding.serieNumero() + "): " + motivo, scope.actor().auditName(),
                 correlationId);
         auditor.record(scope, "document.void_requested", "document", original.getId(), Map.of("voiding_document", voiding.serieNumero()));
         statusChanged.fire(new DocumentStatusChanged(original, original.getStatusBeforeVoiding(), correlationId));
@@ -149,25 +166,23 @@ public class VoidingService {
     }
 
     /** Originals of today's RRs of the same company, environment, type and issue date (voided or voiding). */
-    private static List<DocumentEntity> sameDayReversals(DocumentEntity original) {
+    private List<DocumentModel> sameDayReversals(DocumentModel original) {
         String serie = "RR-" + Summaries.BASIC.format(Deadlines.todayInLima());
-        List<UUID> rrs = DocumentEntity.<DocumentEntity>list("companyId = ?1 and sunatEnv = ?2 and tipoComprobante = 'RR' and serie = ?3 "
-                        + "and status not in ('rejected')", original.getCompanyId(), original.getSunatEnv(), serie).stream().map(d -> d.getId()).toList();
+        List<UUID> rrs = documentProvider.getReversalIds(original.getCompanyId(), original.getSunatEnv(), serie);
         if (rrs.isEmpty()) {
             return List.of();
         }
-        return DocumentEntity.<DocumentEntity>list("voidedByDocumentId in ?1 and tipoComprobante = ?2 and fechaEmision = ?3 "
-                + "and status in ('voided', 'voiding') order by id", rrs, original.getTipoComprobante(), original.getFechaEmision());
+        return documentProvider.getReversedDocuments(rrs, original.getTipoComprobante(), original.getFechaEmision());
     }
 
-    private static void check(DocumentEntity original, VoidRequest request) {
+    private static void check(DocumentModel original, VoidRequest request) {
         if (request == null || request.motivo() == null || request.motivo().isBlank()) {
             throw ApiException.invalid("invalid_request", "Indique el motivo de la anulación.", null);
         }
         if (original.isSummary() || "ose_inbound".equals(original.getOrigin()) || "reception".equals(original.getOrigin())) {
             throw ApiException.conflict("not_voidable", "Este documento no se anula por este medio.");
         }
-        if (!DocumentEntity.ACCEPTED.contains(original.getStatus()) || original.getVoidedByDocumentId() != null) {
+        if (!DocumentModel.ACCEPTED.contains(original.getStatus()) || original.getVoidedByDocumentId() != null) {
             throw ApiException.conflict("not_voidable", "Solo se pueden anular documentos aceptados por SUNAT.");
         }
         if (original.getDeliveredAt() != null || !Boolean.TRUE.equals(request.notDelivered())) {

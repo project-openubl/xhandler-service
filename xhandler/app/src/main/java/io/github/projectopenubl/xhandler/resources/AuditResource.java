@@ -1,6 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.AuditLogEntity;
+import io.github.projectopenubl.xhandler.models.AuditLogProvider;
+import io.github.projectopenubl.xhandler.models.AuditLogModel;
 
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -20,11 +21,14 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/audit")
 public class AuditResource {
 
+    private final AuditLogProvider auditLogProvider;
+
     public record AuditEntry(Instant at, String actor, String action, String objectType, String objectId, Map<String, Object> details) {}
 
     private final TenantAccess access;
 
-    public AuditResource(TenantAccess access) {
+    public AuditResource(TenantAccess access, AuditLogProvider auditLogProvider) {
+        this.auditLogProvider = auditLogProvider;
         this.access = access;
     }
 
@@ -36,7 +40,7 @@ public class AuditResource {
         access.enter(tenantId, Role.ADMIN);
         int size = Page.limit(limit);
         int from = Page.offset(offset);
-        List<AuditLogEntity> entries = AuditLogEntity.find("order by at desc, id desc").range(from, from + size - 1).list();
+        List<AuditLogModel> entries = auditLogProvider.getAuditLogs(from, size);
         return new Page<>(entries.stream()
                 .map(e -> new AuditEntry(e.getAt(), e.getActor(), e.getAction(), e.getObjectType(), e.getObjectId(), e.getDetails()))
                 .toList(), size, from);

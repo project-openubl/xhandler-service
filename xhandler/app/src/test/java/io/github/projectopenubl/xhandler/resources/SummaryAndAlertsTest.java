@@ -2,7 +2,7 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.jobs.handlers.BoletaSummaryFallback;
 import io.github.projectopenubl.xhandler.jobs.handlers.DeadlineAlerts;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import static io.github.projectopenubl.xhandler.Api.as;
@@ -114,7 +114,7 @@ class SummaryAndAlertsTest {
             });
             alerts.run(context("documents.deadline-alerts"));
             alerts.run(context("documents.deadline-alerts"));
-            DocumentEntity alerted = docs.get(tenant, doc.id());
+            DocumentModel alerted = docs.get(tenant, doc.id());
             assertNotNull(alerted.getDeadlineAlertedAt());
             await().atMost(WAIT).until(() -> receiver.types().contains("document.delayed"));
             Thread.sleep(500);

@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.managers.Notifications;
 
@@ -24,11 +25,14 @@ public final class PlatformNotices {
     @ApplicationScoped
     public static class CertificateExpiry implements JobHandler {
 
+        private final CompanyProvider companyProvider;
+
         private final EntityManager em;
         private final TenantAccess access;
         private final Notifications notifications;
 
-        public CertificateExpiry(EntityManager em, TenantAccess access, Notifications notifications) {
+        public CertificateExpiry(EntityManager em, TenantAccess access, Notifications notifications, CompanyProvider companyProvider) {
+            this.companyProvider = companyProvider;
             this.em = em;
             this.access = access;
             this.notifications = notifications;
@@ -55,7 +59,7 @@ public final class PlatformNotices {
                 for (Expiring e : expiring) {
                     QuarkusTransaction.requiringNew().run(() -> {
                         access.enterAsPlatform(e.tenantId());
-                        var company = io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity.<io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity>findById(e.companyId());
+                        var company = companyProvider.getCompany(e.companyId()).orElse(null);
                         long left = Math.max(0, ChronoUnit.DAYS.between(Instant.now(), e.validUntil()));
                         notifications.publish(e.tenantId(), Notifications.CERTIFICATE_EXPIRING,
                                 "Certificado digital por vencer: " + company.getRuc(),

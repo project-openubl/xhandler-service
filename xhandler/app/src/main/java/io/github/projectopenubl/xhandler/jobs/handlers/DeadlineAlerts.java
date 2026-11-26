@@ -1,7 +1,9 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
@@ -28,8 +30,12 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class DeadlineAlerts implements JobHandler {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
     /** Fired with the tenant open, in the alert's transaction (tenant notifications observe it). */
-    public record DocumentAtRisk(DocumentEntity document) {}
+    public record DocumentAtRisk(DocumentModel document) {}
 
     private final EntityManager em;
     private final TenantAccess access;
@@ -39,7 +45,9 @@ public class DeadlineAlerts implements JobHandler {
     private final Duration horizon;
 
     public DeadlineAlerts(EntityManager em, TenantAccess access, WebhookEvents webhooks, Event<DocumentAtRisk> atRisk,
-            MeterRegistry metrics, @ConfigProperty(name = "xhandler.documents.deadline-alert", defaultValue = "12h") Duration horizon) {
+            MeterRegistry metrics, @ConfigProperty(name = "xhandler.documents.deadline-alert", defaultValue = "12h") Duration horizon, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentEventProvider = documentEventProvider;
         this.em = em;
         this.access = access;
         this.webhooks = webhooks;
@@ -68,13 +76,13 @@ public class DeadlineAlerts implements JobHandler {
         for (AtRisk risk : documents) {
             boolean sent = QuarkusTransaction.requiringNew().call(() -> {
                 access.enterAsPlatform(risk.tenantId());
-                DocumentEntity doc = DocumentEntity.findById(risk.documentId(), LockModeType.PESSIMISTIC_WRITE);
+                DocumentModel doc = documentProvider.getDocumentForUpdate(risk.documentId()).orElse(null);
                 if (doc == null || doc.getDeadlineAlertedAt() != null || (doc.definitive() && !"exception".equals(doc.getStatus()))) {
                     return false;
                 }
                 doc.setDeadlineAlertedAt(Instant.now());
                 boolean late = doc.getDeadlineAt().isBefore(doc.getDeadlineAlertedAt());
-                DocumentEventEntity.record(doc, null, late ? "legal deadline passed without SUNAT's answer" : "legal deadline at risk",
+                documentEventProvider.addDocumentEvent(doc, null, late ? "legal deadline passed without SUNAT's answer" : "legal deadline at risk",
                         "platform:worker", context.correlationId());
                 Map<String, Object> data = new java.util.LinkedHashMap<>(WebhookEvents.documentData(doc));
                 data.put("deadline_at", doc.getDeadlineAt().toString());

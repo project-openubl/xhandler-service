@@ -1,6 +1,8 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import jakarta.inject.Inject;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 
 import static io.github.projectopenubl.xhandler.Api.as;
 import static io.github.projectopenubl.xhandler.Api.createCompany;
@@ -21,6 +23,9 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 @QuarkusTestResource(EngineStub.class)
 class CompanyTest {
+
+    @Inject
+    CompanyProvider companyProvider;
 
     @jakarta.inject.Inject
     io.github.projectopenubl.xhandler.security.TenantAccess access;
@@ -72,9 +77,9 @@ class CompanyTest {
     private void verify(UUID tenant, UUID company) {
         io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            CompanyEntity c = CompanyEntity.findById(company);
+            CompanyModel c = companyProvider.getCompany(company).orElse(null);
             c.setRucVerifiedAt(java.time.Instant.now());
-            CompanyEntity.flush();
+            companyProvider.flush();
         });
     }
 

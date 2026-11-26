@@ -1,7 +1,8 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
@@ -41,6 +42,8 @@ import org.jboss.logging.Logger;
 @ApplicationScoped
 public class SireService {
 
+    private final CompanyProvider companyProvider;
+
     static final int MAX_ATTEMPTS = 20;
     private static final String CLAIM = "claim:";
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -55,7 +58,8 @@ public class SireService {
     private final Notifications notifications;
 
     public SireService(EntityManager em, TenantAccess access, Engine engine, CredentialService credentials, FileStore files,
-            RegisterRows registers, Notifications notifications) {
+            RegisterRows registers, Notifications notifications, CompanyProvider companyProvider) {
+        this.companyProvider = companyProvider;
         this.em = em;
         this.access = access;
         this.engine = engine;
@@ -81,7 +85,7 @@ public class SireService {
                 ((Number) r[8]).intValue());
     }
 
-    private Optional<EngineModels.ApiCredentials> apiCredentials(TenantScope scope, CompanyEntity company, String purpose) {
+    private Optional<EngineModels.ApiCredentials> apiCredentials(TenantScope scope, CompanyModel company, String purpose) {
         return credentials.read(scope, company, "sire", purpose)
                 .map(f -> new EngineModels.ApiCredentials(f.get("client_id"), f.get("client_secret"), f.get("username"), f.get("password")));
     }
@@ -158,7 +162,7 @@ public class SireService {
     /** Asks SUNAT for the proposal of a period in {@code requested} without a ticket; one caller at a time. */
     public void requestProposal(UUID tenantId, UUID id) {
         String claim = CLAIM + UUID.randomUUID();
-        record Call(Period period, CompanyEntity company, EngineModels.ApiCredentials creds) {}
+        record Call(Period period, CompanyModel company, EngineModels.ApiCredentials creds) {}
         Call call = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(tenantId);
             int claimed = em.createNativeQuery("""
@@ -171,7 +175,7 @@ public class SireService {
                 return null;
             }
             Period p = load(id);
-            CompanyEntity company = CompanyEntity.findById(p.companyId());
+            CompanyModel company = companyProvider.getCompany(p.companyId()).orElse(null);
             return new Call(p, company, apiCredentials(scope, company, "sire:" + id).orElse(null));
         });
         if (call == null) {
@@ -210,11 +214,11 @@ public class SireService {
 
     /** Follows the ticket of a requested proposal or a submitted replacement, and recovers stale submissions. */
     public void poll(UUID tenantId, UUID id) {
-        record Call(Period period, CompanyEntity company, EngineModels.ApiCredentials creds) {}
+        record Call(Period period, CompanyModel company, EngineModels.ApiCredentials creds) {}
         Call call = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(tenantId);
             Period p = load(id);
-            CompanyEntity company = CompanyEntity.findById(p.companyId());
+            CompanyModel company = companyProvider.getCompany(p.companyId()).orElse(null);
             return new Call(p, company, apiCredentials(scope, company, "sire:" + id).orElse(null));
         });
         Period p = call.period();
@@ -311,11 +315,11 @@ public class SireService {
 
     /** Builds the replacement from the stored rows and submits it (a period in {@code submitting}). */
     public void replace(UUID tenantId, UUID id) {
-        record Call(Period period, CompanyEntity company, EngineModels.ApiCredentials creds, List<RegisterRows.Row> rows) {}
+        record Call(Period period, CompanyModel company, EngineModels.ApiCredentials creds, List<RegisterRows.Row> rows) {}
         Call call = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(tenantId);
             Period p = load(id);
-            CompanyEntity company = CompanyEntity.findById(p.companyId());
+            CompanyModel company = companyProvider.getCompany(p.companyId()).orElse(null);
             List<RegisterRows.Row> rows = "rvie".equals(p.book())
                     ? registers.sales(p.companyId(), p.sunatEnv(), p.period())
                     : registers.purchases(p.companyId(), p.period());

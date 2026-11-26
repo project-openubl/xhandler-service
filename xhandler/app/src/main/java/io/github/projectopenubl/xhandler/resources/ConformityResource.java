@@ -1,11 +1,13 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -36,6 +38,10 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}")
 public class ConformityResource {
 
+    private final CompanyManager companyManager;
+
+    private final DocumentProvider documentProvider;
+
     public record ConformityView(
             UUID documentId, String serieNumero, String buyerRuc, String state, Instant acceptedAt, Instant windowEndsAt, Instant checkedAt,
             String checkDetail, Instant resolvedAt, Map<String, Object> suggestedCreditNote) {}
@@ -44,7 +50,9 @@ public class ConformityResource {
     private final EntityManager em;
     private final Auditor auditor;
 
-    public ConformityResource(TenantAccess access, EntityManager em, Auditor auditor) {
+    public ConformityResource(TenantAccess access, EntityManager em, Auditor auditor, DocumentProvider documentProvider, CompanyManager companyManager) {
+        this.companyManager = companyManager;
+        this.documentProvider = documentProvider;
         this.access = access;
         this.em = em;
         this.auditor = auditor;
@@ -69,7 +77,7 @@ public class ConformityResource {
         Object[] r = rows.get(0);
         Map<String, Object> creditNote = null;
         if ("objected".equals(r[4])) {
-            creditNote = creditNote13(DocumentEntity.findById(documentId));
+            creditNote = creditNote13(documentProvider.getDocument(documentId).orElse(null));
         }
         return view(r, creditNote);
     }
@@ -82,7 +90,7 @@ public class ConformityResource {
             @Schema(description = "pending, agreed, objected o silent_agreement; sin filtro, todas.") @QueryParam("state") String state,
             @QueryParam("limit") Integer limit, @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
-        CompanyResource.find(companyId);
+        companyManager.getCompany(companyId);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
         return new Page<>(rows(companyId, state, size, start).stream().map(r -> view(r, null)).toList(), size, start);
@@ -98,7 +106,7 @@ public class ConformityResource {
     @Transactional
     public Response export(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @QueryParam("state") String state) {
         TenantScope scope = access.enter(tenantId, Role.VIEWER);
-        CompanyResource.find(companyId);
+        companyManager.getCompany(companyId);
         StringBuilder csv = new StringBuilder("﻿serie_numero,fecha_emision,adquirente_ruc,adquirente,moneda,total,conformidad,"
                 + "aceptada_sunat,vence_plazo,resuelta\r\n");
         for (Object[] r : rows(companyId, state, EXPORT_LIMIT, 0)) {
@@ -130,7 +138,7 @@ public class ConformityResource {
      * The guided correction after an objection: a credit note type 13 (ajustes de montos y/o fechas
      * de pago) on the factura, to complete with the corrected cuotas and send to {@code POST /documents}.
      */
-    static Map<String, Object> creditNote13(DocumentEntity d) {
+    static Map<String, Object> creditNote13(DocumentModel d) {
         Map<String, Object> cliente = new LinkedHashMap<>();
         cliente.put("tipo_documento_identidad", d.getCustomerTipo());
         cliente.put("numero_documento_identidad", d.getCustomerNumero());

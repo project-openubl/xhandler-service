@@ -1,13 +1,17 @@
 package io.github.projectopenubl.xhandler.pdf;
 
+import io.github.projectopenubl.xhandler.models.TenantProvider;
+import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.utils.Qr;
 import io.github.projectopenubl.xhandler.files.FileStore;
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
+import io.github.projectopenubl.xhandler.models.TenantModel;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -29,6 +33,14 @@ import java.util.UUID;
 @ApplicationScoped
 public class DocumentPdf {
 
+    private final TenantProvider tenantProvider;
+
+    private final DocumentProvider documentProvider;
+
+    private final DocumentFileProvider documentFileProvider;
+
+    private final CompanyProvider companyProvider;
+
     static final Map<String, String> TIPOS = Map.of(
             "01", "FACTURA ELECTRÓNICA", "03", "BOLETA DE VENTA ELECTRÓNICA", "07", "NOTA DE CRÉDITO ELECTRÓNICA",
             "08", "NOTA DE DÉBITO ELECTRÓNICA", "09", "GUÍA DE REMISIÓN REMITENTE ELECTRÓNICA",
@@ -43,7 +55,11 @@ public class DocumentPdf {
     private final ObjectMapper json;
     private final EntityManager em;
 
-    public DocumentPdf(FileStore files, PdfRenderer renderer, ObjectMapper json, EntityManager em) {
+    public DocumentPdf(FileStore files, PdfRenderer renderer, ObjectMapper json, EntityManager em, CompanyProvider companyProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, TenantProvider tenantProvider) {
+        this.tenantProvider = tenantProvider;
+        this.documentProvider = documentProvider;
+        this.documentFileProvider = documentFileProvider;
+        this.companyProvider = companyProvider;
         this.files = files;
         this.renderer = renderer;
         this.json = json;
@@ -53,8 +69,8 @@ public class DocumentPdf {
     /** PDF bytes; {@code accessUrl} (the buyer link) is printed when given. */
     @Transactional(Transactional.TxType.MANDATORY)
     public byte[] render(UUID documentId, String accessUrl) {
-        DocumentEntity doc = DocumentEntity.findById(documentId);
-        CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
+        DocumentModel doc = documentProvider.getDocument(documentId).orElse(null);
+        CompanyModel company = companyProvider.getCompany(doc.getCompanyId()).orElse(null);
         JsonNode spec = enriched(doc).path("spec");
         Map<String, Object> d = new HashMap<>();
         d.put("tipoNombre", TIPOS.getOrDefault(doc.getTipoComprobante(), "COMPROBANTE ELECTRÓNICO"));
@@ -127,9 +143,9 @@ public class DocumentPdf {
     }
 
     /** Partner branding (white-label): color, footer, name. */
-    private Map<String, Object> branding(CompanyEntity company) {
+    private Map<String, Object> branding(CompanyModel company) {
         Map<String, Object> brand = new HashMap<>(Map.of("color", "#1f4e79", "footer", ""));
-        TenantEntity tenant = TenantEntity.findById(company.getTenantId());
+        TenantModel tenant = tenantProvider.getTenant(company.getTenantId()).orElse(null);
         if (tenant != null && tenant.getPartnerId() != null) {
             Object raw = em.createNativeQuery("SELECT CAST(branding AS text) FROM xhandler.partner WHERE id = :id")
                     .setParameter("id", tenant.getPartnerId())
@@ -155,10 +171,10 @@ public class DocumentPdf {
     }
 
     /** The company's logo, else its partner's (white-label), else none. */
-    private String logo(CompanyEntity company) {
+    private String logo(CompanyModel company) {
         String ref = company.getLogoRef();
         if (ref == null) {
-            TenantEntity tenant = TenantEntity.findById(company.getTenantId());
+            TenantModel tenant = tenantProvider.getTenant(company.getTenantId()).orElse(null);
             if (tenant != null && tenant.getPartnerId() != null) {
                 List<?> partnerLogo = em.createNativeQuery("SELECT logo_ref FROM xhandler.partner WHERE id = :id")
                         .setParameter("id", tenant.getPartnerId())
@@ -174,8 +190,8 @@ public class DocumentPdf {
         return "data:" + type + ";base64," + Base64.getEncoder().encodeToString(bytes);
     }
 
-    private JsonNode enriched(DocumentEntity doc) {
-        return DocumentFileEntity.of(doc.getId(), "enriched").map(f -> {
+    private JsonNode enriched(DocumentModel doc) {
+        return documentFileProvider.getDocumentFile(doc.getId(), "enriched").map(f -> {
             try {
                 return json.readTree(files.get(f.getStorageKey()));
             } catch (IOException e) {

@@ -1,12 +1,14 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.CredentialProvider;
+import io.github.projectopenubl.xhandler.models.OseEndpointProvider;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.OseEndpointEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
+import io.github.projectopenubl.xhandler.models.OseEndpointModel;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CredentialEntity;
+import io.github.projectopenubl.xhandler.models.CredentialModel;
 import io.github.projectopenubl.xhandler.managers.CredentialService;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -24,6 +26,10 @@ import java.util.UUID;
 @ApplicationScoped
 public class Routes {
 
+    private final CredentialProvider credentialProvider;
+
+    private final OseEndpointProvider oseEndpointProvider;
+
     /** Where to send, and as whom. Null credentials: the environment's shared user (beta, fake). */
     public record Target(EngineModels.Environment environment, EngineModels.Credentials credentials, EngineModels.Urls urls) {}
 
@@ -36,7 +42,9 @@ public class Routes {
     private final io.github.projectopenubl.xhandler.managers.Auditor auditor;
 
     public Routes(CredentialService credentials, io.github.projectopenubl.xhandler.managers.PlatformCredentials platformCredentials,
-            io.github.projectopenubl.xhandler.managers.Auditor auditor) {
+            io.github.projectopenubl.xhandler.managers.Auditor auditor, OseEndpointProvider oseEndpointProvider, CredentialProvider credentialProvider) {
+        this.credentialProvider = credentialProvider;
+        this.oseEndpointProvider = oseEndpointProvider;
         this.auditor = auditor;
         this.credentials = credentials;
         this.platformCredentials = platformCredentials;
@@ -60,7 +68,7 @@ public class Routes {
      * SUNAT's public user. Refuses routes the company may not use.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Assignment assign(CompanyEntity company, String sunatEnv, String tipoComprobante) {
+    public Assignment assign(CompanyModel company, String sunatEnv, String tipoComprobante) {
         String service = service(tipoComprobante);
         if ("pse".equals(company.getEmissionMode()) && "production".equals(sunatEnv) && !"despatch".equals(service)) {
             // As PSE the platform sends with its own SOL users, spread over the pool (§10.2)
@@ -75,7 +83,7 @@ public class Routes {
                     "La empresa está obligada a emitir a través de un OSE: configure su OSE antes de emitir.", null);
         }
         if (viaOse) {
-            OseEndpointEntity ose = OseEndpointEntity.of(company.getId()).orElseThrow(() ->
+            OseEndpointModel ose = oseEndpointProvider.getOseEndpointByCompany(company.getId()).orElseThrow(() ->
                     ApiException.invalid("invalid_route", "La empresa usa un OSE pero no tiene uno configurado.", null));
             if ("perception".equals(service) && ose.getPerceptionUrl() == null) {
                 throw ApiException.invalid("invalid_route", "El OSE de la empresa no tiene un servicio para percepciones y retenciones.", null);
@@ -101,7 +109,7 @@ public class Routes {
      * original — an RA for a factura sent directly goes directly, whatever the company's route now.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Assignment assignLike(CompanyEntity company, String sunatEnv, String tipoComprobante, DocumentEntity original) {
+    public Assignment assignLike(CompanyModel company, String sunatEnv, String tipoComprobante, DocumentModel original) {
         if (original.getEndpoint().startsWith("ose:")) {
             return assign(company, sunatEnv, tipoComprobante);
         }
@@ -119,20 +127,20 @@ public class Routes {
         return new Assignment(sunatEnv + ":" + service, credential.orElse(null));
     }
 
-    private static Optional<UUID> credentialId(CompanyEntity company, String kind) {
-        return CredentialEntity.<CredentialEntity>find("companyId = ?1 and kind = ?2", company.getId(), kind).firstResultOptional().map(c -> c.getId());
+    private Optional<UUID> credentialId(CompanyModel company, String kind) {
+        return credentialProvider.getCredential(company.getId(), kind).map(c -> c.getId());
     }
 
     /** Reads the secret (audited) and builds the target. Runs with the company's tenant open. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Target target(TenantScope scope, CompanyEntity company, DocumentEntity document) {
+    public Target target(TenantScope scope, CompanyModel company, DocumentModel document) {
         EngineModels.Environment environment = EngineModels.Environment.of(document.getSunatEnv());
         EngineModels.Urls urls = null;
         String kind = document.isGuia() ? "gre" : "sol";
         if (document.getEndpoint().startsWith("ose:")) {
             kind = "ose";
             UUID oseId = UUID.fromString(document.getEndpoint().split(":")[1]);
-            OseEndpointEntity ose = OseEndpointEntity.findById(oseId);
+            OseEndpointModel ose = oseEndpointProvider.getOseEndpoint(oseId).orElse(null);
             if (ose == null) {
                 throw new MissingCredentials("ose");
             }

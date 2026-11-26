@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.representations.idm;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.math.BigDecimal;
@@ -53,11 +53,11 @@ public record DocumentView(
 
     public record Customer(String tipo, String numero, String nombre) {}
 
-    public static DocumentView of(DocumentEntity d) {
+    public static DocumentView of(DocumentModel d) {
         return of(d, null, null);
     }
 
-    public static DocumentView of(DocumentEntity d, String accessUrl, String qr) {
+    public static DocumentView of(DocumentModel d, String accessUrl, String qr) {
         return new DocumentView(d.getId(), "xh:document:" + d.getId(), d.getCompanyId(), d.getSunatEnv(), d.getKind(), d.getTipoComprobante(), d.getSerie(), d.getNumero(),
                 d.serieNumero(), d.getFechaEmision(), d.getDeadlineAt(), d.getStatus(), d.getHoldReason(), d.getSunatCode(), d.getSunatDescription(), d.getSunatNotes(),
                 d.getCodeClass(), d.getDigestValue(), d.getMoneda(), d.getTotal(),

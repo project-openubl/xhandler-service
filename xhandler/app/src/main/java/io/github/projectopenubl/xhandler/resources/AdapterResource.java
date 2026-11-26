@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.managers.UblUploadService;
 import io.github.projectopenubl.xhandler.utils.SfsAdapter;
@@ -7,7 +8,7 @@ import io.github.projectopenubl.xhandler.utils.SfsAdapter;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.managers.EmitService;
@@ -42,6 +43,8 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}")
 public class AdapterResource {
 
+    private final CompanyManager companyManager;
+
     public record SfsRequest(@NotBlank String fileName, @NotBlank String cab, @NotBlank String det) {}
 
     public record TokenRequest(@NotBlank @Size(max = 100) String label) {}
@@ -59,7 +62,8 @@ public class AdapterResource {
     private final com.fasterxml.jackson.databind.ObjectMapper json;
 
     public AdapterResource(TenantAccess access, UblUploadService ubl, EmitService emit, EntityManager em, Auditor auditor,
-            com.fasterxml.jackson.databind.ObjectMapper json) {
+            com.fasterxml.jackson.databind.ObjectMapper json, CompanyManager companyManager) {
+        this.companyManager = companyManager;
         this.access = access;
         this.ubl = ubl;
         this.emit = emit;
@@ -100,7 +104,7 @@ public class AdapterResource {
         SfsAdapter.Converted converted = SfsAdapter.convert(request.fileName(), request.cab(), request.det());
         String ruc = QuarkusTransaction.requiringNew().call(() -> {
             access.enter(tenantId, Role.OPERATOR);
-            return CompanyResource.find(companyId).getRuc();
+            return companyManager.getCompany(companyId).getRuc();
         });
         if (!ruc.equals(converted.ruc())) {
             throw ApiException.invalid("invalid_document", "El RUC del archivo no es el de la empresa.", null);
@@ -120,7 +124,7 @@ public class AdapterResource {
     @Transactional
     public Response createToken(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid TokenRequest request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.find(companyId);
+        CompanyModel company = companyManager.getCompany(companyId);
         byte[] raw = new byte[24];
         RANDOM.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
@@ -141,7 +145,7 @@ public class AdapterResource {
     @Transactional
     public java.util.List<AdapterTokenView> listTokens(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.ADMIN);
-        CompanyResource.find(companyId);
+        companyManager.getCompany(companyId);
         @SuppressWarnings("unchecked")
         java.util.List<Object[]> rows = em.createNativeQuery("""
                         SELECT id, kind, label, created_by, created_at, revoked_at FROM xhandler.adapter_token WHERE company_id = :c ORDER BY created_at DESC""")

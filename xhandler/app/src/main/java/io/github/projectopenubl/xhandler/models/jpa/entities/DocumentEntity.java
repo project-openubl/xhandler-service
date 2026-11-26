@@ -24,9 +24,7 @@ import org.hibernate.type.SqlTypes;
 public class DocumentEntity extends PanacheEntityBase {
 
     /** No definitive answer yet: the reconciler keeps attempting these (§24.2). */
-    public static final Set<String> RETRYABLE = Set.of("pending_send", "in_progress", "unknown");
 
-    public static final Set<String> ACCEPTED = Set.of("accepted", "accepted_with_observations");
 
     @Id
     private UUID id;
@@ -106,55 +104,6 @@ public class DocumentEntity extends PanacheEntityBase {
     private Instant updatedAt;
 
     /** The engine's amounts as stored on documents and receptions (absent taxes left out). */
-    public static Map<String, String> amountsOf(io.github.projectopenubl.xhandler.xml.EngineModels.Amounts a) {
-        if (a == null) {
-            return null;
-        }
-        Map<String, String> m = new java.util.LinkedHashMap<>();
-        java.util.function.BiConsumer<String, String> put = (k, v) -> {
-            if (v != null) {
-                m.put(k, v);
-            }
-        };
-        put.accept("gravada", a.gravada());
-        put.accept("igv", a.igv());
-        put.accept("exonerada", a.exonerada());
-        put.accept("inafecta", a.inafecta());
-        put.accept("exportacion", a.exportacion());
-        put.accept("gratuita", a.gratuita());
-        put.accept("ivap_base", a.ivapBase());
-        put.accept("ivap", a.ivap());
-        put.accept("isc", a.isc());
-        put.accept("icbper", a.icbper());
-        put.accept("otros", a.otros());
-        return m;
-    }
-
-    public String serieNumero() {
-        return serie + "-" + numero;
-    }
-
-    public boolean definitive() {
-        return !RETRYABLE.contains(status) && !"draft".equals(status);
-    }
-
-    public boolean isSummary() {
-        return "RC".equals(tipoComprobante) || "RA".equals(tipoComprobante) || "RR".equals(tipoComprobante);
-    }
-
-    /** Boletas and their notes (series starting with B) */
-    public boolean isBoletaFamily() {
-        return "03".equals(tipoComprobante) || (("07".equals(tipoComprobante) || "08".equals(tipoComprobante)) && serie.startsWith("B"));
-    }
-
-    /** Facturas and their notes (series starting with F) */
-    public boolean isFacturaFamily() {
-        return "01".equals(tipoComprobante) || (("07".equals(tipoComprobante) || "08".equals(tipoComprobante)) && serie.startsWith("F"));
-    }
-
-    public boolean isGuia() {
-        return "09".equals(tipoComprobante) || "31".equals(tipoComprobante);
-    }
 
     public UUID getId() {
         return id;

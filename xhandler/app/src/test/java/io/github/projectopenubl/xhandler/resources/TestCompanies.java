@@ -1,8 +1,10 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.SeriesProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.DefaultSeries;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.SeriesEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
+import io.github.projectopenubl.xhandler.models.SeriesModel;
 
 import io.github.projectopenubl.xhandler.Api;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -19,9 +21,15 @@ import java.util.UUID;
 @ApplicationScoped
 public class TestCompanies {
 
+    private final SeriesProvider seriesProvider;
+
+    private final CompanyProvider companyProvider;
+
     private final TenantAccess access;
 
-    public TestCompanies(TenantAccess access) {
+    public TestCompanies(TenantAccess access, CompanyProvider companyProvider, SeriesProvider seriesProvider) {
+        this.seriesProvider = seriesProvider;
+        this.companyProvider = companyProvider;
         this.access = access;
     }
 
@@ -32,24 +40,22 @@ public class TestCompanies {
     public UUID verified(UUID tenantId, String sunatEnv, String ruc) {
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            CompanyEntity company = new CompanyEntity();
-            company.setId(Ids.newId());
+            CompanyModel company = companyProvider.newCompany(Ids.newId());
             company.setTenantId(tenantId);
             company.setRuc(ruc);
             company.setRazonSocial("Empresa " + company.getRuc());
             company.setSunatEnv(sunatEnv);
             company.setRucVerifiedAt(Instant.now());
-            company.persist();
+            companyProvider.persist(company);
             for (DefaultSeries.Entry entry : DefaultSeries.ENTRIES) {
-                SeriesEntity series = new SeriesEntity();
-                series.setId(Ids.newId());
+                SeriesModel series = seriesProvider.newSeries(Ids.newId());
                 series.setTenantId(tenantId);
                 series.setCompanyId(company.getId());
                 series.setSunatEnv(sunatEnv);
                 series.setTipoComprobante(entry.tipoComprobante());
                 series.setSerie(entry.serie());
                 series.setDefault(true);
-                series.persist();
+                seriesProvider.persist(series);
             }
             return company.getId();
         });

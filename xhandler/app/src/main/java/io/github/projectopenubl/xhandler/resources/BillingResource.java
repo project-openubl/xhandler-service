@@ -1,10 +1,11 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.managers.Entitlements;
 
 import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
+import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.transaction.Transactional;
@@ -23,6 +24,8 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/billing")
 public class BillingResource {
 
+    private final TenantProvider tenantProvider;
+
     public record BillingDetails(@Pattern(regexp = "\\d{11}") String billingRuc, @Size(max = 300) String billingName,
             @Email String billingEmail) {}
 
@@ -32,7 +35,8 @@ public class BillingResource {
     private final Entitlements entitlements;
     private final Auditor auditor;
 
-    public BillingResource(TenantAccess access, Entitlements entitlements, Auditor auditor) {
+    public BillingResource(TenantAccess access, Entitlements entitlements, Auditor auditor, TenantProvider tenantProvider) {
+        this.tenantProvider = tenantProvider;
         this.access = access;
         this.entitlements = entitlements;
         this.auditor = auditor;
@@ -43,7 +47,7 @@ public class BillingResource {
     @Transactional
     public BillingView get(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        TenantEntity tenant = TenantEntity.findById(tenantId);
+        TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
         return new BillingView(entitlements.usage(tenantId), tenant.getBillingRuc(), tenant.getBillingName(), tenant.getBillingEmail());
     }
 
@@ -52,7 +56,7 @@ public class BillingResource {
     @Transactional
     public BillingView details(@PathParam("tenantId") UUID tenantId, @Valid BillingDetails details) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        TenantEntity tenant = TenantEntity.findById(tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        TenantModel tenant = tenantProvider.getTenantForUpdate(tenantId).orElse(null);
         tenant.setBillingRuc(details.billingRuc());
         tenant.setBillingName(details.billingName());
         tenant.setBillingEmail(details.billingEmail());

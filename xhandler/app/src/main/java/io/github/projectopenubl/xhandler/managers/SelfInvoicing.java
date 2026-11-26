@@ -1,5 +1,8 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.TenantProvider;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -11,7 +14,7 @@ import io.github.projectopenubl.xhandler.jobs.JobStore;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
+import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -133,6 +136,10 @@ public final class SelfInvoicing {
     @ApplicationScoped
     public static class Job implements JobHandler {
 
+        private final DocumentProvider documentProvider;
+
+        private final TenantProvider tenantProvider;
+
         public static final String NAME = "billing.self-invoice";
 
         private final EntityManager em;
@@ -141,7 +148,9 @@ public final class SelfInvoicing {
         private final Jobs jobs;
         private final ObjectMapper json;
 
-        public Job(EntityManager em, TenantAccess access, EmitService emit, Jobs jobs, ObjectMapper json) {
+        public Job(EntityManager em, TenantAccess access, EmitService emit, Jobs jobs, ObjectMapper json, TenantProvider tenantProvider, DocumentProvider documentProvider) {
+            this.documentProvider = documentProvider;
+            this.tenantProvider = tenantProvider;
             this.em = em;
             this.access = access;
             this.emit = emit;
@@ -174,7 +183,7 @@ public final class SelfInvoicing {
             record Buyer(String ruc, String name, String email) {}
             Buyer buyer = QuarkusTransaction.requiringNew().call(() -> {
                 access.enterAsPlatform(customer);
-                TenantEntity tenant = TenantEntity.findById(customer);
+                TenantModel tenant = tenantProvider.getTenant(customer).orElse(null);
                 if (tenant == null) {
                     throw new IllegalStateException("tenant " + customer + " of Lago invoice " + lagoId + " doesn't exist");
                 }
@@ -183,9 +192,7 @@ public final class SelfInvoicing {
             // Already issued (a retry after the idempotency window): link it, never issue twice
             Optional<UUID> existing = QuarkusTransaction.requiringNew().call(() -> {
                 access.enterAsPlatform(issuer.tenant());
-                return io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity.<io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity>find(
-                                "companyId = ?1 and function('jsonb_extract_path_text', labels, 'lago_invoice') = ?2", issuer.company(), lagoId)
-                        .firstResultOptional().map(d -> d.getId());
+                return documentProvider.getDocumentByLabel(issuer.company(), "lago_invoice", lagoId).map(d -> d.getId());
             });
             if (existing.isPresent()) {
                 QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery(

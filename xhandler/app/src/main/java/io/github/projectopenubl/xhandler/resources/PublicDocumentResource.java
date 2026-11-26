@@ -1,13 +1,17 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.managers.AccessLinks;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
+import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -36,6 +40,14 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/public/documents/{token}")
 public class PublicDocumentResource {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentFileProvider documentFileProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
+    private final CompanyProvider companyProvider;
+
     public record PublicDocument(
             String emisorRuc,
             String emisorRazonSocial,
@@ -56,7 +68,11 @@ public class PublicDocumentResource {
     private final io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf;
 
     public PublicDocumentResource(AccessLinks links, TenantAccess access, FileStore files, EntityManager em,
-            io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf) {
+            io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentFileProvider = documentFileProvider;
+        this.documentEventProvider = documentEventProvider;
+        this.companyProvider = companyProvider;
         this.pdf = pdf;
         this.links = links;
         this.access = access;
@@ -68,9 +84,9 @@ public class PublicDocumentResource {
     @GET
     @Transactional
     public PublicDocument get(@PathParam("token") String token) {
-        DocumentEntity doc = open(token);
-        CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
-        java.util.List<String> available = DocumentFileEntity.<DocumentFileEntity>list("documentId", doc.getId()).stream()
+        DocumentModel doc = open(token);
+        CompanyModel company = companyProvider.getCompany(doc.getCompanyId()).orElse(null);
+        java.util.List<String> available = documentFileProvider.getDocumentFiles(doc.getId()).stream()
                 .map(f -> switch (f.getKind()) {
                     case "xml_signed" -> "xml";
                     case "cdr_zip" -> "cdr";
@@ -103,10 +119,10 @@ public class PublicDocumentResource {
         };
         record Download(byte[] content, String name) {}
         Download download = QuarkusTransaction.requiringNew().call(() -> {
-            DocumentEntity doc = open(token);
+            DocumentModel doc = open(token);
             byte[] content = "pdf".equals(kind)
                     ? pdf.render(doc.getId(), links.url(token))
-                    : files.get(DocumentFileEntity.of(doc.getId(), stored).orElseThrow(ApiException::notFound).getStorageKey());
+                    : files.get(documentFileProvider.getDocumentFile(doc.getId(), stored).orElseThrow(ApiException::notFound).getStorageKey());
             markDelivered(doc.getId());
             return new Download(content, DocumentResource.fileName(null, doc, kind));
         });
@@ -116,10 +132,10 @@ public class PublicDocumentResource {
                 .build();
     }
 
-    private DocumentEntity open(String token) {
+    private DocumentModel open(String token) {
         AccessLinks.Resolved resolved = links.resolve(token).orElseThrow(ApiException::notFound);
         access.enterAsPlatform(resolved.tenantId());
-        DocumentEntity doc = DocumentEntity.findById(resolved.documentId());
+        DocumentModel doc = documentProvider.getDocument(resolved.documentId()).orElse(null);
         if (doc == null) {
             throw ApiException.notFound();
         }
@@ -128,7 +144,7 @@ public class PublicDocumentResource {
 
     /** First download by the buyer: the document counts as delivered (voiding is then refused, §9.3). */
     private void markDelivered(java.util.UUID documentId) {
-        DocumentEntity doc = DocumentEntity.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
+        DocumentModel doc = documentProvider.getDocumentForUpdate(documentId).orElse(null);
         em.createNativeQuery("""
                         INSERT INTO xhandler.delivery (id, tenant_id, document_id, channel, result) VALUES (:id, :tenant, :document, 'portal', 'downloaded')""")
                 .setParameter("id", Ids.newId())
@@ -139,7 +155,7 @@ public class PublicDocumentResource {
             doc.setDeliveredAt(Instant.now());
             doc.setDeliveredSource("service");
             doc.setUpdatedAt(doc.getDeliveredAt());
-            DocumentEventEntity.record(doc, null, "delivered (buyer portal)", "public:buyer", null);
+            documentEventProvider.addDocumentEvent(doc, null, "delivered (buyer portal)", "public:buyer", null);
         }
     }
 

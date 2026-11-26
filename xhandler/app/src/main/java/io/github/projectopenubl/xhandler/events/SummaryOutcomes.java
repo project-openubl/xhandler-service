@@ -1,7 +1,9 @@
 package io.github.projectopenubl.xhandler.events;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
@@ -17,28 +19,32 @@ import java.util.List;
 @ApplicationScoped
 public class SummaryOutcomes {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
     private final Event<DocumentStatusChanged> statusChanged;
 
-    public SummaryOutcomes(Event<DocumentStatusChanged> statusChanged) {
+    public SummaryOutcomes(Event<DocumentStatusChanged> statusChanged, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentEventProvider = documentEventProvider;
         this.statusChanged = statusChanged;
     }
 
     void onStatusChanged(@Observes DocumentStatusChanged change) {
-        DocumentEntity rc = change.document();
+        DocumentModel rc = change.document();
         if (!"RC".equals(rc.getTipoComprobante()) || !rc.definitive() || "ticket_lost".equals(rc.getCodeClass())) {
             // A lost ticket was resolved line by line already (AttemptHandler)
             return;
         }
-        List<DocumentEntity> lines = DocumentEntity.<DocumentEntity>find("summaryDocumentId = ?1 order by id", rc.getId())
-                .withLock(LockModeType.PESSIMISTIC_WRITE)
-                .list();
+        List<DocumentModel> lines = documentProvider.getSummaryLinesForUpdate(rc.getId());
         Instant now = Instant.now();
-        for (DocumentEntity line : lines) {
+        for (DocumentModel line : lines) {
             if (line.definitive() && !"exception".equals(line.getStatus())) {
                 continue;
             }
             String previous = line.getStatus();
-            if (DocumentEntity.ACCEPTED.contains(rc.getStatus())) {
+            if (DocumentModel.ACCEPTED.contains(rc.getStatus())) {
                 line.setStatus(rc.getStatus());
                 line.setSunatCode(rc.getSunatCode());
                 line.setSunatDescription("Aceptado en el resumen diario " + rc.serieNumero());
@@ -53,7 +59,7 @@ public class SummaryOutcomes {
             line.setNextAttemptAt(null);
             line.setProgressAt(now);
             line.setUpdatedAt(now);
-            DocumentEventEntity.record(line, line.getSunatCode(), line.getSunatDescription(), "platform:worker", change.correlationId());
+            documentEventProvider.addDocumentEvent(line, line.getSunatCode(), line.getSunatDescription(), "platform:worker", change.correlationId());
             if (!line.getStatus().equals(previous)) {
                 statusChanged.fire(new DocumentStatusChanged(line, previous, change.correlationId()));
             }

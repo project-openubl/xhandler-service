@@ -1,6 +1,7 @@
 package io.github.projectopenubl.xhandler.jobs;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
+import io.github.projectopenubl.xhandler.models.JobProvider;
+import io.github.projectopenubl.xhandler.models.JobModel;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -18,18 +19,20 @@ import java.util.UUID;
 @ApplicationScoped
 public class Jobs {
 
+    private final JobProvider jobProvider;
+
     private final JobStore store;
 
-    public Jobs(JobStore store) {
+    public Jobs(JobStore store, JobProvider jobProvider) {
+        this.jobProvider = jobProvider;
         this.store = store;
     }
 
     /** Enqueues a job in the open tenant; it runs after this transaction commits. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public JobEntity enqueue(TenantScope scope, String name, int priorityClass, Map<String, Object> args, List<String> resources,
+    public JobModel enqueue(TenantScope scope, String name, int priorityClass, Map<String, Object> args, List<String> resources,
             String correlationId) {
-        JobEntity job = new JobEntity();
-        job.setId(Ids.newId());
+        JobModel job = jobProvider.newJob(Ids.newId());
         job.setTenantId(scope.tenantId());
         job.setName(name);
         job.setPriorityClass((short) priorityClass);
@@ -39,7 +42,7 @@ public class Jobs {
         job.setRunAt(Instant.now());
         job.setCreatedAt(job.getRunAt());
         job.setUpdatedAt(job.getRunAt());
-        job.persist();
+        jobProvider.persist(job);
         store.notifyWakeup();
         return job;
     }
@@ -50,9 +53,6 @@ public class Jobs {
      */
     @Transactional(Transactional.TxType.MANDATORY)
     public String cancel(UUID jobId) {
-        Object state = JobEntity.getEntityManager().createNativeQuery("SELECT xhandler.cancel_tenant_job(:id)")
-                .setParameter("id", jobId)
-                .getSingleResult();
-        return state == null ? null : state.toString();
+        return jobProvider.cancelTenantJob(jobId);
     }
 }

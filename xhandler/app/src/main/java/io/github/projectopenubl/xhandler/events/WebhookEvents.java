@@ -1,10 +1,12 @@
 package io.github.projectopenubl.xhandler.events;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookDeliveryEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookSubscriptionEntity;
+import io.github.projectopenubl.xhandler.models.WebhookSubscriptionProvider;
+import io.github.projectopenubl.xhandler.models.WebhookDeliveryProvider;
+import io.github.projectopenubl.xhandler.models.WebhookDeliveryModel;
+import io.github.projectopenubl.xhandler.models.WebhookSubscriptionModel;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -23,12 +25,21 @@ import java.util.UUID;
 @ApplicationScoped
 public class WebhookEvents {
 
+    private final WebhookSubscriptionProvider webhookSubscriptionProvider;
+
+    private final WebhookDeliveryProvider webhookDeliveryProvider;
+
+    public WebhookEvents(WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider) {
+        this.webhookSubscriptionProvider = webhookSubscriptionProvider;
+        this.webhookDeliveryProvider = webhookDeliveryProvider;
+    }
+
     public static final String SOURCE = "urn:xhandler-service";
     public static final String DOCUMENT_SCHEMA = "urn:xhandler:schema:document-event:v1";
 
     /** Status changes become document.* events. */
     void onStatusChanged(@Observes DocumentStatusChanged change) {
-        DocumentEntity d = change.document();
+        DocumentModel d = change.document();
         String type = switch (d.getStatus()) {
             case "accepted", "accepted_with_observations" -> "document.accepted";
             case "rejected" -> "document.rejected";
@@ -49,7 +60,7 @@ public class WebhookEvents {
     /** Queues an event for every active subscription of the tenant that wants it. */
     @Transactional(Transactional.TxType.MANDATORY)
     public int publish(UUID tenantId, String type, String subject, String dataSchema, Map<String, Object> data) {
-        List<WebhookSubscriptionEntity> subscriptions = WebhookSubscriptionEntity.list("tenantId = ?1 and active and deletedAt is null", tenantId);
+        List<WebhookSubscriptionModel> subscriptions = webhookSubscriptionProvider.getActiveWebhookSubscriptions(tenantId);
         UUID eventId = Ids.newId();
         Instant now = Instant.now();
         Map<String, Object> event = new LinkedHashMap<>();
@@ -63,12 +74,11 @@ public class WebhookEvents {
         event.put("dataschema", dataSchema);
         event.put("data", data);
         int queued = 0;
-        for (WebhookSubscriptionEntity subscription : subscriptions) {
+        for (WebhookSubscriptionModel subscription : subscriptions) {
             if (!subscription.wants(type)) {
                 continue;
             }
-            WebhookDeliveryEntity delivery = new WebhookDeliveryEntity();
-            delivery.setId(Ids.newId());
+            WebhookDeliveryModel delivery = webhookDeliveryProvider.newWebhookDelivery(Ids.newId());
             delivery.setTenantId(tenantId);
             delivery.setSubscriptionId(subscription.getId());
             delivery.setEventId(eventId);
@@ -77,13 +87,13 @@ public class WebhookEvents {
             delivery.setNextAttemptAt(now);
             delivery.setCreatedAt(now);
             delivery.setUpdatedAt(now);
-            delivery.persist();
+            webhookDeliveryProvider.persist(delivery);
             queued++;
         }
         return queued;
     }
 
-    public static Map<String, Object> documentData(DocumentEntity d) {
+    public static Map<String, Object> documentData(DocumentModel d) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("id", d.getId().toString());
         data.put("prn", "xh:document:" + d.getId());

@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 
 import static io.github.projectopenubl.xhandler.Api.as;
 import static io.github.projectopenubl.xhandler.Api.tenantOf;
@@ -244,7 +244,7 @@ class DeliveryTest {
             d.setNextAttemptAt(null);
             d.setTotal(new BigDecimal("118.00"));
         });
-        DocumentEntity stored = docs.get(tenant, doc.id());
+        DocumentModel stored = docs.get(tenant, doc.id());
         Map<String, Object> request = new HashMap<>(Map.of("ruc", ruc, "tipo_comprobante", "01", "serie", "F001", "numero", stored.getNumero(),
                 "fecha_emision", stored.getFechaEmision().toString(), "total", "118.00", "captcha", "wrong"));
         given().contentType("application/json").body(request).post("/api/v1/public/lookup").then().statusCode(403);

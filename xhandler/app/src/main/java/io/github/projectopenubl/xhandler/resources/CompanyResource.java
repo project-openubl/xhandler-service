@@ -1,8 +1,11 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
+import io.github.projectopenubl.xhandler.models.SeriesProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.DefaultSeries;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.SeriesEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
+import io.github.projectopenubl.xhandler.models.SeriesModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Constraints;
@@ -43,6 +46,12 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 /** Companies (RUCs) of a tenant and their series. */
 @Path("/api/v1/tenants/{tenantId}/companies")
 public class CompanyResource {
+
+    private final CompanyManager companyManager;
+
+    private final SeriesProvider seriesProvider;
+
+    private final CompanyProvider companyProvider;
 
 
     public record CreateCompany(
@@ -87,7 +96,10 @@ public class CompanyResource {
             Idempotency idempotency,
             EntityManager em,
             @org.eclipse.microprofile.config.inject.ConfigProperty(name = "xhandler.limits.max-unverified-companies", defaultValue = "3")
-                    long maxUnverifiedCompanies) {
+                    long maxUnverifiedCompanies, CompanyProvider companyProvider, SeriesProvider seriesProvider, CompanyManager companyManager) {
+        this.companyManager = companyManager;
+        this.seriesProvider = seriesProvider;
+        this.companyProvider = companyProvider;
         this.access = access;
         this.auditor = auditor;
         this.idempotency = idempotency;
@@ -105,27 +117,25 @@ public class CompanyResource {
             @Valid CreateCompany request) {
         return idempotency.create(tenantId, Role.ADMIN, idempotencyKey, idempotency.hash("company", tenantId, request), () -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
-            if (CompanyEntity.count("rucVerifiedAt is null and deletedAt is null") >= maxUnverifiedCompanies) {
+            if (companyProvider.countUnverifiedCompanies() >= maxUnverifiedCompanies) {
                 throw ApiException.conflict("limit_reached", "Alcanzó el máximo de empresas sin verificar.");
             }
-            CompanyEntity company = new CompanyEntity();
-            company.setId(Ids.newId());
+            CompanyModel company = companyProvider.newCompany(Ids.newId());
             company.setTenantId(tenantId);
             company.setRuc(request.ruc());
             company.setRazonSocial(request.razonSocial().strip());
             company.setNombreComercial(request.nombreComercial() == null ? null : request.nombreComercial().strip());
             // Unverified duplicates of a RUC are allowed: the RUC is claimed at verification (P3)
-            company.persist();
+            companyProvider.persist(company);
             for (DefaultSeries.Entry entry : DefaultSeries.ENTRIES) {
-                SeriesEntity series = new SeriesEntity();
-                series.setId(Ids.newId());
+                SeriesModel series = seriesProvider.newSeries(Ids.newId());
                 series.setTenantId(tenantId);
                 series.setCompanyId(company.getId());
                 series.setSunatEnv(company.getSunatEnv());
                 series.setTipoComprobante(entry.tipoComprobante());
                 series.setSerie(entry.serie());
                 series.setDefault(true);
-                series.persist();
+                seriesProvider.persist(series);
             }
             auditor.record(scope, "company.created", "company", company.getId(), Map.of("ruc", company.getRuc()));
             return view(company);
@@ -140,7 +150,7 @@ public class CompanyResource {
         access.enter(tenantId, Role.VIEWER);
         int size = Page.limit(limit);
         int from = Page.offset(offset);
-        List<CompanyEntity> companies = CompanyEntity.find("deletedAt is null order by createdAt").range(from, from + size - 1).list();
+        List<CompanyModel> companies = companyProvider.getCompanies(from, size);
         return new Page<>(companies.stream().map(CompanyResource::view).toList(), size, from);
     }
 
@@ -150,7 +160,7 @@ public class CompanyResource {
     @Transactional
     public CompanyView get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
-        return view(find(companyId));
+        return view(companyManager.getCompany(companyId));
     }
 
     @Operation(operationId = "listSeries")
@@ -159,8 +169,8 @@ public class CompanyResource {
     @Transactional
     public List<SeriesView> series(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
-        CompanyEntity company = find(companyId);
-        List<SeriesEntity> series = SeriesEntity.list("companyId = ?1 and sunatEnv = ?2 order by tipoComprobante, serie", company.getId(), company.getSunatEnv());
+        CompanyModel company = companyManager.getCompany(companyId);
+        List<SeriesModel> series = seriesProvider.getSeries(company.getId(), company.getSunatEnv());
         return series.stream().map(CompanyResource::view).toList();
     }
 
@@ -175,9 +185,8 @@ public class CompanyResource {
             @HeaderParam("Idempotency-Key") String idempotencyKey, @Valid CreateSeries request) {
         return idempotency.create(tenantId, Role.ADMIN, idempotencyKey, idempotency.hash("series", companyId, request), () -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
-            CompanyEntity company = find(companyId);
-            SeriesEntity series = new SeriesEntity();
-            series.setId(Ids.newId());
+            CompanyModel company = companyManager.getCompany(companyId);
+            SeriesModel series = seriesProvider.newSeries(Ids.newId());
             series.setTenantId(tenantId);
             series.setCompanyId(company.getId());
             series.setSunatEnv(company.getSunatEnv());
@@ -186,7 +195,8 @@ public class CompanyResource {
             // Onboarding from another provider: continue its numbering (DESIGN.md §9.2.1, 1033)
             series.setNextNumber(request.nextNumber() == null ? 1 : request.nextNumber());
             try {
-                series.persistAndFlush();
+                seriesProvider.persist(series);
+                seriesProvider.flush();
             } catch (PersistenceException e) {
                 if (Constraints.violated(e).isPresent()) {
                     throw ApiException.conflict("series_exists", "La serie ya existe.");
@@ -215,8 +225,8 @@ public class CompanyResource {
     public SeriesView updateSeries(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @PathParam("seriesId") UUID seriesId, @Valid UpdateSeries request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        find(companyId);
-        if (SeriesEntity.count("id = ?1 and companyId = ?2", seriesId, companyId) == 0) {
+        companyManager.getCompany(companyId);
+        if (!seriesProvider.seriesExists(companyId, seriesId)) {
             throw ApiException.notFound();
         }
         Map<String, Object> changes = new java.util.LinkedHashMap<>();
@@ -245,36 +255,20 @@ public class CompanyResource {
     }
 
     /** The series row as committed so far in this transaction (the native updates bypass the session). */
-    private SeriesEntity current(UUID seriesId) {
-        SeriesEntity series = SeriesEntity.findById(seriesId);
-        em.refresh(series);
+    private SeriesModel current(UUID seriesId) {
+        SeriesModel series = seriesProvider.getSeries(seriesId).orElse(null);
+        seriesProvider.refresh(series);
         return series;
     }
 
-    /** A company of the open tenant (row-level security already limits the query to it). */
-    public static CompanyEntity find(UUID companyId) {
-        return check(CompanyEntity.findById(companyId));
-    }
 
-    /** Same as {@link #find}, locking the row until the transaction ends. */
-    public static CompanyEntity findForUpdate(UUID companyId) {
-        return check(CompanyEntity.findById(companyId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE));
-    }
-
-    private static CompanyEntity check(CompanyEntity company) {
-        if (company == null || company.getDeletedAt() != null) {
-            throw ApiException.notFound();
-        }
-        return company;
-    }
-
-    static CompanyView view(CompanyEntity c) {
+    static CompanyView view(CompanyModel c) {
         return new CompanyView(c.getId(), c.getRuc(), c.getRazonSocial(), c.getNombreComercial(), c.getSunatEnv(), c.getEmissionMode(), c.getRucVerifiedAt(), c.getEmail(),
                 c.isDeliveredOnEmitDefault(), c.isSendingPaused(), c.getDireccion(), c.getPdfFormat(), c.isEmailOnAccept(), c.getLogoRef() != null, c.getSubmissionRoute(),
                 c.getLibroReclamacionesUrl(), c.getEmailSubject(), c.getEmailBody());
     }
 
-    static SeriesView view(SeriesEntity s) {
+    static SeriesView view(SeriesModel s) {
         return new SeriesView(s.getId(), s.getSunatEnv(), s.getTipoComprobante(), s.getSerie(), s.getNextNumber(), s.isDefault(), s.isActive());
     }
 }

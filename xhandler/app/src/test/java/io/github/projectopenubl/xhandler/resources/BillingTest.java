@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.jobs.handlers.BillingJobs;
 
 import static io.github.projectopenubl.xhandler.Api.as;
@@ -154,7 +155,7 @@ class BillingTest {
         EngineStub.LAGO_PLAN.set("business");
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity.getEntityManager().createNativeQuery(
+            io.quarkus.hibernate.orm.panache.Panache.getEntityManager().createNativeQuery(
                     "UPDATE xhandler.entitlement SET source = 'lago', synced_at = now() - interval '30 days' WHERE tenant_id = :t")
                     .setParameter("t", tenant).executeUpdate();
         });

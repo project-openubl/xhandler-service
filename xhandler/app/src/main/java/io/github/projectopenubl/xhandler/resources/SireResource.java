@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.jobs.handlers.SireJobs;
 
@@ -9,7 +10,7 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
 import io.github.projectopenubl.xhandler.managers.RegisterRows;
@@ -44,6 +45,8 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/sire")
 public class SireResource {
 
+    private final CompanyManager companyManager;
+
     public record SirePeriodView(
             UUID id, String book, String period, String sunatEnv, String status, String detail, JsonNode reconciliation,
             boolean proposalFile, boolean replacementFile, Instant createdAt, Instant updatedAt) {}
@@ -69,7 +72,8 @@ public class SireResource {
     private final Auditor auditor;
     private final RegisterRows registers;
 
-    public SireResource(TenantAccess access, Jobs jobs, EntityManager em, FileStore files, Auditor auditor, RegisterRows registers) {
+    public SireResource(TenantAccess access, Jobs jobs, EntityManager em, FileStore files, Auditor auditor, RegisterRows registers, CompanyManager companyManager) {
+        this.companyManager = companyManager;
         this.registers = registers;
         this.access = access;
         this.jobs = jobs;
@@ -96,7 +100,7 @@ public class SireResource {
             @PathParam("book") String book, @PathParam("period") String period) {
         check(book, period);
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        CompanyEntity company = CompanyResource.find(companyId);
+        CompanyModel company = companyManager.getCompany(companyId);
         if ("beta".equals(company.getSunatEnv())) {
             throw ApiException.conflict("sire_not_available", "SUNAT no tiene ambiente de pruebas para SIRE.");
         }
@@ -147,7 +151,7 @@ public class SireResource {
             @PathParam("period") String period, ReplaceRequest request) {
         check(book, period);
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.find(companyId);
+        CompanyModel company = companyManager.getCompany(companyId);
         UUID id = find(companyId, company.getSunatEnv(), book, period);
         boolean acknowledge = request != null && Boolean.TRUE.equals(request.acknowledgeDifferences());
         boolean confirmed = request != null && Boolean.TRUE.equals(request.confirmNotReceived());
@@ -201,7 +205,7 @@ public class SireResource {
             @PathParam("period") String period) {
         check(book, period);
         access.enter(tenantId, Role.VIEWER);
-        CompanyEntity company = CompanyResource.find(companyId);
+        CompanyModel company = companyManager.getCompany(companyId);
         return view(find(companyId, company.getSunatEnv(), book, period));
     }
 
@@ -216,7 +220,7 @@ public class SireResource {
             throw ApiException.invalid("invalid_request", "book debe ser rvie o rce.", "book");
         }
         access.enter(tenantId, Role.VIEWER);
-        CompanyEntity company = CompanyResource.find(companyId);
+        CompanyModel company = companyManager.getCompany(companyId);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
         @SuppressWarnings("unchecked")
@@ -243,7 +247,7 @@ public class SireResource {
             @PathParam("period") String period, @PathParam("kind") String kind) {
         check(book, period);
         TenantScope scope = access.enter(tenantId, Role.VIEWER);
-        CompanyEntity company = CompanyResource.find(companyId);
+        CompanyModel company = companyManager.getCompany(companyId);
         UUID id = find(companyId, company.getSunatEnv(), book, period);
         String column = switch (kind) {
             case "proposal" -> "proposal_ref";

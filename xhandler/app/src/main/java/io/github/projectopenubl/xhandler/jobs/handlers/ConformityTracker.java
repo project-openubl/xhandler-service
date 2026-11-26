@@ -1,9 +1,11 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
@@ -37,6 +39,10 @@ import org.jboss.logging.Logger;
 @ApplicationScoped
 public class ConformityTracker implements JobHandler {
 
+    private final DocumentProvider documentProvider;
+
+    private final CompanyProvider companyProvider;
+
     static final Duration WINDOW = Duration.ofDays(8);
     static final Duration REMIND_BEFORE = Duration.ofDays(2);
     private static final Logger LOG = Logger.getLogger(ConformityTracker.class);
@@ -49,7 +55,9 @@ public class ConformityTracker implements JobHandler {
     private final Notifications notifications;
 
     public ConformityTracker(EntityManager em, TenantAccess access, Engine engine, CredentialService credentials, WebhookEvents webhooks,
-            Notifications notifications) {
+            Notifications notifications, CompanyProvider companyProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.companyProvider = companyProvider;
         this.em = em;
         this.access = access;
         this.engine = engine;
@@ -60,7 +68,7 @@ public class ConformityTracker implements JobHandler {
 
     /** Inside the transaction that recorded SUNAT's acceptance: no I/O, one insert. SIRE has no beta. */
     void onAccepted(@Observes DocumentStatusChanged change) {
-        DocumentEntity d = change.document();
+        DocumentModel d = change.document();
         if ("voided".equals(d.getStatus()) && "01".equals(d.getTipoComprobante())) {
             // A voided factura is no longer negotiable: stop following it
             em.createNativeQuery("UPDATE xhandler.conformity SET state = 'closed', resolved_at = now() WHERE document_id = :d AND state = 'pending'")
@@ -68,8 +76,8 @@ public class ConformityTracker implements JobHandler {
             return;
         }
         // Facturas negociables are between companies: the buyer is identified by RUC
-        if (!"01".equals(d.getTipoComprobante()) || !"credito".equals(d.getPaymentTerms()) || !DocumentEntity.ACCEPTED.contains(d.getStatus())
-                || DocumentEntity.ACCEPTED.contains(change.previousStatus()) || "beta".equals(d.getSunatEnv()) || !"6".equals(d.getCustomerTipo())) {
+        if (!"01".equals(d.getTipoComprobante()) || !"credito".equals(d.getPaymentTerms()) || !DocumentModel.ACCEPTED.contains(d.getStatus())
+                || DocumentModel.ACCEPTED.contains(change.previousStatus()) || "beta".equals(d.getSunatEnv()) || !"6".equals(d.getCustomerTipo())) {
             return;
         }
         Instant now = Instant.now();
@@ -114,8 +122,8 @@ public class ConformityTracker implements JobHandler {
             TenantScope scope = access.enterAsPlatform(tenantId);
             Object[] c = (Object[]) em.createNativeQuery("SELECT document_id, window_ends_at, reminded_at FROM xhandler.conformity WHERE id = :id")
                     .setParameter("id", conformityId).getSingleResult();
-            DocumentEntity doc = DocumentEntity.findById(c[0]);
-            CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
+            DocumentModel doc = documentProvider.getDocument((UUID) c[0]).orElse(null);
+            CompanyModel company = companyProvider.getCompany(doc.getCompanyId()).orElse(null);
             EngineModels.ConformityRequest request = credentials.read(scope, company, "sire", "conformity:" + doc.getId())
                     .map(f -> new EngineModels.ConformityRequest("fake".equals(doc.getSunatEnv()) ? EngineModels.Environment.FAKE
                             : EngineModels.Environment.PRODUCTION,
@@ -169,7 +177,7 @@ public class ConformityTracker implements JobHandler {
             if (changed == 0) {
                 return;
             }
-            DocumentEntity doc = DocumentEntity.findById(documentId);
+            DocumentModel doc = documentProvider.getDocument(documentId).orElse(null);
             Map<String, Object> data = new LinkedHashMap<>(WebhookEvents.documentData(doc));
             data.put("conformity", state);
             webhooks.publish(tenantId, "document.conformity_" + state, "xh:document:" + documentId, WebhookEvents.DOCUMENT_SCHEMA, data);
@@ -195,7 +203,7 @@ public class ConformityTracker implements JobHandler {
             if (changed == 0) {
                 return;
             }
-            DocumentEntity doc = DocumentEntity.findById(documentId);
+            DocumentModel doc = documentProvider.getDocument(documentId).orElse(null);
             Map<String, Object> data = new LinkedHashMap<>(WebhookEvents.documentData(doc));
             data.put("window_ends_at", windowEnds.toString());
             webhooks.publish(tenantId, "document.conformity_reminder", "xh:document:" + documentId, WebhookEvents.DOCUMENT_SCHEMA, data);

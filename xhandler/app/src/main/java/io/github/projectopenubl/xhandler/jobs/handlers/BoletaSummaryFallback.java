@@ -1,11 +1,14 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.managers.Summaries;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -31,13 +34,22 @@ import org.jboss.logging.Logger;
 @ApplicationScoped
 public class BoletaSummaryFallback implements JobHandler {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
+    private final CompanyProvider companyProvider;
+
     private static final Logger LOG = Logger.getLogger(BoletaSummaryFallback.class);
 
     private final EntityManager em;
     private final TenantAccess access;
     private final Summaries summaries;
 
-    public BoletaSummaryFallback(EntityManager em, TenantAccess access, Summaries summaries) {
+    public BoletaSummaryFallback(EntityManager em, TenantAccess access, Summaries summaries, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentEventProvider = documentEventProvider;
+        this.companyProvider = companyProvider;
         this.em = em;
         this.access = access;
         this.summaries = summaries;
@@ -89,40 +101,26 @@ public class BoletaSummaryFallback implements JobHandler {
 
     record Chunk(int lines) {}
 
-    /** Lines a resumen diario may take: SUNAT can't have them and no attempt is in flight (§9.2.4). */
-    static final String CANDIDATES = """
-            companyId = ?1 and sunatEnv = ?2 and fechaEmision = ?3 and summaryDocumentId is null
-            and origin <> 'ose_inbound'
-            and (tipoComprobante = '03' or (tipoComprobante in ('07', '08') and serie like 'B%'))
-            and (fechaEmision < ?4 or codeClass = 'route_change')
-            and (status = 'pending_send' or (status = 'exception' and codeClass = 'route_change'))
-            and (codeClass is null or codeClass <> 'summary_failed')
-            and (holdReason is null or holdReason <> 'operator')
-            order by id""";
-
     private Chunk summarizeChunk(UUID tenantId, UUID companyId, String sunatEnv, LocalDate fecha, LocalDate today, String correlationId) {
         TenantScope scope = access.enterAsPlatform(tenantId);
         // Lock order (§10.8 rule 4): company → daily counter → documents
-        CompanyEntity company = CompanyEntity.findById(companyId, LockModeType.PESSIMISTIC_READ);
+        CompanyModel company = companyProvider.getCompanyForShare(companyId).orElse(null);
         int numero = summaries.reserveResumenDiario(company, sunatEnv);
-        List<DocumentEntity> boletas = DocumentEntity.<DocumentEntity>find(CANDIDATES, companyId, sunatEnv, fecha, today.minusDays(5))
-                .withLock(LockModeType.PESSIMISTIC_WRITE)
-                .withHint("jakarta.persistence.lock.timeout", -2)
-                .page(0, Summaries.MAX_LINES)
-                .list();
+        List<DocumentModel> boletas = documentProvider.getSummaryCandidatesForUpdate(companyId, sunatEnv, fecha, today.minusDays(5),
+                Summaries.MAX_LINES, true);
         boletas = boletas.stream().filter(d -> !attemptActive(d.getId())).toList();
         if (boletas.isEmpty()) {
             // Rolls back: the reserved number is not consumed
             QuarkusTransaction.setRollbackOnly();
             return new Chunk(0);
         }
-        DocumentEntity rc = summaries.resumenDiario(scope, company, sunatEnv, fecha, boletas, "1", correlationId, Deadlines.todayInLima(), numero);
+        DocumentModel rc = summaries.resumenDiario(scope, company, sunatEnv, fecha, boletas, "1", correlationId, Deadlines.todayInLima(), numero);
         Instant now = Instant.now();
-        for (DocumentEntity boleta : boletas) {
+        for (DocumentModel boleta : boletas) {
             boleta.setSummaryDocumentId(rc.getId());
             boleta.setNextAttemptAt(null);
             boleta.setUpdatedAt(now);
-            DocumentEventEntity.record(boleta, null, "moved into resumen diario " + rc.serieNumero(), "platform:worker", correlationId);
+            documentEventProvider.addDocumentEvent(boleta, null, "moved into resumen diario " + rc.serieNumero(), "platform:worker", correlationId);
         }
         return new Chunk(boletas.size());
     }
@@ -141,15 +139,13 @@ public class BoletaSummaryFallback implements JobHandler {
         try {
             QuarkusTransaction.requiringNew().run(() -> {
                 access.enterAsPlatform(tenantId);
-                List<DocumentEntity> boletas = DocumentEntity.<DocumentEntity>find(CANDIDATES, companyId, sunatEnv, fecha, today.minusDays(5))
-                        .withLock(LockModeType.PESSIMISTIC_WRITE)
-                        .page(0, Summaries.MAX_LINES)
-                        .list();
-                for (DocumentEntity boleta : boletas) {
+                List<DocumentModel> boletas = documentProvider.getSummaryCandidatesForUpdate(companyId, sunatEnv, fecha, today.minusDays(5),
+                        Summaries.MAX_LINES, false);
+                for (DocumentModel boleta : boletas) {
                     boleta.setCodeClass("summary_failed");
                     boleta.setHoldReason("needs_attention");
                     boleta.setUpdatedAt(Instant.now());
-                    DocumentEventEntity.record(boleta, null, "could not build its resumen diario: " + reason, "platform:worker", correlationId);
+                    documentEventProvider.addDocumentEvent(boleta, null, "could not build its resumen diario: " + reason, "platform:worker", correlationId);
                 }
             });
         } catch (RuntimeException e) {

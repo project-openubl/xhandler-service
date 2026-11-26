@@ -1,6 +1,7 @@
 package io.github.projectopenubl.xhandler.jobs;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
+import io.github.projectopenubl.xhandler.models.JobProvider;
+import io.github.projectopenubl.xhandler.models.JobModel;
 
 import static io.github.projectopenubl.xhandler.Api.tenantOf;
 import static io.github.projectopenubl.xhandler.xml.EngineStub.Reply;
@@ -11,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.projectopenubl.xhandler.resources.TestCompanies;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.resources.TestDocuments;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -38,6 +39,9 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 @QuarkusTestResource(EngineStub.class)
 class RecoveryTest {
+
+    @Inject
+    JobProvider jobProvider;
 
     static final Duration WAIT = Duration.ofSeconds(30);
 
@@ -119,7 +123,7 @@ class RecoveryTest {
             // The connection is gone: recovery fails the job and the waiting attempt runs
             await().atMost(WAIT).until(() -> "failed".equals(jobState(job)));
         }
-        await().atMost(WAIT).until(() -> DocumentEntity.ACCEPTED.contains(docs.get(tenant, doc.id()).getStatus()));
+        await().atMost(WAIT).until(() -> DocumentModel.ACCEPTED.contains(docs.get(tenant, doc.id()).getStatus()));
         assertEquals(1, EngineStub.requests("/v1/send", doc.marker()).size());
     }
 
@@ -237,7 +241,7 @@ class RecoveryTest {
     long outstandingAttempts() {
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenant);
-            return JobEntity.count("endpoint = ?1 and state in ('waiting', 'running')", endpoint);
+            return jobProvider.countActiveJobs(endpoint);
         });
     }
 

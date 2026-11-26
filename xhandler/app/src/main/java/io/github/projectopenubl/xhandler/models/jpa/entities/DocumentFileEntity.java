@@ -28,23 +28,7 @@ public class DocumentFileEntity extends PanacheEntityBase {
     private long size;
     private Instant createdAt;
 
-    public static DocumentFileEntity record(DocumentEntity document, String kind, FileStore.Stored stored) {
-        DocumentFileEntity file = new DocumentFileEntity();
-        file.id = Ids.newId();
-        file.tenantId = document.getTenantId();
-        file.documentId = document.getId();
-        file.kind = kind;
-        file.storageKey = stored.key();
-        file.sha256 = stored.sha256();
-        file.size = stored.size();
-        file.createdAt = Instant.now();
-        file.persist();
-        return file;
-    }
 
-    public static Optional<DocumentFileEntity> of(UUID documentId, String kind) {
-        return find("documentId = ?1 and kind = ?2", documentId, kind).firstResultOptional();
-    }
 
     public UUID getId() {
         return id;

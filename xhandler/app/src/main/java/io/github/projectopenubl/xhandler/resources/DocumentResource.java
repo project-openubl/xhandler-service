@@ -1,12 +1,16 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.DocumentSearch;
+import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.managers.AccessLinks;
 import io.github.projectopenubl.xhandler.managers.DocumentControl;
 import io.github.projectopenubl.xhandler.managers.EmitService;
 import io.github.projectopenubl.xhandler.managers.VoidingService;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
+import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -40,6 +44,12 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}")
 public class DocumentResource {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentFileProvider documentFileProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
     public record Event(Instant at, String status, Integer code, String message, String actor, String correlationId) {}
 
     public record AccessLink(String accessUrl) {}
@@ -54,7 +64,10 @@ public class DocumentResource {
     private final io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf;
 
     public DocumentResource(TenantAccess access, EmitService emit, DocumentControl control, AccessLinks links, FileStore files,
-            Auditor auditor, VoidingService voiding, io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf) {
+            Auditor auditor, VoidingService voiding, io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentFileProvider = documentFileProvider;
+        this.documentEventProvider = documentEventProvider;
         this.pdf = pdf;
         this.access = access;
         this.voiding = voiding;
@@ -108,45 +121,21 @@ public class DocumentResource {
             @QueryParam("limit") Integer limit,
             @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
-        StringBuilder query = new StringBuilder("1 = 1");
-        Map<String, Object> params = new HashMap<>();
-        add(query, params, "companyId", companyId);
-        add(query, params, "status", status);
-        add(query, params, "tipoComprobante", tipo);
-        add(query, params, "serie", serie);
-        add(query, params, "holdReason", holdReason);
-        if (customerNumero != null && !customerNumero.isBlank()) {
-            query.append(" and customerNumero = :customerNumero");
-            params.put("customerNumero", customerNumero.strip());
-        }
-        if (customerNombre != null && !customerNombre.isBlank()) {
-            // A prefix match, served by the document_customer_nombre index
-            query.append(" and lower(customerNombre) like :customerNombre escape '\\'");
-            params.put("customerNombre", likePrefix(customerNombre.strip().toLowerCase(java.util.Locale.ROOT)));
-        }
-        if (from != null) {
-            query.append(" and fechaEmision >= :from");
-            params.put("from", from);
-        }
-        if (to != null) {
-            query.append(" and fechaEmision <= :to");
-            params.put("to", to);
-        }
-        int i = 0;
+        Map<String, String> labelFilters = new java.util.LinkedHashMap<>();
         for (String label : labels == null ? List.<String>of() : labels) {
             int colon = label.indexOf(':');
             if (colon <= 0) {
                 throw ApiException.invalid("invalid_request", "Filtre etiquetas como label=clave:valor.", null);
             }
-            query.append(" and function('jsonb_extract_path_text', labels, :labelKey").append(i).append(") = :labelValue").append(i);
-            params.put("labelKey" + i, label.substring(0, colon));
-            params.put("labelValue" + i, label.substring(colon + 1));
-            i++;
+            labelFilters.put(label.substring(0, colon), label.substring(colon + 1));
         }
-        query.append(" order by createdAt desc, id desc");
+        DocumentSearch search = new DocumentSearch(companyId, status, tipo, serie, holdReason,
+                customerNumero == null || customerNumero.isBlank() ? null : customerNumero.strip(),
+                customerNombre == null || customerNombre.isBlank() ? null : likePrefix(customerNombre.strip().toLowerCase(java.util.Locale.ROOT)),
+                from, to, labelFilters);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
-        List<DocumentEntity> page = DocumentEntity.<DocumentEntity>find(query.toString(), params).range(start, start + size - 1).list();
+        List<DocumentModel> page = documentProvider.searchDocuments(search, start, size);
         return new Page<>(page.stream().map(DocumentView::of).toList(), size, start);
     }
 
@@ -166,7 +155,7 @@ public class DocumentResource {
     public List<Event> events(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
         access.enter(tenantId, Role.VIEWER);
         find(documentId);
-        List<DocumentEventEntity> events = DocumentEventEntity.list("documentId = ?1 order by at, id", documentId);
+        List<DocumentEventModel> events = documentEventProvider.getDocumentEvents(documentId);
         return events.stream().map(e -> new Event(e.getAt(), e.getStatus(), e.getCode(), e.getMessage(), e.getActor(), e.getCorrelationId())).toList();
     }
 
@@ -184,7 +173,7 @@ public class DocumentResource {
     public Response file(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId,
             @PathParam("kind") String kind) {
         TenantScope scope = access.enter(tenantId, Role.VIEWER);
-        DocumentEntity doc = find(documentId);
+        DocumentModel doc = find(documentId);
         String stored = switch (kind) {
             case "xml" -> "xml_signed";
             case "cdr" -> "cdr_zip";
@@ -193,7 +182,7 @@ public class DocumentResource {
         };
         byte[] content = "pdf".equals(kind)
                 ? pdf.render(doc.getId(), null)
-                : files.get(DocumentFileEntity.of(doc.getId(), stored).orElseThrow(ApiException::notFound).getStorageKey());
+                : files.get(documentFileProvider.getDocumentFile(doc.getId(), stored).orElseThrow(ApiException::notFound).getStorageKey());
         auditor.record(scope, "document.file_read", "document", doc.getId(), Map.of("kind", kind));
         return Response.ok(content)
                 .type(contentType(kind))
@@ -236,7 +225,7 @@ public class DocumentResource {
     @Operation(operationId = "voidDocument", summary = "Anula un documento aceptado y no entregado (RA, RC o RR)")
     public Response voidDocument(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId,
             @HeaderParam("X-Correlation-Id") String correlationId, VoidingService.VoidRequest request) {
-        DocumentEntity voidingDocument = voiding.voidDocument(tenantId, documentId, request, correlation(correlationId));
+        DocumentModel voidingDocument = voiding.voidDocument(tenantId, documentId, request, correlation(correlationId));
         return Response.status(202).entity(DocumentView.of(voidingDocument)).build();
     }
 
@@ -255,12 +244,12 @@ public class DocumentResource {
     @Operation(operationId = "markDocumentDelivered")
     public DocumentView delivered(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        DocumentEntity doc = control.lock(documentId);
+        DocumentModel doc = control.lock(documentId);
         if (doc.getDeliveredAt() == null) {
             doc.setDeliveredAt(Instant.now());
             doc.setDeliveredSource("client");
             doc.setUpdatedAt(doc.getDeliveredAt());
-            DocumentEventEntity.record(doc, null, "delivered (client)", scope.actor().auditName(), null);
+            documentEventProvider.addDocumentEvent(doc, null, "delivered (client)", scope.actor().auditName(), null);
             auditor.record(scope, "document.delivered", "document", doc.getId());
         }
         return DocumentView.of(doc);
@@ -273,7 +262,7 @@ public class DocumentResource {
     @Operation(operationId = "createDocumentAccessLink")
     public AccessLink accessLink(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        DocumentEntity doc = find(documentId);
+        DocumentModel doc = find(documentId);
         auditor.record(scope, "document.access_link_created", "document", doc.getId());
         return new AccessLink(links.url(links.create(doc)));
     }
@@ -286,11 +275,8 @@ public class DocumentResource {
     @Operation(operationId = "revokeDocumentAccessLinks")
     public Response revokeAccessLinks(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        DocumentEntity doc = find(documentId);
-        int revoked = DocumentEntity.getEntityManager()
-                .createNativeQuery("UPDATE xhandler.access_token SET expires_at = now() WHERE document_id = :id AND expires_at > now()")
-                .setParameter("id", doc.getId())
-                .executeUpdate();
+        DocumentModel doc = find(documentId);
+        int revoked = documentProvider.revokeAccessLinks(doc.getId());
         auditor.record(scope, "document.access_links_revoked", "document", doc.getId(), Map.of("count", revoked));
         return Response.noContent().build();
     }
@@ -303,8 +289,8 @@ public class DocumentResource {
         return UUID.randomUUID().toString();
     }
 
-    static DocumentEntity find(UUID documentId) {
-        DocumentEntity doc = DocumentEntity.findById(documentId);
+    DocumentModel find(UUID documentId) {
+        DocumentModel doc = documentProvider.getDocument(documentId).orElse(null);
         if (doc == null) {
             throw ApiException.notFound();
         }
@@ -320,7 +306,7 @@ public class DocumentResource {
         };
     }
 
-    static String fileName(TenantScope scope, DocumentEntity doc, String kind) {
+    static String fileName(TenantScope scope, DocumentModel doc, String kind) {
         String base = doc.getTipoComprobante() + "-" + doc.serieNumero();
         return switch (kind) {
             case "xml" -> base + ".xml";

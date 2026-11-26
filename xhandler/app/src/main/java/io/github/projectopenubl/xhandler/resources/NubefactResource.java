@@ -1,11 +1,15 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.utils.NubefactAdapter;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.managers.EmitService;
 import io.github.projectopenubl.xhandler.managers.VoidingService;
@@ -36,13 +40,22 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/public/nubefact/{companyId}")
 public class NubefactResource {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
+    private final CompanyProvider companyProvider;
+
     private final EntityManager em;
     private final TenantAccess access;
     private final EmitService emit;
     private final VoidingService voiding;
     private final ObjectMapper json;
 
-    public NubefactResource(EntityManager em, TenantAccess access, EmitService emit, VoidingService voiding, ObjectMapper json) {
+    public NubefactResource(EntityManager em, TenantAccess access, EmitService emit, VoidingService voiding, ObjectMapper json, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentEventProvider = documentEventProvider;
+        this.companyProvider = companyProvider;
         this.em = em;
         this.access = access;
         this.emit = emit;
@@ -100,11 +113,11 @@ public class NubefactResource {
             throw ApiException.conflict("not_an_adapter_document", "El comprobante no fue emitido por la API compatible con Nubefact.");
         }
         String motivo = request.path("motivo").asText("Anulación");
-        DocumentEntity voidingDocument = voiding.voidDocumentAsPlatform(client.tenantId(), UUID.fromString(view.path("id").asText()),
+        DocumentModel voidingDocument = voiding.voidDocumentAsPlatform(client.tenantId(), UUID.fromString(view.path("id").asText()),
                 new VoidingService.VoidRequest(motivo, true, null), UUID.randomUUID().toString());
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(client.tenantId());
-            io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity.record(DocumentEntity.findById(UUID.fromString(view.path("id").asText())), null,
+            documentEventProvider.addDocumentEvent(documentProvider.getDocument(UUID.fromString(view.path("id").asText())).orElse(null), null,
                     "void requested by Nubefact token " + client.tokenId() + " (" + client.label() + ")", "token:" + client.tokenId(), null);
         });
         return Response.ok(Map.of("numero", view.path("numero").asLong(), "enlace", "", "sunat_ticket_numero", "",
@@ -117,8 +130,7 @@ public class NubefactResource {
         long numero = request.path("numero").asLong();
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(client.tenantId());
-            List<DocumentEntity> found = DocumentEntity.list("companyId = ?1 and sunatEnv = ?2 and tipoComprobante = ?3 and serie = ?4 and numero = ?5"
-                    + " order by createdAt desc", client.companyId(), client.sunatEnv(), tipo, serie, numero);
+            List<DocumentModel> found = documentProvider.getDocumentsByNumber(client.companyId(), client.sunatEnv(), tipo, serie, numero);
             if (found.isEmpty()) {
                 throw ApiException.notFound();
             }
@@ -146,7 +158,7 @@ public class NubefactResource {
             }
             UUID tenant = (UUID) rows.get(0)[0];
             access.enterAsPlatform(tenant);
-            io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity company = io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity.findById(companyId);
+            CompanyModel company = companyProvider.getCompany(companyId).orElse(null);
             return new Client(tenant, companyId, company.getSunatEnv(), (UUID) rows.get(0)[3], (String) rows.get(0)[2]);
         });
     }

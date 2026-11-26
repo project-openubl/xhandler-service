@@ -1,7 +1,8 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.SeriesProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.models.jpa.entities.SeriesEntity;
+import io.github.projectopenubl.xhandler.models.SeriesModel;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -18,6 +19,8 @@ import java.util.UUID;
 @ApplicationScoped
 public class Numbering {
 
+    private final SeriesProvider seriesProvider;
+
     /** How far past the series counter a client-chosen number may go. */
     static final long MAX_JUMP = 100_000;
 
@@ -26,7 +29,8 @@ public class Numbering {
 
     private final EntityManager em;
 
-    public Numbering(EntityManager em) {
+    public Numbering(EntityManager em, SeriesProvider seriesProvider) {
+        this.seriesProvider = seriesProvider;
         this.em = em;
     }
 
@@ -122,9 +126,7 @@ public class Numbering {
      */
     @Transactional(Transactional.TxType.MANDATORY)
     public String defaultSerie(UUID companyId, String sunatEnv, String tipoComprobante, String prefix) {
-        List<SeriesEntity> candidates = SeriesEntity.list(
-                "companyId = ?1 and sunatEnv = ?2 and tipoComprobante = ?3 and active order by isDefault desc, serie",
-                companyId, sunatEnv, tipoComprobante);
+        List<SeriesModel> candidates = seriesProvider.getActiveSeries(companyId, sunatEnv, tipoComprobante);
         return candidates.stream()
                 .filter(s -> prefix == null || s.getSerie().startsWith(prefix))
                 .findFirst()

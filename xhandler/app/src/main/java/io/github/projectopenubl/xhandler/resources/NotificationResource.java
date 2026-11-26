@@ -1,12 +1,13 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
+import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.persistence.EntityManager;
@@ -31,6 +32,8 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}")
 public class NotificationResource {
 
+    private final TenantProvider tenantProvider;
+
     public record NotificationView(UUID id, String kind, String title, String body, UUID documentId, Instant createdAt, Instant readAt) {}
 
     public record Preference(@NotBlank String kind, boolean email, boolean inApp) {}
@@ -41,7 +44,8 @@ public class NotificationResource {
     private final EntityManager em;
     private final Auditor auditor;
 
-    public NotificationResource(TenantAccess access, EntityManager em, Auditor auditor) {
+    public NotificationResource(TenantAccess access, EntityManager em, Auditor auditor, TenantProvider tenantProvider) {
+        this.tenantProvider = tenantProvider;
         this.access = access;
         this.em = em;
         this.auditor = auditor;
@@ -125,7 +129,7 @@ public class NotificationResource {
     @Transactional
     public NotificationSettings getSettings(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        TenantEntity tenant = TenantEntity.findById(tenantId);
+        TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
         if (tenant == null) {
             throw ApiException.notFound();
         }
@@ -138,7 +142,7 @@ public class NotificationResource {
     @Transactional
     public NotificationSettings settings(@PathParam("tenantId") UUID tenantId, @Valid NotificationSettings settings) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        TenantEntity tenant = TenantEntity.findById(tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        TenantModel tenant = tenantProvider.getTenantForUpdate(tenantId).orElse(null);
         tenant.setNotificationEmail(settings.notificationEmail() == null || settings.notificationEmail().isBlank()
                 ? null : settings.notificationEmail().strip());
         auditor.record(scope, "tenant.notification_email_changed", "tenant", tenantId);

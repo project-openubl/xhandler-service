@@ -1,7 +1,8 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.utils.Times;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -40,6 +41,8 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/pse")
 public class PseResource {
 
+    private final CompanyManager companyManager;
+
     public record Authorization(@NotNull LocalDate authorizedAt, @NotBlank String evidenceBase64) {}
 
     public record EmissionMode(@NotBlank @Pattern(regexp = "software|pse") String emissionMode) {}
@@ -54,7 +57,8 @@ public class PseResource {
     private final PlatformKeys platformKeys;
 
     public PseResource(TenantAccess access, EntityManager em, Auditor auditor, FileStore files, Notifications notifications,
-            PlatformKeys platformKeys) {
+            PlatformKeys platformKeys, CompanyManager companyManager) {
+        this.companyManager = companyManager;
         this.access = access;
         this.em = em;
         this.auditor = auditor;
@@ -68,7 +72,7 @@ public class PseResource {
     @Transactional
     public List<AuthorizationView> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
-        CompanyResource.find(companyId);
+        companyManager.getCompany(companyId);
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery("""
                         SELECT id, authorized_at, evidence_ref IS NOT NULL, registered_by, approved_at, revoked_at FROM xhandler.pse_authorization
@@ -86,7 +90,7 @@ public class PseResource {
     public AuthorizationView authorize(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @Valid Authorization request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.findForUpdate(companyId);
+        CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         if (company.getRucVerifiedAt() == null) {
             throw ApiException.conflict("ruc_not_verified", "Verifique el RUC de la empresa antes de registrar la autorización de PSE.");
         }
@@ -134,7 +138,7 @@ public class PseResource {
     @Transactional
     public RevokedView revoke(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.findForUpdate(companyId);
+        CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         long pending = ((Number) em.createNativeQuery("""
                         SELECT count(*) FROM xhandler.document WHERE company_id = :c AND emission_mode = 'pse'
                           AND status IN ('pending_send', 'in_progress', 'unknown', 'voiding')""").setParameter("c", companyId).getSingleResult())
@@ -165,7 +169,7 @@ public class PseResource {
     public CompanyResource.CompanyView mode(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @Valid EmissionMode request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.findForUpdate(companyId);
+        CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         if ("pse".equals(request.emissionMode())) {
             if (em.createNativeQuery("SELECT 1 FROM xhandler.pse_authorization WHERE company_id = :c AND revoked_at IS NULL AND approved_at IS NOT NULL")
                     .setParameter("c", companyId).getResultList().isEmpty()) {

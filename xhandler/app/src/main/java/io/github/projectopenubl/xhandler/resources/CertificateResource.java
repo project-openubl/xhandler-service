@@ -1,13 +1,15 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
+import io.github.projectopenubl.xhandler.models.SigningKeyProvider;
 import io.github.projectopenubl.xhandler.keys.CertificateImporter;
 import io.github.projectopenubl.xhandler.keys.KeyVault;
-import io.github.projectopenubl.xhandler.models.jpa.entities.SigningKeyEntity;
+import io.github.projectopenubl.xhandler.models.SigningKeyModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -34,6 +36,10 @@ import org.jboss.resteasy.reactive.multipart.FileUpload;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/certificate")
 public class CertificateResource {
 
+    private final CompanyManager companyManager;
+
+    private final SigningKeyProvider signingKeyProvider;
+
     public record CertificateView(String subject, String issuer, String serial, String ruc, Instant validFrom, Instant validUntil, boolean rucMatches) {}
 
     private final TenantAccess access;
@@ -42,7 +48,9 @@ public class CertificateResource {
     private final jakarta.transaction.TransactionSynchronizationRegistry transactions;
 
     public CertificateResource(
-            TenantAccess access, KeyVault vault, Auditor auditor, jakarta.transaction.TransactionSynchronizationRegistry transactions) {
+            TenantAccess access, KeyVault vault, Auditor auditor, jakarta.transaction.TransactionSynchronizationRegistry transactions, SigningKeyProvider signingKeyProvider, CompanyManager companyManager) {
+        this.companyManager = companyManager;
+        this.signingKeyProvider = signingKeyProvider;
         this.access = access;
         this.vault = vault;
         this.auditor = auditor;
@@ -61,7 +69,7 @@ public class CertificateResource {
             @RestForm("password") String password) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         // Serializes concurrent uploads for the same company
-        CompanyEntity company = CompanyResource.findForUpdate(companyId);
+        CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         if (file == null || password == null) {
             throw ApiException.invalid("invalid_request", "Debe enviar el archivo .pfx y su contraseña.", null);
         }
@@ -76,13 +84,12 @@ public class CertificateResource {
             Arrays.fill(pkcs12, (byte) 0);
         }
 
-        java.util.Optional<SigningKeyEntity> previous = SigningKeyEntity.active(company.getId());
+        java.util.Optional<SigningKeyModel> previous = signingKeyProvider.getActiveSigningKey(company.getId());
         previous.ifPresent(p -> p.setStatus("replaced"));
         // The previous key must stop being "active" before the new one is inserted (unique index)
-        SigningKeyEntity.flush();
+        signingKeyProvider.flush();
 
-        SigningKeyEntity key = new SigningKeyEntity();
-        key.setId(Ids.newId());
+        SigningKeyModel key = signingKeyProvider.newSigningKey(Ids.newId());
         key.setTenantId(tenantId);
         key.setCompanyId(company.getId());
         key.setKeyRef(vault.storePrivateKey(imported.privateKey(), imported.certificate()));
@@ -116,7 +123,7 @@ public class CertificateResource {
         key.setRuc(imported.ruc().orElse(null));
         key.setValidFrom(imported.certificate().getNotBefore().toInstant());
         key.setValidUntil(imported.certificate().getNotAfter().toInstant());
-        key.persist();
+        signingKeyProvider.persist(key);
 
         // A matching RUC is informative only: anyone can make a self-signed certificate with any
         // RUC. The RUC is verified by a SUNAT SOL login (P3), or later by checking the chain against
@@ -132,11 +139,11 @@ public class CertificateResource {
     @Transactional
     public CertificateView get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
-        CompanyEntity company = CompanyResource.find(companyId);
-        return SigningKeyEntity.active(company.getId()).map(k -> view(k, company)).orElseThrow(ApiException::notFound);
+        CompanyModel company = companyManager.getCompany(companyId);
+        return signingKeyProvider.getActiveSigningKey(company.getId()).map(k -> view(k, company)).orElseThrow(ApiException::notFound);
     }
 
-    private static CertificateView view(SigningKeyEntity k, CompanyEntity company) {
+    private static CertificateView view(SigningKeyModel k, CompanyModel company) {
         return new CertificateView(k.getSubject(), k.getIssuer(), k.getSerial(), k.getRuc(), k.getValidFrom(), k.getValidUntil(), company.getRuc().equals(k.getRuc()));
     }
 
