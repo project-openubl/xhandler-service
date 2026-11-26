@@ -297,17 +297,19 @@ class AllDocumentsTest {
 
     @Test
     void exchange_rates_are_imported_and_used_for_boletas_in_foreign_currency() throws Exception {
-        EngineStub.FX_LINE.set("16/11/2026|3.700|3.750|");
+        // Yesterday in Lima: inside the window SUNAT accepts for fecha_emision (7 days back, 2 ahead)
+        java.time.LocalDate day = java.time.LocalDate.now(java.time.ZoneId.of("America/Lima")).minusDays(1);
+        EngineStub.FX_LINE.set(day.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) + "|3.700|3.750|");
         rates.run(new JobContext(UUID.randomUUID(), null, "platform.exchange-rates", 1,
                 com.fasterxml.jackson.databind.node.NullNode.getInstance(), null, () -> false));
-        as("alice").get("/api/v1/exchange-rates?date=2026-11-16").then().statusCode(200).body("venta", equalTo(3.75f));
+        as("alice").get("/api/v1/exchange-rates?date=" + day).then().statusCode(200).body("venta", equalTo(3.75f));
         // 1180 USD ≈ S/ 4,425: the buyer must be identified
         Map<String, Object> anonymous = document("Invoice", Map.of("tipo_comprobante", "03", "moneda", "USD",
-                "fecha_emision", "2026-11-16",
+                "fecha_emision", day.toString(),
                 "cliente", Map.of("tipo_documento_identidad", "0", "numero_documento_identidad", "-", "nombre", "Clientes varios")));
         as("alice").body(anonymous).post(base + "/companies/" + company + "/documents").then().statusCode(422)
                 .body("detail", startsWith("2514"));
-        Map<String, Object> identified = document("Invoice", Map.of("tipo_comprobante", "03", "moneda", "USD", "fecha_emision", "2026-11-16"));
+        Map<String, Object> identified = document("Invoice", Map.of("tipo_comprobante", "03", "moneda", "USD", "fecha_emision", day.toString()));
         as("alice").body(identified).post(base + "/companies/" + company + "/documents").then().statusCode(201);
     }
 
