@@ -92,9 +92,3 @@ export const catalogEntrySchema = (kind: ICatalogKind) =>
       }),
     ),
   );
-
-/** Which lookup a customer's document allows: RUC and DNI only. */
-export const lookupTipo = (
-  tipoDocumento: string | undefined,
-): "ruc" | "dni" | undefined =>
-  tipoDocumento === "6" ? "ruc" : tipoDocumento === "1" ? "dni" : undefined;

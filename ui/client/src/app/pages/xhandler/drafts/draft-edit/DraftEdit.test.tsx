@@ -15,6 +15,8 @@ import {
   useDraftUpdateMutation,
   useSuspenseDraftDetailQuery,
 } from "@app/queries/xhandler/drafts";
+import { useExchangeRateQuery } from "@app/queries/xhandler/exchange-rates";
+import { useIdentityLookupMutation } from "@app/queries/xhandler/identity";
 import { useSeriesListQuery } from "@app/queries/xhandler/series";
 
 import { DraftEdit } from "./DraftEdit";
@@ -42,6 +44,13 @@ vi.mock(import("@app/queries/xhandler/documents"), () => ({
 }));
 vi.mock(import("@app/queries/xhandler/series"), () => ({
   useSeriesListQuery: vi.fn(),
+}));
+vi.mock(import("@app/queries/xhandler/exchange-rates"), () => ({
+  useExchangeRateQuery: vi.fn(),
+}));
+vi.mock(import("@app/queries/xhandler/identity"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  useIdentityLookupMutation: vi.fn(),
 }));
 vi.mock(import("@app/queries/xhandler/drafts"), () => ({
   getDraftConflictKind: vi.fn(),
@@ -144,7 +153,26 @@ const setUp = ({
     mutate: vi.fn(),
     isPending: false,
   } as unknown as ReturnType<typeof useDraftDeleteMutation>);
-  return { update, updateAsync, issueAsync };
+  vi.mocked(useExchangeRateQuery).mockReturnValue({
+    data: { day: "2026-11-26", compra: 3.741, venta: 3.752 },
+    isError: false,
+  } as unknown as ReturnType<typeof useExchangeRateQuery>);
+  // Answers every lookup with the name SUNAT holds, through the caller's onSuccess.
+  const lookup = vi.fn();
+  vi.mocked(useIdentityLookupMutation).mockImplementation(
+    (_companyId, options) =>
+      ({
+        mutate: (variables: { tipo: string; numero: string }) => {
+          lookup(variables);
+          void options?.onSuccess?.(
+            { nombre: "EMPRESA CONSULTADA S.A.C." },
+            variables as never,
+          );
+        },
+        isPending: false,
+      }) as unknown as ReturnType<typeof useIdentityLookupMutation>,
+  );
+  return { update, updateAsync, issueAsync, lookup };
 };
 
 describe("DraftEdit", () => {
@@ -374,5 +402,52 @@ describe("DraftEdit", () => {
       .element(screen.getByText(/ya se emitió en otra sesión/))
       .toBeVisible();
     await expect.element(screen.getByText("F001-7")).toBeVisible();
+  });
+
+  it("fills the buyer's name from a RUC lookup, only for a RUC or a DNI", async () => {
+    const { lookup } = setUp();
+    const screen = await render(<DraftEdit draftId="d1" />);
+
+    await screen.getByRole("button", { name: "Consultar RUC/DNI" }).click();
+    expect(lookup).toHaveBeenCalledWith({ tipo: "ruc", numero: "20123456789" });
+    await expect
+      .element(
+        screen.getByRole("textbox", {
+          name: "Nombre o razón social",
+          exact: true,
+        }),
+      )
+      .toHaveValue("EMPRESA CONSULTADA S.A.C.");
+
+    await screen
+      .getByRole("combobox", { name: "Tipo de documento" })
+      .selectOptions("Pasaporte");
+    await expect
+      .element(screen.getByRole("button", { name: "Consultar RUC/DNI" }))
+      .toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("defaults a foreign-currency draft to SUNAT's selling rate", async () => {
+    const { update } = setUp({
+      draft: { ...DRAFT, spec: { ...DRAFT.spec, moneda: "USD" } },
+    });
+    const screen = await render(<DraftEdit draftId="d1" />);
+
+    const rate = screen.getByRole("textbox", { name: "Tipo de cambio" });
+    await expect.element(rate).toHaveAttribute("placeholder", "3.752");
+    await screen.getByRole("button", { name: "Guardar borrador" }).click();
+
+    await expect.poll(() => update.mock.calls.length).toBe(1);
+    expect(update.mock.calls[0][0]).toMatchObject({
+      spec: { moneda: "USD", tipo_cambio: 3.752 },
+    });
+  });
+
+  it("has no exchange rate in soles", async () => {
+    setUp();
+    const screen = await render(<DraftEdit draftId="d1" />);
+    await expect
+      .element(screen.getByRole("textbox", { name: "Tipo de cambio" }))
+      .not.toBeInTheDocument();
   });
 });

@@ -23,6 +23,21 @@ export const draftFormSchema = object({
     .defined()
     .matches(/^(\d{4}-\d{2}-\d{2})?$/, "Usa el formato AAAA-MM-DD"),
   moneda: string().oneOf(["PEN", "USD"]).required("Elige la moneda"),
+  // Foreign currency only; empty lets the service use SUNAT's rate of the day (DESIGN.md §26.7).
+  tipo_cambio: string()
+    .trim()
+    .defined()
+    .when("moneda", ([moneda], schema) =>
+      moneda === "PEN"
+        ? schema
+        : schema
+            .matches(/^(\d+(\.\d+)?)?$/, "Usa solo números y punto decimal")
+            .test(
+              "positive",
+              "Debe ser mayor que cero",
+              (value) => !value || Number(value) > 0,
+            ),
+    ),
   precios_con_igv: boolean().required(),
   cliente_tipo: string().required("Elige el tipo de documento"),
   cliente_numero: string()

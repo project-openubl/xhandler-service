@@ -11,10 +11,8 @@ import {
   createCatalogEntry,
   deleteCatalogEntry,
   type Entry,
-  type Identity,
   listCatalogEntries,
   type ListCatalogEntriesData,
-  lookupIdentity,
   type PageEntry,
   updateCatalogEntry,
 } from "@app/client/xhandler";
@@ -179,42 +177,6 @@ export const useCatalogEntryDeleteMutation = (
     onSuccess: async (data, variables) => {
       await queryClient.invalidateQueries({
         queryKey: catalogKeys.list(tenantId, companyId, variables.kind),
-      });
-      await options?.onSuccess?.(data, variables);
-    },
-    onError: options?.onError,
-  });
-};
-
-export interface IIdentityLookup {
-  tipo: "ruc" | "dni";
-  numero: string;
-}
-
-/**
- * `GET …/companies/{id}/lookup/{ruc|dni}/{numero}` (operator): the name and address SUNAT or
- * RENIEC hold. Not a cached query: each lookup is audited and limited per tenant per hour
- * (`429`), so it runs only when the user asks. The service also merges the answer into the
- * customer catalog (DESIGN.md §17).
- */
-export const useIdentityLookupMutation = (
-  companyId: string,
-  options?: IMutationCallbacks<Identity, IIdentityLookup, XhandlerAxiosError>,
-) => {
-  const tenantId = useSelectedTenantId();
-  const queryClient = useQueryClient();
-  return useMutation<Identity, XhandlerAxiosError, IIdentityLookup>({
-    mutationFn: async ({ tipo, numero }) =>
-      (
-        await lookupIdentity({
-          path: { tenantId, companyId, tipo, numero },
-          throwOnError: true,
-        })
-      ).data,
-    onSuccess: async (data, variables) => {
-      // A lookup may have added or completed a customer entry.
-      void queryClient.invalidateQueries({
-        queryKey: catalogKeys.list(tenantId, companyId, "customer"),
       });
       await options?.onSuccess?.(data, variables);
     },

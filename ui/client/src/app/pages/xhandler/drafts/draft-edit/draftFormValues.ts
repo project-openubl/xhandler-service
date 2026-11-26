@@ -63,6 +63,7 @@ export const toFormValues = (draft: DraftView): IDraftFormValues => {
     serie: draft.serie ?? "",
     fecha_emision: asText(spec.fecha_emision),
     moneda: asText(spec.moneda) === "USD" ? "USD" : "PEN",
+    tipo_cambio: asText(spec.tipo_cambio),
     precios_con_igv: conIgv,
     cliente_tipo: asText(cliente.tipo_documento_identidad) || "6",
     cliente_numero: asText(cliente.numero_documento_identidad),
@@ -74,6 +75,21 @@ export const toFormValues = (draft: DraftView): IDraftFormValues => {
     detalles: detalles.length > 0 ? detalles : [EMPTY_DETALLE],
   };
 };
+
+/**
+ * The values to save: a foreign-currency draft without an exchange rate takes SUNAT's selling
+ * rate of its date (DESIGN.md §26.7), when there is one.
+ */
+export const withDefaultTipoCambio = ({
+  values,
+  defaultTipoCambio,
+}: {
+  values: IDraftFormValues;
+  defaultTipoCambio: string | undefined;
+}): IDraftFormValues =>
+  values.moneda !== "PEN" && !values.tipo_cambio.trim() && defaultTipoCambio
+    ? { ...values, tipo_cambio: defaultTipoCambio }
+    : values;
 
 /**
  * The `PUT` body: the draft's spec with the form's fields written over it (fields set through the
@@ -89,6 +105,12 @@ export const toDraftInput = ({
   const spec: Spec = { ...asRecord(draft.spec) };
   const previousDetalles = Array.isArray(spec.detalles) ? spec.detalles : [];
   spec.moneda = values.moneda;
+  const tipoCambio = values.tipo_cambio.trim();
+  if (values.moneda !== "PEN" && tipoCambio) {
+    spec.tipo_cambio = Number(tipoCambio);
+  } else {
+    delete spec.tipo_cambio;
+  }
   if (values.fecha_emision) {
     spec.fecha_emision = values.fecha_emision;
   } else {

@@ -27,10 +27,11 @@ import { ControlledTextField } from "@app/components/ControlledTextField";
 import { FormSubmitError } from "@app/components/FormSubmitError";
 import { useNotifications } from "@app/hooks/useNotifications";
 import { useSubmitError } from "@app/hooks/useSubmitError";
+import { useCatalogEntrySaveMutation } from "@app/queries/xhandler/catalogs";
 import {
-  useCatalogEntrySaveMutation,
+  lookupTipo,
   useIdentityLookupMutation,
-} from "@app/queries/xhandler/catalogs";
+} from "@app/queries/xhandler/identity";
 import { getMutationErrorMessage } from "@app/utils/apiError";
 
 import {
@@ -41,7 +42,6 @@ import {
 import {
   catalogEntrySchema,
   type CatalogEntryValues,
-  lookupTipo,
   toEntryData,
   toFormValues,
 } from "./catalogEntryForm";

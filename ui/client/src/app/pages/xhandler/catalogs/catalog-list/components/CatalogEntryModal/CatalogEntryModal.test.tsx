@@ -2,10 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { useNotifications } from "@app/hooks/useNotifications";
-import {
-  useCatalogEntrySaveMutation,
-  useIdentityLookupMutation,
-} from "@app/queries/xhandler/catalogs";
+import { useCatalogEntrySaveMutation } from "@app/queries/xhandler/catalogs";
+import { useIdentityLookupMutation } from "@app/queries/xhandler/identity";
 
 import { catalogKindBySlug } from "../../catalogKinds";
 import { CatalogEntryModal } from "./CatalogEntryModal";
@@ -13,8 +11,12 @@ import { CatalogEntryModal } from "./CatalogEntryModal";
 vi.mock(import("@app/hooks/useNotifications"), () => ({
   useNotifications: vi.fn(),
 }));
-vi.mock(import("@app/queries/xhandler/catalogs"), () => ({
+vi.mock(import("@app/queries/xhandler/catalogs"), async (importOriginal) => ({
+  ...(await importOriginal()),
   useCatalogEntrySaveMutation: vi.fn(),
+}));
+vi.mock(import("@app/queries/xhandler/identity"), async (importOriginal) => ({
+  ...(await importOriginal()),
   useIdentityLookupMutation: vi.fn(),
 }));
 

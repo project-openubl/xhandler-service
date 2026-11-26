@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { catalogKindBySlug } from "../../catalogKinds";
 import {
   catalogEntrySchema,
-  lookupTipo,
   toEntryData,
   toFormValues,
 } from "./catalogEntryForm";
@@ -98,13 +97,5 @@ describe("catalogEntrySchema", () => {
         precio: "-1",
       }),
     ).toEqual(["Ingresa un número mayor o igual a cero"]);
-  });
-});
-
-describe("lookupTipo", () => {
-  it("looks up RUC and DNI only", () => {
-    expect(lookupTipo("6")).toBe("ruc");
-    expect(lookupTipo("1")).toBe("dni");
-    expect(lookupTipo("7")).toBeUndefined();
   });
 });
