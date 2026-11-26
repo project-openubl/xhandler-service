@@ -16,6 +16,9 @@ import {
   downloadDocumentFile,
   emailDocument,
   type EmailRequest,
+  emitDocument,
+  type EmitRequest,
+  emitSfsDocument,
   type Event,
   getDocument,
   holdDocument,
@@ -28,6 +31,8 @@ import {
   releaseDocument,
   retryDocument,
   revokeDocumentAccessLinks,
+  type SfsRequest,
+  uploadUblDocument,
   voidDocument,
   type VoidRequest,
 } from "@app/client/xhandler";
@@ -344,6 +349,73 @@ export const useDocumentReleaseMutation = (
 export const useDocumentMarkDeliveredMutation = (
   options?: IMutationCallbacks<DocumentView, DocumentView, XhandlerAxiosError>,
 ) => useDocumentActionMutation(markDocumentDelivered, options);
+
+/** One upload of a document built outside the console (DESIGN.md §5), for one company. */
+export type IDocumentUploadVariables = { companyId: string } & (
+  | { format: "ubl"; file: File }
+  | { format: "sfs"; body: SfsRequest; idempotencyKey: string }
+  | { format: "json"; body: EmitRequest; idempotencyKey: string }
+);
+
+/**
+ * `POST …/companies/{id}/documents/ubl` (an XML, signed if unsigned), `…/documents/sfs` (the
+ * SFS TXT files, keeping their number) or `…/documents` (xbuilder JSON, numbered by the
+ * service). Operator; each answers `201` with the document, which SUNAT receives later.
+ */
+export const useDocumentUploadMutation = (
+  options?: IMutationCallbacks<
+    DocumentView,
+    IDocumentUploadVariables,
+    XhandlerAxiosError
+  >,
+) => {
+  const tenantId = useSelectedTenantId();
+  const queryClient = useQueryClient();
+  return useMutation<
+    DocumentView,
+    XhandlerAxiosError,
+    IDocumentUploadVariables
+  >({
+    mutationFn: async (variables) => {
+      const path = { tenantId, companyId: variables.companyId };
+      switch (variables.format) {
+        case "ubl":
+          return (
+            await uploadUblDocument({
+              path,
+              body: variables.file,
+              throwOnError: true,
+            })
+          ).data;
+        case "sfs":
+          return (
+            await emitSfsDocument({
+              path,
+              body: variables.body,
+              headers: { "Idempotency-Key": variables.idempotencyKey },
+              throwOnError: true,
+            })
+          ).data;
+        case "json":
+          return (
+            await emitDocument({
+              path,
+              body: variables.body,
+              headers: { "Idempotency-Key": variables.idempotencyKey },
+              throwOnError: true,
+            })
+          ).data;
+      }
+    },
+    onSuccess: async (data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: documentKeys.list(tenantId),
+      });
+      await options?.onSuccess?.(data, variables);
+    },
+    onError: options?.onError,
+  });
+};
 
 export interface IDocumentVoidVariables {
   documentId: string;

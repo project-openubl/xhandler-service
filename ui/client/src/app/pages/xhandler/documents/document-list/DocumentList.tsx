@@ -1,4 +1,5 @@
 import type React from "react";
+import { useState } from "react";
 
 import { Link } from "@tanstack/react-router";
 import dayjs from "dayjs";
@@ -6,6 +7,8 @@ import dayjs from "dayjs";
 import {
   Content,
   ContentVariants,
+  Flex,
+  FlexItem,
   PageSection,
   PaginationVariant,
 } from "@patternfly/react-core";
@@ -25,6 +28,7 @@ import {
   DocumentStatusLabel,
 } from "@app/components/DocumentStatusLabel";
 import { DocumentTitle } from "@app/components/DocumentTitle";
+import { GatedButton } from "@app/components/GatedButton";
 import { ListPagination } from "@app/components/ListPagination";
 import { SingleSelectFilter } from "@app/components/SingleSelectFilter";
 import { TableEmptyState } from "@app/components/TableEmptyState";
@@ -33,6 +37,7 @@ import { DEFAULT_REFETCH_INTERVAL, RENDER_DATE_FORMAT } from "@app/constants";
 import { useDebouncedValue } from "@app/hooks/useDebouncedValue";
 import { usePersistentState } from "@app/hooks/usePersistentState";
 import { useSelectedTenantId } from "@app/hooks/useSelectedTenantId";
+import { useTenantRole } from "@app/hooks/useTenantRole";
 import {
   DOCUMENT_STATUSES,
   isDocumentSettling,
@@ -47,6 +52,7 @@ import {
 } from "@app/utils/documentPresentation";
 import { estimateItemCount, toPageParams } from "@app/utils/listState";
 
+import { DocumentUploadModal } from "./components/DocumentUploadModal";
 import { DOCUMENT_LIST_STATE } from "./documentListState";
 
 const TIPO_OPTIONS = TIPOS_COMPROBANTE.map((tipo) => ({
@@ -62,6 +68,8 @@ const STATUS_OPTIONS = DOCUMENT_STATUSES.map((status) => ({
 /** The tenant's issued documents, newest first, filtered server-side (DESIGN.md §12). */
 export const DocumentList: React.FC = () => {
   const tenantId = useSelectedTenantId();
+  const { disabledProps } = useTenantRole();
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [pagination, setPagination] = usePersistentState({
     ...DOCUMENT_LIST_STATE.pagination,
     storage: "url",
@@ -201,11 +209,27 @@ export const DocumentList: React.FC = () => {
       <DocumentTitle title="Comprobantes" />
       <TenantContextSelector />
       <PageSection>
-        <Content component={ContentVariants.h1}>Comprobantes</Content>
-        <Content component={ContentVariants.p}>
-          Los comprobantes emitidos por las empresas de esta organización y su
-          estado en SUNAT.
-        </Content>
+        <Flex
+          justifyContent={{ default: "justifyContentSpaceBetween" }}
+          alignItems={{ default: "alignItemsCenter" }}
+        >
+          <FlexItem>
+            <Content component={ContentVariants.h1}>Comprobantes</Content>
+            <Content component={ContentVariants.p}>
+              Los comprobantes emitidos por las empresas de esta organización y
+              su estado en SUNAT.
+            </Content>
+          </FlexItem>
+          <FlexItem>
+            <GatedButton
+              variant="secondary"
+              onClick={() => setIsUploadOpen(true)}
+              {...disabledProps("operator")}
+            >
+              Subir comprobante
+            </GatedButton>
+          </FlexItem>
+        </Flex>
       </PageSection>
       <PageSection>
         <DataView activeState={activeState}>
@@ -272,6 +296,10 @@ export const DocumentList: React.FC = () => {
           <DataViewToolbar pagination={pager(PaginationVariant.bottom)} />
         </DataView>
       </PageSection>
+      <DocumentUploadModal
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+      />
     </>
   );
 };
