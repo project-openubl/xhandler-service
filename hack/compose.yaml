@@ -14,7 +14,7 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       # Runs in order: xhandler's roles (DESIGN.md §6), then searchpe's database
-      - ../xhandler/hack/postgres/init.sql:/docker-entrypoint-initdb.d/10-xhandler.sql:Z
+      - ./postgres/xhandler.sql:/docker-entrypoint-initdb.d/10-xhandler.sql:Z
       - ./postgres/searchpe.sql:/docker-entrypoint-initdb.d/20-searchpe.sql:Z
     ports:
       - "5432:5432"

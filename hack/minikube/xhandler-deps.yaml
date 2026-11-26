@@ -1,5 +1,5 @@
 # What a full XHandler needs in the CI e2e, in the cluster: PostgreSQL with the production roles
-# (xhandler/hack/postgres/init.sql, from the ConfigMap xhandler-db-init), Keycloak with the dev
+# (hack/postgres/xhandler.sql, from the ConfigMap xhandler-db-init), Keycloak with the dev
 # realm (ConfigMap xhandler-realm) and an S3 API (S3Mock) for the files. Test credentials only.
 apiVersion: v1
 kind: Secret

@@ -26,7 +26,7 @@ Podman or Docker.
 ```
 
 Then sign up with a Keycloak token (dev realm users: alice/alice, bob/bob; platform admin
-olga/olga) or use the UI (`../ui`), create a company and emit (see `hack/e2e.sh` for the whole flow, including the
+olga/olga) or use the UI (`../ui`), create a company and emit (see `../hack/xhandler-e2e.sh` for the whole flow, including the
 switch to SUNAT beta). In dev mode Keycloak runs from Dev Services on a random port (see the
 Dev UI); with `podman compose -f ../hack/compose.yaml up -d` it is on 8180, as below:
 
@@ -50,7 +50,7 @@ Platform administration: `java -jar admin-cli/target/xhandler-admin.jar --help`.
 End-to-end check (dependencies, engine, packaged app, SUNAT beta, trace):
 
 ```bash
-./hack/e2e.sh
+../hack/xhandler-e2e.sh
 ```
 
 ## License

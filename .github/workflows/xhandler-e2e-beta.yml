@@ -21,4 +21,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2.9.3
         with:
           workspaces: xhandler/engine
-      - run: COMPOSE="docker compose" ./xhandler/hack/e2e.sh
+      - run: COMPOSE="docker compose" ./hack/xhandler-e2e.sh
