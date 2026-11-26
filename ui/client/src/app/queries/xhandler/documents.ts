@@ -18,11 +18,14 @@ import {
   type EmailRequest,
   type Event,
   getDocument,
+  holdDocument,
   listDocumentEvents,
   listDocuments,
   type ListDocumentsData,
+  markDocumentDelivered,
   type PageDocumentView,
   type Queued,
+  releaseDocument,
   retryDocument,
   revokeDocumentAccessLinks,
   voidDocument,
@@ -97,6 +100,13 @@ export const isDocumentRetryable = (document: DocumentView): boolean =>
     document.status === "unknown" ||
     document.status === "exception") &&
   document.code_class !== "ticket_lost";
+
+/** Not yet definitive (DESIGN.md §9.1): only those can be held; the API answers 409 otherwise. */
+export const isDocumentHoldable = (document: DocumentView): boolean =>
+  document.status === "draft" ||
+  document.status === "pending_send" ||
+  document.status === "in_progress" ||
+  document.status === "unknown";
 
 /** The §9.3 voiding guards the UI can see: accepted, not delivered, not a summary or a guía. */
 export const isDocumentVoidable = (document: DocumentView): boolean =>
@@ -290,6 +300,50 @@ export const useDocumentRetryMutation = (
     onError: options?.onError,
   });
 };
+
+/** A document action that answers the updated document: invalidates its detail and events. */
+const useDocumentActionMutation = (
+  action: (args: {
+    path: { tenantId: string; documentId: string };
+    throwOnError: true;
+  }) => Promise<{ data: DocumentView }>,
+  options?: IMutationCallbacks<DocumentView, DocumentView, XhandlerAxiosError>,
+) => {
+  const tenantId = useSelectedTenantId();
+  const invalidate = useInvalidateDocument();
+  return useMutation<DocumentView, XhandlerAxiosError, DocumentView>({
+    mutationFn: async (document) =>
+      (
+        await action({
+          path: { tenantId, documentId: document.id ?? "" },
+          throwOnError: true,
+        })
+      ).data,
+    onSuccess: async (data, document) => {
+      await invalidate(document.id ?? "");
+      await options?.onSuccess?.(data, document);
+    },
+    onError: options?.onError,
+  });
+};
+
+/** `POST …/documents/{id}/hold` (operator): no automatic attempt until released; 409 when final. */
+export const useDocumentHoldMutation = (
+  options?: IMutationCallbacks<DocumentView, DocumentView, XhandlerAxiosError>,
+) => useDocumentActionMutation(holdDocument, options);
+
+/** `POST …/documents/{id}/release` (operator): clears the hold; a pending send is attempted now. */
+export const useDocumentReleaseMutation = (
+  options?: IMutationCallbacks<DocumentView, DocumentView, XhandlerAxiosError>,
+) => useDocumentActionMutation(releaseDocument, options);
+
+/**
+ * `POST …/documents/{id}/delivered` (operator): the issuer attests the buyer received it
+ * (DESIGN.md §9.3); from then on it can't be voided.
+ */
+export const useDocumentMarkDeliveredMutation = (
+  options?: IMutationCallbacks<DocumentView, DocumentView, XhandlerAxiosError>,
+) => useDocumentActionMutation(markDocumentDelivered, options);
 
 export interface IDocumentVoidVariables {
   documentId: string;

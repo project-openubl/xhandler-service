@@ -55,6 +55,9 @@ import {
   useDocumentDetailQuery,
   useDocumentEventsQuery,
   useDocumentFileDownloadMutation,
+  useDocumentHoldMutation,
+  useDocumentMarkDeliveredMutation,
+  useDocumentReleaseMutation,
   useDocumentRetryMutation,
   useSuspenseDocumentDetailQuery,
 } from "@app/queries/xhandler/documents";
@@ -74,7 +77,8 @@ interface IDocumentDetailProps {
   documentId: string;
 }
 
-type OpenDialog = "void" | "email" | "cancel-void" | "revoke-links" | null;
+type OpenDialog =
+  "void" | "email" | "cancel-void" | "revoke-links" | "delivered" | null;
 
 const formatTime = (value: string | undefined): string =>
   value ? dayjs(value).format(RENDER_DATETIME_FORMAT) : "-";
@@ -151,6 +155,31 @@ export const DocumentDetail: React.FC<IDocumentDetailProps> = ({
       }),
     onError: errorToast("No se pudo cancelar la anulación"),
   });
+  const hold = useDocumentHoldMutation({
+    onSuccess: (data) =>
+      addNotification({
+        variant: "success",
+        title: `Se retuvo ${data.serie_numero ?? "el comprobante"}`,
+        description: "No se enviará a SUNAT hasta que lo liberes.",
+      }),
+    onError: errorToast("No se pudo retener el comprobante"),
+  });
+  const release = useDocumentReleaseMutation({
+    onSuccess: (data) =>
+      addNotification({
+        variant: "success",
+        title: `Se liberó ${data.serie_numero ?? "el comprobante"}`,
+      }),
+    onError: errorToast("No se pudo liberar el comprobante"),
+  });
+  const markDelivered = useDocumentMarkDeliveredMutation({
+    onSuccess: (data) =>
+      addNotification({
+        variant: "success",
+        title: `${data.serie_numero ?? "El comprobante"} figura como entregado al comprador`,
+      }),
+    onError: errorToast("No se pudo marcar el comprobante como entregado"),
+  });
   const createLink = useDocumentAccessLinkCreateMutation({
     onError: errorToast("No se pudo crear el enlace de acceso"),
   });
@@ -175,6 +204,24 @@ export const DocumentDetail: React.FC<IDocumentDetailProps> = ({
         : {};
 
   const kebabItems = [
+    {
+      key: "hold",
+      title: "Retener envío",
+      onClick: () => hold.mutate(document),
+      ...gate(availability.hold),
+    },
+    {
+      key: "release",
+      title: "Liberar envío",
+      onClick: () => release.mutate(document),
+      ...gate(availability.release),
+    },
+    {
+      key: "delivered",
+      title: "Marcar como entregado",
+      onClick: () => setOpenDialog("delivered"),
+      ...gate(availability.delivered),
+    },
     {
       key: "cancel-void",
       title: "Cancelar anulación",
@@ -506,6 +553,22 @@ export const DocumentDetail: React.FC<IDocumentDetailProps> = ({
         isConfirming={cancelVoid.isPending}
         onConfirm={() =>
           cancelVoid.mutate(document, {
+            onSuccess: () => setOpenDialog(null),
+          })
+        }
+        onCancel={() => setOpenDialog(null)}
+      />
+      <ConfirmActionModal
+        isOpen={openDialog === "delivered"}
+        title="¿Marcar como entregado?"
+        body={`Declaras que el comprador ya recibió ${document.serie_numero ?? "el comprobante"}. Desde ahora no se podrá anular: para corregirlo tendrás que emitir una nota de crédito.`}
+        confirmLabel="Marcar como entregado"
+        cancelLabel="Volver"
+        confirmVariant="primary"
+        titleIconVariant="warning"
+        isConfirming={markDelivered.isPending}
+        onConfirm={() =>
+          markDelivered.mutate(document, {
             onSuccess: () => setOpenDialog(null),
           })
         }
