@@ -2,8 +2,8 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.EmitService;
 import io.github.projectopenubl.xhandler.managers.Idempotency;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentDraft;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentDraftEntity;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.utils.DocumentTypes;
 
@@ -16,7 +16,7 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -125,21 +125,21 @@ public class DraftResource {
         try {
             DraftView view = QuarkusTransaction.requiringNew().call(() -> {
                 TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-                Company company = Company.findById(companyId);
-                if (company == null || company.deletedAt != null) {
+                CompanyEntity company = CompanyEntity.findById(companyId);
+                if (company == null || company.getDeletedAt() != null) {
                     throw ApiException.notFound();
                 }
                 Instant now = Instant.now();
-                DocumentDraft draft = new DocumentDraft();
-                draft.id = Ids.newId();
-                draft.tenantId = tenantId;
-                draft.companyId = companyId;
+                DocumentDraftEntity draft = new DocumentDraftEntity();
+                draft.setId(Ids.newId());
+                draft.setTenantId(tenantId);
+                draft.setCompanyId(companyId);
                 apply(draft, input);
-                draft.createdBy = scope.actor().auditName();
-                draft.createdAt = now;
-                draft.updatedAt = now;
+                draft.setCreatedBy(scope.actor().auditName());
+                draft.setCreatedAt(now);
+                draft.setUpdatedAt(now);
                 draft.persist();
-                auditor.record(scope, "draft.created", "document_draft", draft.id);
+                auditor.record(scope, "draft.created", "document_draft", draft.getId());
                 DraftView created = view(draft);
                 if (idempotencyKey != null) {
                     idempotency.complete(tenantId, idempotencyKey, owned, 201, json.valueToTree(created));
@@ -179,7 +179,7 @@ public class DraftResource {
         query.append(" order by createdAt desc, id desc");
         int size = Page.limit(limit);
         int start = Page.offset(offset);
-        List<DocumentDraft> page = DocumentDraft.<DocumentDraft>find(query.toString(), params).range(start, start + size - 1).list();
+        List<DocumentDraftEntity> page = DocumentDraftEntity.<DocumentDraftEntity>find(query.toString(), params).range(start, start + size - 1).list();
         return new Page<>(page.stream().map(this::view).toList(), size, start);
     }
 
@@ -206,12 +206,12 @@ public class DraftResource {
         checkInput(input);
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
         // Row lock, then decide (§10.8 rule 2)
-        DocumentDraft draft = find(draftId, true);
+        DocumentDraftEntity draft = find(draftId, true);
         checkEditable(draft, input.version());
         apply(draft, input);
-        draft.version++;
-        draft.updatedAt = Instant.now();
-        auditor.record(scope, "draft.updated", "document_draft", draft.id);
+        draft.setVersion(draft.getVersion() + 1);
+        draft.setUpdatedAt(Instant.now());
+        auditor.record(scope, "draft.updated", "document_draft", draft.getId());
         return view(draft);
     }
 
@@ -224,11 +224,11 @@ public class DraftResource {
     @Operation(operationId = "deleteDraft")
     public Response delete(@PathParam("tenantId") UUID tenantId, @PathParam("draftId") UUID draftId) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        DocumentDraft draft = find(draftId, true);
+        DocumentDraftEntity draft = find(draftId, true);
         checkEditable(draft, null);
-        draft.deletedAt = Instant.now();
-        draft.updatedAt = draft.deletedAt;
-        auditor.record(scope, "draft.deleted", "document_draft", draft.id);
+        draft.setDeletedAt(Instant.now());
+        draft.setUpdatedAt(draft.getDeletedAt());
+        auditor.record(scope, "draft.deleted", "document_draft", draft.getId());
         return Response.noContent().build();
     }
 
@@ -257,23 +257,23 @@ public class DraftResource {
         record Snapshot(UUID companyId, int version, EmitService.EmitRequest request) {}
         Snapshot snapshot = QuarkusTransaction.requiringNew().call(() -> {
             access.enter(tenantId, Role.OPERATOR);
-            DocumentDraft draft = find(draftId, false);
-            if (idempotencyKey == null || !"issued".equals(draft.status)) {
+            DocumentDraftEntity draft = find(draftId, false);
+            if (idempotencyKey == null || !"issued".equals(draft.getStatus())) {
                 checkEditable(draft, version);
             }
             // An issued draft with an Idempotency-Key goes on: a retry of the issue that issued it
             // gets the stored 201 (its content and so its request hash are unchanged); any other
             // request stops at the guard with 409 draft_issued
-            ObjectNode spec = json.valueToTree(draft.spec);
-            if ("Invoice".equals(draft.kind) && !spec.hasNonNull("tipo_comprobante")) {
+            ObjectNode spec = json.valueToTree(draft.getSpec());
+            if ("Invoice".equals(draft.getKind()) && !spec.hasNonNull("tipo_comprobante")) {
                 // The type inferred from the series when drafted (B → boleta)
-                spec.put("tipo_comprobante", draft.tipoComprobante);
+                spec.put("tipo_comprobante", draft.getTipoComprobante());
             }
             ObjectNode document = json.createObjectNode();
-            document.put("kind", draft.kind);
+            document.put("kind", draft.getKind());
             document.set("spec", spec);
-            return new Snapshot(draft.companyId, draft.version,
-                    new EmitService.EmitRequest(document, draft.serie, null, draft.labels.isEmpty() ? null : draft.labels));
+            return new Snapshot(draft.getCompanyId(), draft.getVersion(),
+                    new EmitService.EmitRequest(document, draft.getSerie(), null, draft.getLabels().isEmpty() ? null : draft.getLabels()));
         });
         String correlation = DocumentResource.correlation(correlationId);
         EmitService.Emitted emitted = emit.emitDraft(tenantId, snapshot.companyId(), idempotencyKey, snapshot.request(), correlation,
@@ -288,9 +288,9 @@ public class DraftResource {
      * ends, so a concurrent issue, edit or delete waits for it. A draft edited, deleted or issued
      * since it was read stops the emit before it reserves a number or signs.
      */
-    private DocumentDraft lockUnchanged(UUID draftId, int version) {
-        DocumentDraft draft = DocumentDraft.findById(draftId, LockModeType.PESSIMISTIC_WRITE);
-        if (draft == null || draft.deletedAt != null) {
+    private DocumentDraftEntity lockUnchanged(UUID draftId, int version) {
+        DocumentDraftEntity draft = DocumentDraftEntity.findById(draftId, LockModeType.PESSIMISTIC_WRITE);
+        if (draft == null || draft.getDeletedAt() != null) {
             throw ApiException.conflict("draft_changed", "El borrador se eliminó mientras se emitía.");
         }
         checkEditable(draft, version);
@@ -301,19 +301,19 @@ public class DraftResource {
      * Inside the emit transaction, after the document insert: the draft row is already locked by
      * {@link #lockUnchanged}, and is checked again before it is marked issued.
      */
-    private void markIssued(UUID draftId, int version, Document doc) {
-        DocumentDraft draft = lockUnchanged(draftId, version);
-        draft.status = "issued";
-        draft.documentId = doc.id;
-        draft.version++;
-        draft.updatedAt = Instant.now();
+    private void markIssued(UUID draftId, int version, DocumentEntity doc) {
+        DocumentDraftEntity draft = lockUnchanged(draftId, version);
+        draft.setStatus("issued");
+        draft.setDocumentId(doc.getId());
+        draft.setVersion(draft.getVersion() + 1);
+        draft.setUpdatedAt(Instant.now());
     }
 
-    private static void checkEditable(DocumentDraft draft, Integer version) {
-        if ("issued".equals(draft.status)) {
+    private static void checkEditable(DocumentDraftEntity draft, Integer version) {
+        if ("issued".equals(draft.getStatus())) {
             throw ApiException.conflict("draft_issued", "El borrador ya se emitió: los documentos emitidos no se modifican.");
         }
-        if (version != null && version != draft.version) {
+        if (version != null && version != draft.getVersion()) {
             throw ApiException.conflict("draft_changed", "El borrador cambió desde que se abrió. Recárguelo e intente nuevamente.");
         }
     }
@@ -332,12 +332,12 @@ public class DraftResource {
         }
     }
 
-    private void apply(DocumentDraft draft, DraftInput input) {
-        draft.kind = input.kind();
-        draft.tipoComprobante = tipoComprobante(input);
-        draft.serie = input.serie();
-        draft.spec = json.convertValue(input.spec(), new TypeReference<Map<String, Object>>() {});
-        draft.labels = input.labels() == null ? Map.of() : Map.copyOf(input.labels());
+    private void apply(DocumentDraftEntity draft, DraftInput input) {
+        draft.setKind(input.kind());
+        draft.setTipoComprobante(tipoComprobante(input));
+        draft.setSerie(input.serie());
+        draft.setSpec(json.convertValue(input.spec(), new TypeReference<Map<String, Object>>() {}));
+        draft.setLabels(input.labels() == null ? Map.of() : Map.copyOf(input.labels()));
     }
 
     /**
@@ -351,23 +351,23 @@ public class DraftResource {
         return DocumentTypes.tipoComprobante(input.kind(), input.spec());
     }
 
-    private static DocumentDraft find(UUID draftId, boolean lock) {
-        DocumentDraft draft = lock ? DocumentDraft.findById(draftId, LockModeType.PESSIMISTIC_WRITE) : DocumentDraft.findById(draftId);
-        if (draft == null || draft.deletedAt != null) {
+    private static DocumentDraftEntity find(UUID draftId, boolean lock) {
+        DocumentDraftEntity draft = lock ? DocumentDraftEntity.findById(draftId, LockModeType.PESSIMISTIC_WRITE) : DocumentDraftEntity.findById(draftId);
+        if (draft == null || draft.getDeletedAt() != null) {
             throw ApiException.notFound();
         }
         return draft;
     }
 
-    private DraftView view(DocumentDraft d) {
-        JsonNode spec = json.valueToTree(d.spec);
+    private DraftView view(DocumentDraftEntity d) {
+        JsonNode spec = json.valueToTree(d.getSpec());
         JsonNode cliente = spec.path("cliente");
         DocumentView.Customer customer = cliente.isObject()
                 ? new DocumentView.Customer(text(cliente, "tipo_documento_identidad"), text(cliente, "numero_documento_identidad"),
                         text(cliente, "nombre"))
                 : null;
-        return new DraftView(d.id, "xh:draft:" + d.id, d.companyId, d.status, d.version, d.kind, d.tipoComprobante, d.serie, spec,
-                d.labels, customer, text(spec, "moneda"), d.documentId, d.createdBy, d.createdAt, d.updatedAt);
+        return new DraftView(d.getId(), "xh:draft:" + d.getId(), d.getCompanyId(), d.getStatus(), d.getVersion(), d.getKind(), d.getTipoComprobante(), d.getSerie(), spec,
+                d.getLabels(), customer, text(spec, "moneda"), d.getDocumentId(), d.getCreatedBy(), d.getCreatedAt(), d.getUpdatedAt());
     }
 
     private static String text(JsonNode node, String field) {

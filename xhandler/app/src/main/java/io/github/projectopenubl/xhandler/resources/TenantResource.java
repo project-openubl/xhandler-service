@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Tenant;
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantMember;
+import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.TenantMemberEntity;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.CurrentActor;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -95,10 +95,10 @@ public class TenantResource {
         UUID tenantId = Ids.newId();
         access.setTenant(tenantId);
 
-        Tenant tenant = new Tenant();
-        tenant.id = tenantId;
-        tenant.name = request.name().strip();
-        tenant.createdBy = actor.subject();
+        TenantEntity tenant = new TenantEntity();
+        tenant.setId(tenantId);
+        tenant.setName(request.name().strip());
+        tenant.setCreatedBy(actor.subject());
         try {
             tenant.persistAndFlush();
         } catch (jakarta.persistence.PersistenceException e) {
@@ -109,12 +109,12 @@ public class TenantResource {
             throw e;
         }
 
-        TenantMember owner = new TenantMember();
-        owner.id = Ids.newId();
-        owner.tenantId = tenantId;
-        owner.kind = actor.kind();
-        owner.subject = actor.subject();
-        owner.role = Role.OWNER.json();
+        TenantMemberEntity owner = new TenantMemberEntity();
+        owner.setId(Ids.newId());
+        owner.setTenantId(tenantId);
+        owner.setKind(actor.kind());
+        owner.setSubject(actor.subject());
+        owner.setRole(Role.OWNER.json());
         owner.persist();
 
         TenantScope scope = new TenantScope(tenantId, actor, Role.OWNER);
@@ -128,7 +128,7 @@ public class TenantResource {
     @Transactional
     public TenantView get(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        Tenant tenant = Tenant.findById(tenantId);
+        TenantEntity tenant = TenantEntity.findById(tenantId);
         if (tenant == null) {
             throw ApiException.notFound();
         }
@@ -142,20 +142,20 @@ public class TenantResource {
     @Transactional
     public TenantView update(@PathParam("tenantId") UUID tenantId, @Valid UpdateTenant request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Tenant tenant = em.find(Tenant.class, tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        TenantEntity tenant = em.find(TenantEntity.class, tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if (tenant == null) {
             throw ApiException.notFound();
         }
         String name = request.name().strip();
-        if (!name.equals(tenant.name)) {
-            String previous = tenant.name;
-            tenant.name = name;
+        if (!name.equals(tenant.getName())) {
+            String previous = tenant.getName();
+            tenant.setName(name);
             auditor.record(scope, "tenant.renamed", "tenant", tenantId, java.util.Map.of("from", previous, "to", name));
         }
         return view(tenant);
     }
 
-    private static TenantView view(Tenant tenant) {
-        return new TenantView(tenant.id, tenant.name, tenant.plan, tenant.status, tenant.retentionYears);
+    private static TenantView view(TenantEntity tenant) {
+        return new TenantView(tenant.getId(), tenant.getName(), tenant.getPlan(), tenant.getStatus(), tenant.getRetentionYears());
     }
 }

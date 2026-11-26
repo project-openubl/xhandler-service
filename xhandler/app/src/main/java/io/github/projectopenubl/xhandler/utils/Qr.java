@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.utils;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
@@ -13,15 +13,15 @@ public final class Qr {
 
     private Qr() {}
 
-    public static String of(String ruc, Document document, JsonNode enriched) {
+    public static String of(String ruc, DocumentEntity document, JsonNode enriched) {
         if (document.isGuia() || document.isSummary()) {
             return null;
         }
         JsonNode spec = enriched == null ? null : enriched.path("spec");
         BigDecimal igv = spec == null ? null : decimal(spec.path("total_impuestos").path("gravado_importe"));
-        return String.join("|", ruc, document.tipoComprobante, document.serie, String.valueOf(document.numero),
-                amount(igv), amount(document.total), document.fechaEmision.toString(), nz(document.customerTipo),
-                nz(document.customerNumero), nz(document.digestValue)) + "|";
+        return String.join("|", ruc, document.getTipoComprobante(), document.getSerie(), String.valueOf(document.getNumero()),
+                amount(igv), amount(document.getTotal()), document.getFechaEmision().toString(), nz(document.getCustomerTipo()),
+                nz(document.getCustomerNumero()), nz(document.getDigestValue())) + "|";
     }
 
     private static BigDecimal decimal(JsonNode node) {

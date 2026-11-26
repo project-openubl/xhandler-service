@@ -53,7 +53,7 @@ class AdminTest {
         UUID tenant = tenantOf("alice");
         UUID company = companies.verified(tenant, "fake");
         TestDocuments.Created doc = docs.pending(tenant, company, "t-" + UUID.randomUUID() + ":invoice",
-                d -> d.nextAttemptAt = java.time.Instant.now().plusSeconds(3600));
+                d -> d.setNextAttemptAt(java.time.Instant.now().plusSeconds(3600)));
 
         as("olga").post("/api/admin/v1/documents/" + doc.id() + "/hold").then().statusCode(200)
                 .body("hold_reason", equalTo("operator"));
@@ -61,7 +61,7 @@ class AdminTest {
         as("olga").post("/api/admin/v1/documents/" + doc.id() + "/retry").then().statusCode(200)
                 .body("hold_reason", org.hamcrest.Matchers.nullValue())
                 .body("next_attempt_at", notNullValue());
-        await().atMost(Duration.ofSeconds(20)).until(() -> "accepted".equals(docs.get(tenant, doc.id()).status));
+        await().atMost(Duration.ofSeconds(20)).until(() -> "accepted".equals(docs.get(tenant, doc.id()).getStatus()));
 
         // The tenant sees what the platform did
         as("alice").get("/api/v1/tenants/" + tenant + "/audit?limit=200").then().statusCode(200)
@@ -76,12 +76,12 @@ class AdminTest {
         UUID tenant = tenantOf("alice");
         UUID company = companies.verified(tenant, "fake");
         TestDocuments.Created doc = docs.pending(tenant, company, "t-" + UUID.randomUUID() + ":invoice", d -> {
-            d.holdReason = "operator";
-            d.nextAttemptAt = java.time.Instant.now().plusSeconds(3600);
+            d.setHoldReason("operator");
+            d.setNextAttemptAt(java.time.Instant.now().plusSeconds(3600));
         });
         as("olga").post("/api/admin/v1/documents/" + doc.id() + "/release").then().statusCode(200)
                 .body("hold_reason", org.hamcrest.Matchers.nullValue());
-        await().atMost(Duration.ofSeconds(20)).until(() -> "accepted".equals(docs.get(tenant, doc.id()).status));
+        await().atMost(Duration.ofSeconds(20)).until(() -> "accepted".equals(docs.get(tenant, doc.id()).getStatus()));
     }
 
     @Test
@@ -89,7 +89,7 @@ class AdminTest {
         UUID tenant = tenantOf("alice");
         UUID company = companies.verified(tenant, "fake");
         String endpoint = "t-" + UUID.randomUUID() + ":invoice";
-        docs.pending(tenant, company, endpoint, d -> d.nextAttemptAt = java.time.Instant.now().plusSeconds(3600));
+        docs.pending(tenant, company, endpoint, d -> d.setNextAttemptAt(java.time.Instant.now().plusSeconds(3600)));
         // The reconciler registers endpoints it sees in the backlog
         await().atMost(Duration.ofSeconds(10)).until(() -> as("olga").get("/api/admin/v1/endpoints").then().extract()
                 .jsonPath().getList("id").contains(endpoint));

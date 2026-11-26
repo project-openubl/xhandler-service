@@ -1,8 +1,8 @@
 package io.github.projectopenubl.xhandler.managers;
 
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEvent;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -45,8 +45,8 @@ public class DocumentControl {
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
-    public Document lock(UUID documentId) {
-        Document doc = Document.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
+    public DocumentEntity lock(UUID documentId) {
+        DocumentEntity doc = DocumentEntity.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
         if (doc == null) {
             throw ApiException.notFound();
         }
@@ -55,32 +55,32 @@ public class DocumentControl {
 
     /** Stops automatic attempts until released (hold_reason = operator). */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Document hold(TenantScope scope, UUID documentId) {
-        Document doc = lock(documentId);
+    public DocumentEntity hold(TenantScope scope, UUID documentId) {
+        DocumentEntity doc = lock(documentId);
         if (doc.definitive()) {
             throw ApiException.conflict("document_final", "El documento ya tiene una respuesta definitiva.");
         }
-        doc.holdReason = "operator";
-        doc.updatedAt = Instant.now();
-        DocumentEvent.record(doc, null, "held", scope.actor().auditName(), null);
-        auditor.record(scope, "document.held", "document", doc.id);
+        doc.setHoldReason("operator");
+        doc.setUpdatedAt(Instant.now());
+        DocumentEventEntity.record(doc, null, "held", scope.actor().auditName(), null);
+        auditor.record(scope, "document.held", "document", doc.getId());
         return doc;
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
-    public Document release(TenantScope scope, UUID documentId) {
-        Document doc = lock(documentId);
-        if (doc.holdReason == null) {
+    public DocumentEntity release(TenantScope scope, UUID documentId) {
+        DocumentEntity doc = lock(documentId);
+        if (doc.getHoldReason() == null) {
             return doc;
         }
-        doc.holdReason = null;
-        if (Document.RETRYABLE.contains(doc.status)) {
-            doc.nextAttemptAt = Instant.now();
+        doc.setHoldReason(null);
+        if (DocumentEntity.RETRYABLE.contains(doc.getStatus())) {
+            doc.setNextAttemptAt(Instant.now());
             notifyReconciler();
         }
-        doc.updatedAt = Instant.now();
-        DocumentEvent.record(doc, null, "released", scope.actor().auditName(), null);
-        auditor.record(scope, "document.released", "document", doc.id);
+        doc.setUpdatedAt(Instant.now());
+        DocumentEventEntity.record(doc, null, "released", scope.actor().auditName(), null);
+        auditor.record(scope, "document.released", "document", doc.getId());
         return doc;
     }
 
@@ -89,27 +89,27 @@ public class DocumentControl {
      * pending_send} and is resent with the same number and bytes, once the user fixed the cause.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Document retry(TenantScope scope, UUID documentId) {
-        Document doc = lock(documentId);
-        if (doc.summaryDocumentId != null) {
+    public DocumentEntity retry(TenantScope scope, UUID documentId) {
+        DocumentEntity doc = lock(documentId);
+        if (doc.getSummaryDocumentId() != null) {
             // In a resumen diario: only once that summary failed. It leaves the summary and goes
             // to SUNAT again (past D+5 that means a new resumen diario, §9.2.4)
-            Document summary = Document.findById(doc.summaryDocumentId);
-            if (summary != null && !"rejected".equals(summary.status) && !"exception".equals(summary.status)) {
+            DocumentEntity summary = DocumentEntity.findById(doc.getSummaryDocumentId());
+            if (summary != null && !"rejected".equals(summary.getStatus()) && !"exception".equals(summary.getStatus())) {
                 throw ApiException.conflict("document_in_summary", "El documento sigue el resultado de su resumen diario.");
             }
-            doc.summaryDocumentId = null;
+            doc.setSummaryDocumentId(null);
         }
-        if (!RETRY_FROM.contains(doc.status) || "ticket_lost".equals(doc.codeClass)) {
+        if (!RETRY_FROM.contains(doc.getStatus()) || "ticket_lost".equals(doc.getCodeClass())) {
             // A summary resolved line by line must not be resent: its lines went to new summaries
             throw ApiException.conflict("document_not_retryable", "El documento no se puede reenviar en su estado actual.");
         }
         retryLocked(scope, doc);
-        if (doc.isBoletaFamily() && Deadlines.boletaPastIndividualWindow(doc.fechaEmision, Deadlines.todayInLima())) {
+        if (doc.isBoletaFamily() && Deadlines.boletaPastIndividualWindow(doc.getFechaEmision(), Deadlines.todayInLima())) {
             // Past D+5 a boleta can't go on its own: the resumen diario fallback takes it now
-            doc.status = "pending_send";
-            doc.codeClass = "route_change";
-            doc.nextAttemptAt = null;
+            doc.setStatus("pending_send");
+            doc.setCodeClass("route_change");
+            doc.setNextAttemptAt(null);
             jobs.enqueuePlatform("documents.boleta-summary-fallback", 2, Map.of("trigger", "retry"),
                     List.of("schedule:boleta-summary-fallback"));
         }
@@ -136,10 +136,10 @@ public class DocumentControl {
             params.put("to", to);
         }
         query.append(" order by id");
-        List<Document> docs = Document.<Document>find(query.toString(), params).withLock(LockModeType.PESSIMISTIC_WRITE).list();
+        List<DocumentEntity> docs = DocumentEntity.<DocumentEntity>find(query.toString(), params).withLock(LockModeType.PESSIMISTIC_WRITE).list();
         int n = 0;
-        for (Document doc : docs) {
-            if (RETRY_FROM.contains(doc.status)) {
+        for (DocumentEntity doc : docs) {
+            if (RETRY_FROM.contains(doc.getStatus())) {
                 retryLocked(scope, doc);
                 n++;
             }
@@ -152,24 +152,24 @@ public class DocumentControl {
         return n;
     }
 
-    private void retryLocked(TenantScope scope, Document doc) {
-        String previous = doc.status;
+    private void retryLocked(TenantScope scope, DocumentEntity doc) {
+        String previous = doc.getStatus();
         Instant now = Instant.now();
-        if ("exception".equals(doc.status)) {
-            doc.status = "pending_send";
+        if ("exception".equals(doc.getStatus())) {
+            doc.setStatus("pending_send");
         }
-        doc.holdReason = null;
-        doc.nextAttemptAt = now;
-        doc.sameOutcomeCount = 0;
-        doc.lastOutcome = null;
-        if ("summary_failed".equals(doc.codeClass)) {
-            doc.codeClass = null;
+        doc.setHoldReason(null);
+        doc.setNextAttemptAt(now);
+        doc.setSameOutcomeCount(0);
+        doc.setLastOutcome(null);
+        if ("summary_failed".equals(doc.getCodeClass())) {
+            doc.setCodeClass(null);
         }
-        doc.progressAt = now;
-        doc.updatedAt = now;
-        DocumentEvent.record(doc, null, "manual retry", scope.actor().auditName(), null);
-        auditor.record(scope, "document.retried", "document", doc.id);
-        if (!doc.status.equals(previous)) {
+        doc.setProgressAt(now);
+        doc.setUpdatedAt(now);
+        DocumentEventEntity.record(doc, null, "manual retry", scope.actor().auditName(), null);
+        auditor.record(scope, "document.retried", "document", doc.getId());
+        if (!doc.getStatus().equals(previous)) {
             statusChanged.fire(new DocumentStatusChanged(doc, previous, null));
         }
     }

@@ -99,10 +99,10 @@ class DataProtectionTest {
         UUID company = companies.verified(tenant, "fake");
         String dni = String.valueOf(10_000_000 + (int) (Math.random() * 89_999_999));
         docs.pending(tenant, company, "fake:bill", d -> {
-            d.status = "accepted";
-            d.customerTipo = "1";
-            d.customerNumero = dni;
-            d.customerNombre = "PERSONA NATURAL";
+            d.setStatus("accepted");
+            d.setCustomerTipo("1");
+            d.setCustomerNumero(dni);
+            d.setCustomerNombre("PERSONA NATURAL");
         });
         // A person writes to the platform: an admin registers it and it reaches the tenant at once
         String id = as("olga").body(Map.of("subject_doc_type", "1", "subject_doc_number", dni, "kind", "access"))
@@ -130,10 +130,10 @@ class DataProtectionTest {
         UUID tenant = newTenant(name);
         UUID company = companies.verified(tenant, "fake");
         UUID old = docs.pending(tenant, company, "fake:bill", d -> {
-            d.status = "accepted";
-            d.fechaEmision = LocalDate.of(2012, 3, 1);
+            d.setStatus("accepted");
+            d.setFechaEmision(LocalDate.of(2012, 3, 1));
         }).id();
-        UUID current = docs.pending(tenant, company, "fake:bill", d -> d.status = "accepted").id();
+        UUID current = docs.pending(tenant, company, "fake:bill", d -> d.setStatus("accepted")).id();
 
         // Retention: with 10 years, the 2012 document goes and today's stays; an audit hold keeps everything
         as("olga").body(Map.of("audit_hold", true)).put("/api/admin/v1/data-protection/tenants/" + tenant + "/audit-hold").then().statusCode(200);
@@ -146,9 +146,9 @@ class DataProtectionTest {
 
         // Exit waits for documents still going to SUNAT
         String base = "/api/v1/tenants/" + tenant;
-        UUID pending = docs.pending(tenant, company, "fake:bill", d -> d.holdReason = "operator").id();
+        UUID pending = docs.pending(tenant, company, "fake:bill", d -> d.setHoldReason("operator")).id();
         as("alice").body(Map.of("confirm_name", name)).post(base + "/exit").then().statusCode(409).body("kind", equalTo("pending_documents"));
-        docs.update(tenant, pending, d -> d.status = "accepted");
+        docs.update(tenant, pending, d -> d.setStatus("accepted"));
         // and needs a fresh export (one an hour) and the name typed
         as("alice").body(Map.of("confirm_name", name)).post(base + "/exit").then().statusCode(409).body("kind", equalTo("export_required"));
         String export = as("alice").post(base + "/exports").then().statusCode(202)

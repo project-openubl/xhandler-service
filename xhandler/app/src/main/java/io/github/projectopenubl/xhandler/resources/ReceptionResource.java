@@ -7,7 +7,7 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
@@ -97,8 +97,8 @@ public class ReceptionResource {
         }
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-            Company company = CompanyResource.find(companyId);
-            if (!"6".equals(identity.customerTipo()) || !company.ruc.equals(identity.customerNumero())) {
+            CompanyEntity company = CompanyResource.find(companyId);
+            if (!"6".equals(identity.customerTipo()) || !company.getRuc().equals(identity.customerNumero())) {
                 throw ApiException.invalid("invalid_document", "El comprobante no está emitido a la empresa (RUC del adquirente).", null);
             }
             UUID receptionId = Ids.newId();
@@ -211,7 +211,7 @@ public class ReceptionResource {
 
     private String amountsJson(EngineModels.InspectResponse identity) {
         try {
-            var amounts = io.github.projectopenubl.xhandler.models.jpa.entities.Document.amountsOf(identity.amounts());
+            var amounts = io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity.amountsOf(identity.amounts());
             return amounts == null ? null : JSON.writeValueAsString(amounts);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException(e);

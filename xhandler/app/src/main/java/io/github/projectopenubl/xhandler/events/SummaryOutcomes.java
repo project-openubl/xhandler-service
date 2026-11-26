@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.events;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEvent;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
@@ -24,37 +24,37 @@ public class SummaryOutcomes {
     }
 
     void onStatusChanged(@Observes DocumentStatusChanged change) {
-        Document rc = change.document();
-        if (!"RC".equals(rc.tipoComprobante) || !rc.definitive() || "ticket_lost".equals(rc.codeClass)) {
+        DocumentEntity rc = change.document();
+        if (!"RC".equals(rc.getTipoComprobante()) || !rc.definitive() || "ticket_lost".equals(rc.getCodeClass())) {
             // A lost ticket was resolved line by line already (AttemptHandler)
             return;
         }
-        List<Document> lines = Document.<Document>find("summaryDocumentId = ?1 order by id", rc.id)
+        List<DocumentEntity> lines = DocumentEntity.<DocumentEntity>find("summaryDocumentId = ?1 order by id", rc.getId())
                 .withLock(LockModeType.PESSIMISTIC_WRITE)
                 .list();
         Instant now = Instant.now();
-        for (Document line : lines) {
-            if (line.definitive() && !"exception".equals(line.status)) {
+        for (DocumentEntity line : lines) {
+            if (line.definitive() && !"exception".equals(line.getStatus())) {
                 continue;
             }
-            String previous = line.status;
-            if (Document.ACCEPTED.contains(rc.status)) {
-                line.status = rc.status;
-                line.sunatCode = rc.sunatCode;
-                line.sunatDescription = "Aceptado en el resumen diario " + rc.serieNumero();
-                line.holdReason = null;
+            String previous = line.getStatus();
+            if (DocumentEntity.ACCEPTED.contains(rc.getStatus())) {
+                line.setStatus(rc.getStatus());
+                line.setSunatCode(rc.getSunatCode());
+                line.setSunatDescription("Aceptado en el resumen diario " + rc.serieNumero());
+                line.setHoldReason(null);
             } else {
                 // The RC failed: the boletas need a person (retrying puts them in a new RC)
-                line.status = "exception";
-                line.sunatCode = rc.sunatCode;
-                line.sunatDescription = "El resumen diario " + rc.serieNumero() + " no fue aceptado: " + rc.sunatDescription;
-                line.holdReason = "needs_attention";
+                line.setStatus("exception");
+                line.setSunatCode(rc.getSunatCode());
+                line.setSunatDescription("El resumen diario " + rc.serieNumero() + " no fue aceptado: " + rc.getSunatDescription());
+                line.setHoldReason("needs_attention");
             }
-            line.nextAttemptAt = null;
-            line.progressAt = now;
-            line.updatedAt = now;
-            DocumentEvent.record(line, line.sunatCode, line.sunatDescription, "platform:worker", change.correlationId());
-            if (!line.status.equals(previous)) {
+            line.setNextAttemptAt(null);
+            line.setProgressAt(now);
+            line.setUpdatedAt(now);
+            DocumentEventEntity.record(line, line.getSunatCode(), line.getSunatDescription(), "platform:worker", change.correlationId());
+            if (!line.getStatus().equals(previous)) {
                 statusChanged.fire(new DocumentStatusChanged(line, previous, change.correlationId()));
             }
         }

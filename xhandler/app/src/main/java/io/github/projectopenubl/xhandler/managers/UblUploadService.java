@@ -4,12 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.managers.AccessLinks;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEvent;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFile;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.managers.Numbering;
 import io.github.projectopenubl.xhandler.managers.Routes;
@@ -98,29 +98,29 @@ public class UblUploadService {
         return emit.admitted(tenantId, companyId, false, true, () -> QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.OPERATOR);
             emit.boundLockWaits();
-            Company company = Company.findById(companyId, LockModeType.PESSIMISTIC_READ);
-            if (company == null || company.deletedAt != null) {
+            CompanyEntity company = CompanyEntity.findById(companyId, LockModeType.PESSIMISTIC_READ);
+            if (company == null || company.getDeletedAt() != null) {
                 throw ApiException.notFound();
             }
-            if (!company.ruc.equals(identity.ruc())) {
+            if (!company.getRuc().equals(identity.ruc())) {
                 throw ApiException.invalid("invalid_document", "El RUC del emisor del XML no es el de la empresa.", null);
             }
             String tipo = identity.tipoComprobante();
             boolean guia = "09".equals(tipo) || "31".equals(tipo);
             emit.checkCompany(company, tipo);
-            boolean pse = !guia && "pse".equals(company.emissionMode);
+            boolean pse = !guia && "pse".equals(company.getEmissionMode());
             if (identity.signed() && pse) {
                 // As PSE the platform signs: it doesn't send what someone else signed in its name (§3.2)
                 throw ApiException.invalid("invalid_document", "La empresa emite con la plataforma como PSE: envíe el XML sin firmar.", null);
             }
             LocalDate fecha = io.github.projectopenubl.xhandler.managers.EmitService.checkIssueDate(
                     identity.fechaEmision() == null ? Deadlines.todayInLima() : LocalDate.parse(identity.fechaEmision()));
-            Routes.Assignment route = routes.assign(company, company.sunatEnv, tipo);
-            long numero = numbering.claim(tenantId, company.id, company.sunatEnv, tipo, identity.serie(), identity.numero());
+            Routes.Assignment route = routes.assign(company, company.getSunatEnv(), tipo);
+            long numero = numbering.claim(tenantId, company.getId(), company.getSunatEnv(), tipo, identity.serie(), identity.numero());
             String signedXml = xml;
             String digest = identity.digestValue();
             if (!identity.signed()) {
-                SigningService.Signed signed = signing.sign(company, company.sunatEnv, xml, tipo);
+                SigningService.Signed signed = signing.sign(company, company.getSunatEnv(), xml, tipo);
                 signatureLog.record(tenantId, documentId, identity.serie() + "-" + numero, signed.signingKeyId(), signed.platformKeyId(), signed.digestValue(),
                         scope.actor().auditName());
                 signedXml = signed.xml();
@@ -129,35 +129,35 @@ public class UblUploadService {
             FileStore.Stored input = files.put(tenantId, xmlBytes);
             FileStore.Stored stored = files.put(tenantId, signedXml.getBytes(StandardCharsets.UTF_8));
             Instant now = Instant.now();
-            Document doc = new Document();
-            doc.id = documentId;
-            doc.tenantId = tenantId;
-            doc.companyId = company.id;
-            doc.sunatEnv = company.sunatEnv;
-            doc.origin = "adapter";
-            doc.kind = identity.documentType();
-            doc.tipoComprobante = tipo;
-            doc.serie = identity.serie();
-            doc.numero = numero;
-            doc.fechaEmision = fecha;
-            doc.issueYear = (short) fecha.getYear();
-            doc.deadlineAt = Deadlines.sendDeadline(tipo, identity.serie(), fecha);
-            doc.customerTipo = identity.customerTipo();
-            doc.customerNumero = identity.customerNumero();
-            doc.moneda = identity.moneda();
-            doc.total = identity.total() == null ? null : new BigDecimal(identity.total());
-            doc.amounts = Document.amountsOf(identity.amounts());
-            doc.paymentTerms = "01".equals(tipo) ? (identity.paymentTerms() == null ? "contado" : identity.paymentTerms()) : null;
-            doc.status = "pending_send";
-            doc.digestValue = digest;
-            doc.endpoint = route.endpoint();
-            doc.credentialId = route.credentialId();
+            DocumentEntity doc = new DocumentEntity();
+            doc.setId(documentId);
+            doc.setTenantId(tenantId);
+            doc.setCompanyId(company.getId());
+            doc.setSunatEnv(company.getSunatEnv());
+            doc.setOrigin("adapter");
+            doc.setKind(identity.documentType());
+            doc.setTipoComprobante(tipo);
+            doc.setSerie(identity.serie());
+            doc.setNumero(numero);
+            doc.setFechaEmision(fecha);
+            doc.setIssueYear((short) fecha.getYear());
+            doc.setDeadlineAt(Deadlines.sendDeadline(tipo, identity.serie(), fecha));
+            doc.setCustomerTipo(identity.customerTipo());
+            doc.setCustomerNumero(identity.customerNumero());
+            doc.setMoneda(identity.moneda());
+            doc.setTotal(identity.total() == null ? null : new BigDecimal(identity.total()));
+            doc.setAmounts(DocumentEntity.amountsOf(identity.amounts()));
+            doc.setPaymentTerms("01".equals(tipo) ? (identity.paymentTerms() == null ? "contado" : identity.paymentTerms()) : null);
+            doc.setStatus("pending_send");
+            doc.setDigestValue(digest);
+            doc.setEndpoint(route.endpoint());
+            doc.setCredentialId(route.credentialId());
             // Signed by the issuer before upload: its own signature, never the platform's as PSE
-            doc.emissionMode = pse && !identity.signed() ? "pse" : "software";
-            doc.nextAttemptAt = now;
-            doc.progressAt = now;
-            doc.createdAt = now;
-            doc.updatedAt = now;
+            doc.setEmissionMode(pse && !identity.signed() ? "pse" : "software");
+            doc.setNextAttemptAt(now);
+            doc.setProgressAt(now);
+            doc.setCreatedAt(now);
+            doc.setUpdatedAt(now);
             try {
                 doc.persistAndFlush();
             } catch (jakarta.persistence.PersistenceException e) {
@@ -167,11 +167,11 @@ public class UblUploadService {
                 }
                 throw e;
             }
-            DocumentFile.record(doc, "input", input);
-            DocumentFile.record(doc, "xml_signed", stored);
-            DocumentEvent.record(doc, null, identity.signed() ? "uploaded (UBL XML, signed by the issuer)" : "uploaded (UBL XML)",
+            DocumentFileEntity.record(doc, "input", input);
+            DocumentFileEntity.record(doc, "xml_signed", stored);
+            DocumentEventEntity.record(doc, null, identity.signed() ? "uploaded (UBL XML, signed by the issuer)" : "uploaded (UBL XML)",
                     scope.actor().auditName(), correlationId);
-            auditor.record(scope, "document.uploaded", "document", doc.id, Map.of("serie_numero", doc.serieNumero()));
+            auditor.record(scope, "document.uploaded", "document", doc.getId(), Map.of("serie_numero", doc.serieNumero()));
             String token = links.create(doc);
             em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
             return DocumentView.of(doc, links.url(token), null);

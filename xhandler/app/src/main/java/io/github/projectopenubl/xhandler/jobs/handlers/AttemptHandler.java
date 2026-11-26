@@ -3,12 +3,12 @@ package io.github.projectopenubl.xhandler.jobs.handlers;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import io.github.projectopenubl.xhandler.managers.Routes;
 import io.github.projectopenubl.xhandler.models.Outcome;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEvent;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFile;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
 import io.github.projectopenubl.xhandler.utils.OutcomePolicy;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
@@ -167,17 +167,17 @@ public class AttemptHandler implements JobHandler {
         try {
             QuarkusTransaction.requiringNew().run(() -> {
                 access.enterAsPlatform(plan.tenantId());
-                Document doc = Document.findById(plan.documentId(), LockModeType.PESSIMISTIC_WRITE);
-                if (doc == null || doc.attempts != plan.attempt() || !Document.RETRYABLE.contains(doc.status)) {
+                DocumentEntity doc = DocumentEntity.findById(plan.documentId(), LockModeType.PESSIMISTIC_WRITE);
+                if (doc == null || doc.getAttempts() != plan.attempt() || !DocumentEntity.RETRYABLE.contains(doc.getStatus())) {
                     return;
                 }
-                String previous = doc.status;
-                doc.status = "unknown";
-                doc.attemptJobId = null;
-                doc.nextAttemptAt = plan.sendStartedAt().plus(resolveSafety);
-                doc.updatedAt = Instant.now();
-                DocumentEvent.record(doc, null, "unknown: the outcome could not be recorded", "platform:worker", context.correlationId());
-                if (!previous.equals(doc.status)) {
+                String previous = doc.getStatus();
+                doc.setStatus("unknown");
+                doc.setAttemptJobId(null);
+                doc.setNextAttemptAt(plan.sendStartedAt().plus(resolveSafety));
+                doc.setUpdatedAt(Instant.now());
+                DocumentEventEntity.record(doc, null, "unknown: the outcome could not be recorded", "platform:worker", context.correlationId());
+                if (!previous.equals(doc.getStatus())) {
                     statusChanged.fire(new DocumentStatusChanged(doc, previous, context.correlationId()));
                 }
             });
@@ -189,45 +189,45 @@ public class AttemptHandler implements JobHandler {
 
     private Object begin(JobContext context, UUID documentId) {
         TenantScope scope = access.enterAsPlatform(context.tenantId());
-        Document doc = Document.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
+        DocumentEntity doc = DocumentEntity.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
         if (doc == null) {
             return "missing";
         }
-        if (!Document.RETRYABLE.contains(doc.status)) {
+        if (!DocumentEntity.RETRYABLE.contains(doc.getStatus())) {
             return "definitive";
         }
-        if (doc.summaryDocumentId != null) {
+        if (doc.getSummaryDocumentId() != null) {
             // It follows its summary's outcome: no retry state of its own
-            doc.nextAttemptAt = null;
+            doc.setNextAttemptAt(null);
             return "in_summary";
         }
-        if ("operator".equals(doc.holdReason)) {
+        if ("operator".equals(doc.getHoldReason())) {
             return "held";
         }
         Instant now = Instant.now();
         Action action;
-        if ("in_progress".equals(doc.status) && doc.ticket != null) {
+        if ("in_progress".equals(doc.getStatus()) && doc.getTicket() != null) {
             action = Action.VERIFY_TICKET;
-        } else if ("unknown".equals(doc.status)) {
+        } else if ("unknown".equals(doc.getStatus())) {
             // A stale call may still be in flight until its timeout passes (§9.2.1)
-            Instant notBefore = doc.sendStartedAt == null ? now : doc.sendStartedAt.plus(resolveSafety);
+            Instant notBefore = doc.getSendStartedAt() == null ? now : doc.getSendStartedAt().plus(resolveSafety);
             if (now.isBefore(notBefore)) {
-                doc.nextAttemptAt = notBefore;
+                doc.setNextAttemptAt(notBefore);
                 return "waiting_for_stale_call";
             }
             action = Action.RESOLVE;
         } else {
             action = Action.SEND;
         }
-        DocumentFile xml = DocumentFile.of(doc.id, "xml_signed").orElse(null);
+        DocumentFileEntity xml = DocumentFileEntity.of(doc.getId(), "xml_signed").orElse(null);
         if (xml == null) {
             // Can't happen through emit; a person must look instead of re-leasing it forever
-            doc.nextAttemptAt = null;
-            doc.holdReason = "needs_attention";
-            DocumentEvent.record(doc, null, "no signed XML stored: needs attention", "platform:worker", context.correlationId());
+            doc.setNextAttemptAt(null);
+            doc.setHoldReason("needs_attention");
+            DocumentEventEntity.record(doc, null, "no signed XML stored: needs attention", "platform:worker", context.correlationId());
             return "no_signed_xml";
         }
-        Company company = Company.findById(doc.companyId);
+        CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
         Routes.Target target;
         try {
             target = routes.target(scope, company, doc);
@@ -237,49 +237,49 @@ public class AttemptHandler implements JobHandler {
                     now, 1.0, null), Outcome.of(Outcome.Kind.PERMANENT, null, e.getMessage()), context.correlationId());
             return "missing_credentials";
         }
-        doc.attempts++;
-        doc.attemptJobId = context.id();
+        doc.setAttempts(doc.getAttempts() + 1);
+        doc.setAttemptJobId(context.id());
         // Throughput per PSE SOL user (the pool, §10.2); tenant credentials are not tagged (cardinality)
-        metrics.counter("xhandler.sunat.attempts", "mode", doc.emissionMode,
-                "credential", "pse".equals(doc.emissionMode) && doc.credentialId != null ? doc.credentialId.toString() : "tenant").increment();
+        metrics.counter("xhandler.sunat.attempts", "mode", doc.getEmissionMode(),
+                "credential", "pse".equals(doc.getEmissionMode()) && doc.getCredentialId() != null ? doc.getCredentialId().toString() : "tenant").increment();
         if (action != Action.VERIFY_TICKET) {
-            doc.sendStartedAt = now;
+            doc.setSendStartedAt(now);
         }
         // Renew the lease: the attempt may have waited in the queue (§24.2)
-        doc.nextAttemptAt = now.plus(lease);
-        doc.updatedAt = now;
-        boolean viaOse = doc.endpoint.startsWith("ose:");
+        doc.setNextAttemptAt(now.plus(lease));
+        doc.setUpdatedAt(now);
+        boolean viaOse = doc.getEndpoint().startsWith("ose:");
         // validaCDPcriterios doesn't cover percepciones and retenciones: RR lines can't be checked
-        List<Line> lines = action == Action.RESOLVE && doc.isSummary() && doc.ticket == null && target.environment().hasConsultServices()
-                && !viaOse && !"RR".equals(doc.tipoComprobante)
+        List<Line> lines = action == Action.RESOLVE && doc.isSummary() && doc.getTicket() == null && target.environment().hasConsultServices()
+                && !viaOse && !"RR".equals(doc.getTipoComprobante())
                 ? summaryLines(company, doc, target)
                 : List.of();
-        boolean ticketLost = doc.lastOutcome != null && doc.lastOutcome.startsWith("TICKET_LOST");
-        return new Plan(doc.id, doc.tenantId, doc.attempts, action, target, xml.storageKey, doc.ticket,
-                new EngineModels.DocumentKey(company.ruc, doc.tipoComprobante, doc.serie, doc.numero), doc.isFacturaFamily(),
-                doc.isSummary(), doc.sendStartedAt, doc.endpoint, lines, viaOse, ticketLost, doc.firstSentAt);
+        boolean ticketLost = doc.getLastOutcome() != null && doc.getLastOutcome().startsWith("TICKET_LOST");
+        return new Plan(doc.getId(), doc.getTenantId(), doc.getAttempts(), action, target, xml.getStorageKey(), doc.getTicket(),
+                new EngineModels.DocumentKey(company.getRuc(), doc.getTipoComprobante(), doc.getSerie(), doc.getNumero()), doc.isFacturaFamily(),
+                doc.isSummary(), doc.getSendStartedAt(), doc.getEndpoint(), lines, viaOse, ticketLost, doc.getFirstSentAt());
     }
 
     /** The lines of a summary: documents it adds (RC estado 1) and documents it voids (RA, RR, RC estado 3). */
-    private static List<Line> summaryLines(Company company, Document summary, Routes.Target target) {
+    private static List<Line> summaryLines(CompanyEntity company, DocumentEntity summary, Routes.Target target) {
         List<Line> lines = new java.util.ArrayList<>();
-        List<Document> added = Document.list("summaryDocumentId = ?1 order by id", summary.id);
-        List<Document> voided = Document.list("voidedByDocumentId = ?1 order by id", summary.id);
-        for (Document d : added) {
-            lines.add(new Line(d.id, true, validityCheck(company, d, target)));
+        List<DocumentEntity> added = DocumentEntity.list("summaryDocumentId = ?1 order by id", summary.getId());
+        List<DocumentEntity> voided = DocumentEntity.list("voidedByDocumentId = ?1 order by id", summary.getId());
+        for (DocumentEntity d : added) {
+            lines.add(new Line(d.getId(), true, validityCheck(company, d, target)));
         }
-        for (Document d : voided) {
-            lines.add(new Line(d.id, false, validityCheck(company, d, target)));
+        for (DocumentEntity d : voided) {
+            lines.add(new Line(d.getId(), false, validityCheck(company, d, target)));
         }
         return lines;
     }
 
-    private static EngineModels.ValidityRequest validityCheck(Company company, Document d, Routes.Target target) {
+    private static EngineModels.ValidityRequest validityCheck(CompanyEntity company, DocumentEntity d, Routes.Target target) {
         // Anonymous boletas have no buyer document: SUNAT's convention is type 0 / number "-"
         return new EngineModels.ValidityRequest(target.environment(), target.credentials(),
-                new EngineModels.DocumentKey(company.ruc, d.tipoComprobante, d.serie, d.numero),
-                d.customerTipo == null ? "0" : d.customerTipo, d.customerNumero == null ? "-" : d.customerNumero,
-                d.fechaEmision.toString(), d.total == null ? "0.00" : d.total.toPlainString());
+                new EngineModels.DocumentKey(company.getRuc(), d.getTipoComprobante(), d.getSerie(), d.getNumero()),
+                d.getCustomerTipo() == null ? "0" : d.getCustomerTipo(), d.getCustomerNumero() == null ? "-" : d.getCustomerNumero(),
+                d.getFechaEmision().toString(), d.getTotal() == null ? "0.00" : d.getTotal().toPlainString());
     }
 
     private Outcome execute(Plan plan, Map<UUID, String> lineStates) {
@@ -433,8 +433,8 @@ public class AttemptHandler implements JobHandler {
     private boolean finish(JobContext context, Plan plan, Outcome outcome, FileStore.Stored cdr, Instant callStartedAt,
             Map<UUID, String> lineStates) {
         access.enterAsPlatform(plan.tenantId());
-        Document doc = Document.findById(plan.documentId(), LockModeType.PESSIMISTIC_WRITE);
-        if (doc == null || doc.attempts != plan.attempt()) {
+        DocumentEntity doc = DocumentEntity.findById(plan.documentId(), LockModeType.PESSIMISTIC_WRITE);
+        if (doc == null || doc.getAttempts() != plan.attempt()) {
             LOG.infof("stale attempt %d of document %s: a newer attempt started, nothing written", plan.attempt(), plan.documentId());
             return false;
         }
@@ -446,25 +446,25 @@ public class AttemptHandler implements JobHandler {
                     .executeUpdate();
         }
         Instant now = Instant.now();
-        if (cdr != null && DocumentFile.of(doc.id, "cdr_zip").isEmpty()) {
-            DocumentFile.record(doc, "cdr_zip", cdr);
-            doc.cdrReceivedAt = now;
+        if (cdr != null && DocumentFileEntity.of(doc.getId(), "cdr_zip").isEmpty()) {
+            DocumentFileEntity.record(doc, "cdr_zip", cdr);
+            doc.setCdrReceivedAt(now);
         }
-        if (plan.action() != Action.VERIFY_TICKET && doc.firstSentAt == null && outcome.kind() != Outcome.Kind.NOT_DELIVERED
+        if (plan.action() != Action.VERIFY_TICKET && doc.getFirstSentAt() == null && outcome.kind() != Outcome.Kind.NOT_DELIVERED
                 && outcome.kind() != Outcome.Kind.LOCAL_ERROR) {
-            doc.firstSentAt = plan.sendStartedAt();
+            doc.setFirstSentAt(plan.sendStartedAt());
         }
         if (outcome.kind() == Outcome.Kind.TICKET) {
-            doc.ticket = outcome.ticket();
+            doc.setTicket(outcome.ticket());
         } else if (outcome.kind() == Outcome.Kind.TICKET_LOST) {
             // Never check a lost ticket again: resolution takes the lost-ticket path (§9.2.2)
-            doc.ticket = null;
+            doc.setTicket(null);
         }
         // The outcome is written: recovery must not turn it into unknown
-        doc.attemptJobId = null;
+        doc.setAttemptJobId(null);
         if (outcome.kind() == Outcome.Kind.SUMMARY_RESOLVED) {
             applyLines(doc, plan, lineStates, context.correlationId());
-            doc.codeClass = "ticket_lost";
+            doc.setCodeClass("ticket_lost");
         }
         double jitter = 0.8 + ThreadLocalRandom.current().nextDouble() * 0.4;
         Instant resolveNotBefore = plan.sendStartedAt() == null ? null : plan.sendStartedAt().plus(resolveSafety);
@@ -473,84 +473,84 @@ public class AttemptHandler implements JobHandler {
     }
 
     /** Lost-ticket resolution of a summary's lines (§9.2.2), with the lines locked in id order. */
-    private void applyLines(Document summary, Plan plan, Map<UUID, String> states, String correlationId) {
+    private void applyLines(DocumentEntity summary, Plan plan, Map<UUID, String> states, String correlationId) {
         Instant now = Instant.now();
         for (Line line : plan.lines().stream().sorted(java.util.Comparator.comparing(Line::documentId)).toList()) {
-            Document d = Document.findById(line.documentId(), LockModeType.PESSIMISTIC_WRITE);
+            DocumentEntity d = DocumentEntity.findById(line.documentId(), LockModeType.PESSIMISTIC_WRITE);
             String state = states.getOrDefault(line.documentId(), "unknown");
-            String previous = d.status;
+            String previous = d.getStatus();
             String note;
             if (line.adds()) {
                 switch (state) {
                     case "valid" -> {
-                        d.status = "accepted";
+                        d.setStatus("accepted");
                         note = "registered by SUNAT (resumen " + summary.serieNumero() + ", ticket lost)";
                     }
                     case "not_found" -> {
                         // Not in SUNAT: the D+5 fallback puts it in a new resumen diario
-                        d.summaryDocumentId = null;
-                        d.codeClass = "route_change";
+                        d.setSummaryDocumentId(null);
+                        d.setCodeClass("route_change");
                         note = "not registered by SUNAT: goes in a new resumen diario";
                     }
                     case "voided" -> {
-                        d.status = "voided";
+                        d.setStatus("voided");
                         note = "SUNAT has it voided";
                     }
                     default -> {
-                        d.holdReason = "needs_attention";
+                        d.setHoldReason("needs_attention");
                         note = "SUNAT's state is unknown (" + state + "): needs attention";
                     }
                 }
             } else {
                 switch (state) {
                     case "voided" -> {
-                        d.status = "voided";
+                        d.setStatus("voided");
                         note = "voided (" + summary.serieNumero() + ", ticket lost)";
                     }
                     case "valid" -> {
-                        d.status = d.statusBeforeVoiding == null ? "accepted" : d.statusBeforeVoiding;
-                        d.statusBeforeVoiding = null;
-                        d.voidedByDocumentId = null;
+                        d.setStatus(d.getStatusBeforeVoiding() == null ? "accepted" : d.getStatusBeforeVoiding());
+                        d.setStatusBeforeVoiding(null);
+                        d.setVoidedByDocumentId(null);
                         note = "voiding not registered by SUNAT (ticket lost): request it again";
                     }
                     default -> {
-                        d.holdReason = "needs_attention";
+                        d.setHoldReason("needs_attention");
                         note = "SUNAT's state is unknown (" + state + "): needs attention";
                     }
                 }
             }
-            d.nextAttemptAt = null;
-            d.updatedAt = now;
-            DocumentEvent.record(d, null, note, "platform:worker", correlationId);
-            if (!d.status.equals(previous)) {
+            d.setNextAttemptAt(null);
+            d.setUpdatedAt(now);
+            DocumentEventEntity.record(d, null, note, "platform:worker", correlationId);
+            if (!d.getStatus().equals(previous)) {
                 statusChanged.fire(new DocumentStatusChanged(d, previous, correlationId));
             }
         }
     }
 
-    private void applyAndRecord(Document doc, OutcomePolicy.Decision decision, Outcome outcome, String correlationId) {
-        String previous = doc.status;
+    private void applyAndRecord(DocumentEntity doc, OutcomePolicy.Decision decision, Outcome outcome, String correlationId) {
+        String previous = doc.getStatus();
         Instant now = Instant.now();
-        doc.status = decision.status();
-        doc.nextAttemptAt = decision.nextAttemptAt();
-        if (!"operator".equals(doc.holdReason)) {
-            doc.holdReason = decision.holdReason();
+        doc.setStatus(decision.status());
+        doc.setNextAttemptAt(decision.nextAttemptAt());
+        if (!"operator".equals(doc.getHoldReason())) {
+            doc.setHoldReason(decision.holdReason());
         }
-        doc.lastOutcome = decision.outcomeKey();
-        doc.sameOutcomeCount = decision.sameOutcomeCount();
+        doc.setLastOutcome(decision.outcomeKey());
+        doc.setSameOutcomeCount(decision.sameOutcomeCount());
         if (decision.progress()) {
-            doc.progressAt = now;
+            doc.setProgressAt(now);
         }
         if (outcome.code() != null || outcome.description() != null) {
-            doc.sunatCode = outcome.code();
-            doc.sunatDescription = outcome.description();
-            doc.sunatNotes = outcome.notes();
-            doc.codeClass = outcome.kind() == Outcome.Kind.ROUTE_CHANGE ? "route_change"
-                    : outcome.kind() == Outcome.Kind.SUMMARY_RESOLVED ? "ticket_lost" : outcome.codeClass();
+            doc.setSunatCode(outcome.code());
+            doc.setSunatDescription(outcome.description());
+            doc.setSunatNotes(outcome.notes());
+            doc.setCodeClass(outcome.kind() == Outcome.Kind.ROUTE_CHANGE ? "route_change"
+                    : outcome.kind() == Outcome.Kind.SUMMARY_RESOLVED ? "ticket_lost" : outcome.codeClass());
         }
-        doc.updatedAt = now;
-        DocumentEvent.record(doc, outcome.code(), describe(outcome), "platform:worker", correlationId);
-        if (!doc.status.equals(previous)) {
+        doc.setUpdatedAt(now);
+        DocumentEventEntity.record(doc, outcome.code(), describe(outcome), "platform:worker", correlationId);
+        if (!doc.getStatus().equals(previous)) {
             statusChanged.fire(new DocumentStatusChanged(doc, previous, correlationId));
         }
     }
@@ -560,7 +560,7 @@ public class AttemptHandler implements JobHandler {
         return outcome.description() == null ? kind : kind + ": " + outcome.description();
     }
 
-    private static OutcomePolicy.State state(Document doc) {
-        return new OutcomePolicy.State(doc.status, doc.lastOutcome, doc.sameOutcomeCount, doc.progressAt, doc.holdReason);
+    private static OutcomePolicy.State state(DocumentEntity doc) {
+        return new OutcomePolicy.State(doc.getStatus(), doc.getLastOutcome(), doc.getSameOutcomeCount(), doc.getProgressAt(), doc.getHoldReason());
     }
 }

@@ -4,14 +4,14 @@ import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.security.PlatformAdmin;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 import io.github.projectopenubl.xhandler.managers.DocumentControl;
 import io.github.projectopenubl.xhandler.jobs.JobStore;
 import io.github.projectopenubl.xhandler.managers.KeyRotation;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Tenant;
+import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.github.projectopenubl.xhandler.managers.Auditor;
@@ -143,7 +143,7 @@ public class AdminResource {
     public Map<String, Object> oseObligated(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             Map<String, Boolean> body) {
         TenantScope scope = openTenant(tenantId);
-        Company company = Company.findById(companyId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        CompanyEntity company = CompanyEntity.findById(companyId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if (company == null) {
             throw ApiException.notFound();
         }
@@ -151,7 +151,7 @@ public class AdminResource {
             throw ApiException.invalid("invalid_request", "Indique ose_obligated (true o false).", null);
         }
         boolean value = body.get("ose_obligated");
-        company.oseObligated = value;
+        company.setOseObligated(value);
         auditor.record(scope, "company.ose_obligated", "company", companyId, Map.of("value", value));
         return Map.of("company_id", companyId, "ose_obligated", value);
     }
@@ -245,7 +245,7 @@ public class AdminResource {
             throw ApiException.invalid("invalid_request", "tenant_id y company_id deben ser UUID.", null);
         }
         access.enterAsPlatform(tenantId);
-        if (Company.findById(companyId) == null) {
+        if (CompanyEntity.findById(companyId) == null) {
             throw ApiException.notFound();
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s set the billing issuer to company %s of tenant %s", admin.require(), companyId, tenantId);
@@ -416,7 +416,7 @@ public class AdminResource {
 
     private TenantScope scope(UUID tenantId, String adminName) {
         access.enterAsPlatform(tenantId);
-        if (Tenant.findById(tenantId) == null) {
+        if (TenantEntity.findById(tenantId) == null) {
             throw ApiException.notFound();
         }
         return new TenantScope(tenantId, new Actor("admin", adminName.substring("admin:".length()), false, false), Role.PLATFORM);
@@ -424,8 +424,8 @@ public class AdminResource {
 
     private Map<String, Object> pauseTenant(UUID tenantId, boolean paused) {
         TenantScope scope = openTenant(tenantId);
-        Tenant tenant = Tenant.findById(tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
-        tenant.sendingPaused = paused;
+        TenantEntity tenant = TenantEntity.findById(tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        tenant.setSendingPaused(paused);
         auditor.record(scope, paused ? "tenant.sending_held" : "tenant.sending_released", "tenant", tenantId);
         notifyReconcile();
         return Map.of("tenant_id", tenantId, "sending_paused", paused);
@@ -433,11 +433,11 @@ public class AdminResource {
 
     private Map<String, Object> pauseCompany(UUID tenantId, UUID companyId, boolean paused) {
         TenantScope scope = openTenant(tenantId);
-        Company company = Company.findById(companyId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        CompanyEntity company = CompanyEntity.findById(companyId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if (company == null) {
             throw ApiException.notFound();
         }
-        company.sendingPaused = paused;
+        company.setSendingPaused(paused);
         auditor.record(scope, paused ? "company.sending_held" : "company.sending_released", "company", companyId);
         notifyReconcile();
         return Map.of("company_id", companyId, "sending_paused", paused);
@@ -468,7 +468,7 @@ public class AdminResource {
                 ((Number) r[3]).intValue(), (Boolean) r[4]);
     }
 
-    private static DocumentState view(Document d) {
-        return new DocumentState(d.id, d.tenantId, d.serieNumero(), d.status, d.holdReason, d.nextAttemptAt, d.attempts);
+    private static DocumentState view(DocumentEntity d) {
+        return new DocumentState(d.getId(), d.getTenantId(), d.serieNumero(), d.getStatus(), d.getHoldReason(), d.getNextAttemptAt(), d.getAttempts());
     }
 }

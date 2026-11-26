@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFile;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -36,59 +36,59 @@ public class TestDocuments {
 
     public record Created(UUID id, String marker) {}
 
-    public Created pending(UUID tenantId, UUID companyId, String endpoint, Consumer<Document> customize) {
+    public Created pending(UUID tenantId, UUID companyId, String endpoint, Consumer<DocumentEntity> customize) {
         String marker = "doc-" + UUID.randomUUID();
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            Document doc = new Document();
-            doc.id = Ids.newId();
-            doc.tenantId = tenantId;
-            doc.companyId = companyId;
-            doc.sunatEnv = "fake";
-            doc.kind = "Invoice";
-            doc.tipoComprobante = "01";
-            doc.serie = "F001";
-            doc.numero = NUMERO.incrementAndGet();
-            doc.fechaEmision = Deadlines.todayInLima();
-            doc.issueYear = (short) doc.fechaEmision.getYear();
-            doc.deadlineAt = Deadlines.sendDeadline("01", "F001", doc.fechaEmision);
-            doc.status = "pending_send";
-            doc.endpoint = endpoint;
-            doc.nextAttemptAt = Instant.now();
-            doc.progressAt = Instant.now();
-            doc.createdAt = Instant.now();
-            doc.updatedAt = doc.createdAt;
+            DocumentEntity doc = new DocumentEntity();
+            doc.setId(Ids.newId());
+            doc.setTenantId(tenantId);
+            doc.setCompanyId(companyId);
+            doc.setSunatEnv("fake");
+            doc.setKind("Invoice");
+            doc.setTipoComprobante("01");
+            doc.setSerie("F001");
+            doc.setNumero(NUMERO.incrementAndGet());
+            doc.setFechaEmision(Deadlines.todayInLima());
+            doc.setIssueYear((short) doc.getFechaEmision().getYear());
+            doc.setDeadlineAt(Deadlines.sendDeadline("01", "F001", doc.getFechaEmision()));
+            doc.setStatus("pending_send");
+            doc.setEndpoint(endpoint);
+            doc.setNextAttemptAt(Instant.now());
+            doc.setProgressAt(Instant.now());
+            doc.setCreatedAt(Instant.now());
+            doc.setUpdatedAt(doc.getCreatedAt());
             if (customize != null) {
                 customize.accept(doc);
             }
-            doc.issueYear = (short) doc.fechaEmision.getYear();
+            doc.setIssueYear((short) doc.getFechaEmision().getYear());
             doc.persist();
             String xml = "<Invoice><cbc:ID>" + doc.serieNumero() + "</cbc:ID><marker>" + marker + "</marker></Invoice>";
             FileStore.Stored stored = files.put(tenantId, xml.getBytes(StandardCharsets.UTF_8));
-            DocumentFile.record(doc, "xml_signed", stored);
-            return new Created(doc.id, marker);
+            DocumentFileEntity.record(doc, "xml_signed", stored);
+            return new Created(doc.getId(), marker);
         });
     }
 
-    public Document get(UUID tenantId, UUID documentId) {
+    public DocumentEntity get(UUID tenantId, UUID documentId) {
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            Document doc = Document.findById(documentId);
-            Document.getEntityManager().detach(doc);
+            DocumentEntity doc = DocumentEntity.findById(documentId);
+            DocumentEntity.getEntityManager().detach(doc);
             return doc;
         });
     }
 
-    public void update(UUID tenantId, UUID documentId, Consumer<Document> change) {
+    public void update(UUID tenantId, UUID documentId, Consumer<DocumentEntity> change) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            change.accept(Document.findById(documentId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE));
+            change.accept(DocumentEntity.findById(documentId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE));
         });
     }
 
     /** Makes a document due now (skips its backoff or lease). */
     public void dueNow(UUID tenantId, UUID documentId) {
-        update(tenantId, documentId, d -> d.nextAttemptAt = Instant.now().minus(Duration.ofSeconds(1)));
+        update(tenantId, documentId, d -> d.setNextAttemptAt(Instant.now().minus(Duration.ofSeconds(1))));
     }
 
     /** Makes several documents due in one transaction. */
@@ -96,8 +96,8 @@ public class TestDocuments {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
             for (UUID id : documentIds.stream().sorted().toList()) {
-                Document doc = Document.findById(id, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
-                doc.nextAttemptAt = Instant.now().minus(Duration.ofSeconds(1));
+                DocumentEntity doc = DocumentEntity.findById(id, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+                doc.setNextAttemptAt(Instant.now().minus(Duration.ofSeconds(1)));
             }
         });
     }

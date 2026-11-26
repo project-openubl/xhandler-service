@@ -1,8 +1,8 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.models.DefaultSeries;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Series;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.SeriesEntity;
 
 import io.github.projectopenubl.xhandler.Api;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -32,26 +32,26 @@ public class TestCompanies {
     public UUID verified(UUID tenantId, String sunatEnv, String ruc) {
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            Company company = new Company();
-            company.id = Ids.newId();
-            company.tenantId = tenantId;
-            company.ruc = ruc;
-            company.razonSocial = "Empresa " + company.ruc;
-            company.sunatEnv = sunatEnv;
-            company.rucVerifiedAt = Instant.now();
+            CompanyEntity company = new CompanyEntity();
+            company.setId(Ids.newId());
+            company.setTenantId(tenantId);
+            company.setRuc(ruc);
+            company.setRazonSocial("Empresa " + company.getRuc());
+            company.setSunatEnv(sunatEnv);
+            company.setRucVerifiedAt(Instant.now());
             company.persist();
             for (DefaultSeries.Entry entry : DefaultSeries.ENTRIES) {
-                Series series = new Series();
-                series.id = Ids.newId();
-                series.tenantId = tenantId;
-                series.companyId = company.id;
-                series.sunatEnv = sunatEnv;
-                series.tipoComprobante = entry.tipoComprobante();
-                series.serie = entry.serie();
-                series.isDefault = true;
+                SeriesEntity series = new SeriesEntity();
+                series.setId(Ids.newId());
+                series.setTenantId(tenantId);
+                series.setCompanyId(company.getId());
+                series.setSunatEnv(sunatEnv);
+                series.setTipoComprobante(entry.tipoComprobante());
+                series.setSerie(entry.serie());
+                series.setDefault(true);
                 series.persist();
             }
-            return company.id;
+            return company.getId();
         });
     }
 }

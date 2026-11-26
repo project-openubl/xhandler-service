@@ -6,11 +6,11 @@ import io.github.projectopenubl.xhandler.resources.EmailSuppressions;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.managers.AccessLinks;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEvent;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFile;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.pdf.DocumentPdf;
@@ -78,8 +78,8 @@ public class DocumentEmailJob implements JobHandler {
         record Prepared(EmailSender.Message message, EmailSender.Smtp smtp, List<String> skipped) {}
         Prepared prepared = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(context.tenantId());
-            Document doc = Document.findById(documentId);
-            Company company = Company.findById(doc.companyId);
+            DocumentEntity doc = DocumentEntity.findById(documentId);
+            CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
             List<String> skipped = new ArrayList<>();
             List<String> recipients = new ArrayList<>();
             List<String> to = new ArrayList<>(givenTo);
@@ -99,21 +99,21 @@ public class DocumentEmailJob implements JobHandler {
             }
             String link = links.url(links.create(doc));
             List<EmailSender.Attachment> attachments = new ArrayList<>();
-            String base = doc.tipoComprobante + "-" + doc.serieNumero();
-            attachments.add(new EmailSender.Attachment(base + ".pdf", "application/pdf", pdf.render(doc.id, link)));
-            DocumentFile.of(doc.id, "xml_signed").ifPresent(f ->
-                    attachments.add(new EmailSender.Attachment(base + ".xml", "application/xml", files.get(f.storageKey))));
+            String base = doc.getTipoComprobante() + "-" + doc.serieNumero();
+            attachments.add(new EmailSender.Attachment(base + ".pdf", "application/pdf", pdf.render(doc.getId(), link)));
+            DocumentFileEntity.of(doc.getId(), "xml_signed").ifPresent(f ->
+                    attachments.add(new EmailSender.Attachment(base + ".xml", "application/xml", files.get(f.getStorageKey()))));
             if (includeCdr) {
-                DocumentFile.of(doc.id, "cdr_zip").ifPresent(f ->
-                        attachments.add(new EmailSender.Attachment("R-" + base + ".zip", "application/zip", files.get(f.storageKey))));
+                DocumentFileEntity.of(doc.getId(), "cdr_zip").ifPresent(f ->
+                        attachments.add(new EmailSender.Attachment("R-" + base + ".zip", "application/zip", files.get(f.getStorageKey()))));
             }
-            String subject = subject(company.emailSubject, doc, company);
-            String body = HtmlSanitizer.sanitize(render(company.emailBody, DEFAULT_BODY, doc, company, link));
+            String subject = subject(company.getEmailSubject(), doc, company);
+            String body = HtmlSanitizer.sanitize(render(company.getEmailBody(), DEFAULT_BODY, doc, company, link));
             // The plan may have changed since the SMTP server was saved (downgrade, stale entitlement)
-            EmailSender.Smtp smtp = entitlements.usage(doc.tenantId).plan().customSmtp()
-                    ? credentials.read(scope, company, "smtp", "email:" + doc.id).map(EmailSender::smtp).orElse(null)
+            EmailSender.Smtp smtp = entitlements.usage(doc.getTenantId()).plan().customSmtp()
+                    ? credentials.read(scope, company, "smtp", "email:" + doc.getId()).map(EmailSender::smtp).orElse(null)
                     : null;
-            return new Prepared(new EmailSender.Message(sender(company), company.email, recipients, ccKept, subject, body, attachments),
+            return new Prepared(new EmailSender.Message(sender(company), company.getEmail(), recipients, ccKept, subject, body, attachments),
                     smtp, skipped);
         });
         if (prepared.message() == null) {
@@ -146,24 +146,24 @@ public class DocumentEmailJob implements JobHandler {
         String finalDetail = detail;
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(context.tenantId());
-            Document doc = Document.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
+            DocumentEntity doc = DocumentEntity.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
             for (String recipient : prepared.message().to()) {
                 em.createNativeQuery("""
                                 INSERT INTO xhandler.delivery (id, tenant_id, document_id, channel, recipient, result, detail)
                                 VALUES (:id, :tenant, :document, 'email', :recipient, :result, :detail)""")
                         .setParameter("id", Ids.newId())
-                        .setParameter("tenant", doc.tenantId)
-                        .setParameter("document", doc.id)
+                        .setParameter("tenant", doc.getTenantId())
+                        .setParameter("document", doc.getId())
                         .setParameter("recipient", recipient)
                         .setParameter("result", finalResult)
                         .setParameter("detail", finalDetail == null ? null : finalDetail.substring(0, Math.min(500, finalDetail.length())))
                         .executeUpdate();
             }
-            if ("sent".equals(finalResult) && doc.deliveredAt == null) {
-                doc.deliveredAt = Instant.now();
-                doc.deliveredSource = "service";
-                doc.updatedAt = doc.deliveredAt;
-                DocumentEvent.record(doc, null, "delivered (email)", "platform:worker", context.correlationId());
+            if ("sent".equals(finalResult) && doc.getDeliveredAt() == null) {
+                doc.setDeliveredAt(Instant.now());
+                doc.setDeliveredSource("service");
+                doc.setUpdatedAt(doc.getDeliveredAt());
+                DocumentEventEntity.record(doc, null, "delivered (email)", "platform:worker", context.correlationId());
             }
         });
         if (!"sent".equals(result)) {
@@ -184,12 +184,12 @@ public class DocumentEmailJob implements JobHandler {
             "31", "guía de remisión electrónica", "20", "comprobante de retención", "40", "comprobante de percepción");
 
     /** {placeholders} in the company's template; values are HTML-escaped. */
-    static String render(String template, String fallback, Document doc, Company company, String link) {
+    static String render(String template, String fallback, DocumentEntity doc, CompanyEntity company, String link) {
         String text = template == null || template.isBlank() ? fallback : template;
         Map<String, String> values = Map.of(
-                "{tipo}", doc.tipoComprobante, "{tipo_nombre}", TIPOS.getOrDefault(doc.tipoComprobante, "comprobante electrónico"),
-                "{serie_numero}", doc.serieNumero(), "{razon_social}", company.razonSocial, "{fecha}", doc.fechaEmision.toString(),
-                "{moneda}", doc.moneda == null ? "" : doc.moneda, "{total}", doc.total == null ? "" : doc.total.toPlainString(),
+                "{tipo}", doc.getTipoComprobante(), "{tipo_nombre}", TIPOS.getOrDefault(doc.getTipoComprobante(), "comprobante electrónico"),
+                "{serie_numero}", doc.serieNumero(), "{razon_social}", company.getRazonSocial(), "{fecha}", doc.getFechaEmision().toString(),
+                "{moneda}", doc.getMoneda() == null ? "" : doc.getMoneda(), "{total}", doc.getTotal() == null ? "" : doc.getTotal().toPlainString(),
                 "{link}", link);
         for (Map.Entry<String, String> e : values.entrySet()) {
             text = text.replace(e.getKey(), escape(e.getValue()));
@@ -198,10 +198,10 @@ public class DocumentEmailJob implements JobHandler {
     }
 
     /** The subject: plain text, one line (no header injection). */
-    static String subject(String template, Document doc, Company company) {
+    static String subject(String template, DocumentEntity doc, CompanyEntity company) {
         String text = template == null || template.isBlank() ? "{tipo} {serie_numero} - {razon_social}" : template;
-        Map<String, String> values = Map.of("{tipo}", TIPOS.getOrDefault(doc.tipoComprobante, doc.tipoComprobante),
-                "{serie_numero}", doc.serieNumero(), "{razon_social}", company.razonSocial, "{fecha}", doc.fechaEmision.toString());
+        Map<String, String> values = Map.of("{tipo}", TIPOS.getOrDefault(doc.getTipoComprobante(), doc.getTipoComprobante()),
+                "{serie_numero}", doc.serieNumero(), "{razon_social}", company.getRazonSocial(), "{fecha}", doc.getFechaEmision().toString());
         for (Map.Entry<String, String> e : values.entrySet()) {
             text = text.replace(e.getKey(), e.getValue());
         }
@@ -209,10 +209,10 @@ public class DocumentEmailJob implements JobHandler {
     }
 
     /** The buyer's email as the client gave it ({@code cliente.contacto.email} in the input). */
-    private java.util.Optional<String> customerEmail(Document doc) {
-        return DocumentFile.of(doc.id, "input").map(f -> {
+    private java.util.Optional<String> customerEmail(DocumentEntity doc) {
+        return DocumentFileEntity.of(doc.getId(), "input").map(f -> {
             try {
-                JsonNode email = new com.fasterxml.jackson.databind.ObjectMapper().readTree(files.get(f.storageKey))
+                JsonNode email = new com.fasterxml.jackson.databind.ObjectMapper().readTree(files.get(f.getStorageKey()))
                         .path("spec").path("cliente").path("contacto").path("email");
                 return email.isMissingNode() || email.isNull() ? null : email.asText();
             } catch (java.io.IOException e) {
@@ -222,14 +222,14 @@ public class DocumentEmailJob implements JobHandler {
     }
 
     /** As the company's own address when the tenant verified its domain, else the platform's sender. */
-    private String sender(Company company) {
-        if (company.email == null || !company.email.contains("@")) {
+    private String sender(CompanyEntity company) {
+        if (company.getEmail() == null || !company.getEmail().contains("@")) {
             return null;
         }
-        String domain = company.email.substring(company.email.indexOf('@') + 1).toLowerCase(java.util.Locale.ROOT);
+        String domain = company.getEmail().substring(company.getEmail().indexOf('@') + 1).toLowerCase(java.util.Locale.ROOT);
         boolean verified = !em.createNativeQuery("SELECT 1 FROM xhandler.sender_domain WHERE domain = :d AND verified_at IS NOT NULL")
                 .setParameter("d", domain).getResultList().isEmpty();
-        return verified ? company.razonSocial.replaceAll("[\\r\\n\"<>]", "") + " <" + company.email + ">" : null;
+        return verified ? company.getRazonSocial().replaceAll("[\\r\\n\"<>]", "") + " <" + company.getEmail() + ">" : null;
     }
 
     /** An SMTP target refused at send time (the message is safe to show the tenant). */

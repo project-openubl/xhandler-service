@@ -1,10 +1,10 @@
 package io.github.projectopenubl.xhandler.managers;
 
 import io.github.projectopenubl.xhandler.keys.SecretBox;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Credential;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CredentialEntity;
 
 import io.github.projectopenubl.xhandler.keys.KeyVault;
-import io.github.projectopenubl.xhandler.models.jpa.entities.SigningKey;
+import io.github.projectopenubl.xhandler.models.jpa.entities.SigningKeyEntity;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
@@ -93,20 +93,20 @@ public class KeyRotation {
         access.enterAsPlatform(tenantId);
         String current = vault.currentMasterKeyId();
         // Locked, so a concurrent update of the secret can't be overwritten with the old ciphertext
-        List<Credential> credentials = Credential.<Credential>find("masterKeyId <> ?1", current)
+        List<CredentialEntity> credentials = CredentialEntity.<CredentialEntity>find("masterKeyId <> ?1", current)
                 .withLock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
                 .list();
-        for (Credential credential : credentials) {
+        for (CredentialEntity credential : credentials) {
             credential.seal(box.rewrap(credential.sealed()));
         }
         int keys = 0;
         // Every key, not only active ones: replaced keys stay readable for retention
-        for (SigningKey key : SigningKey.<SigningKey>find("from SigningKey")
+        for (SigningKeyEntity key : SigningKeyEntity.<SigningKeyEntity>find("from SigningKeyEntity")
                 .withLock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
                 .list()) {
-            String rewrapped = vault.rewrapPrivateKey(key.keyRef);
-            if (!rewrapped.equals(key.keyRef)) {
-                key.keyRef = rewrapped;
+            String rewrapped = vault.rewrapPrivateKey(key.getKeyRef());
+            if (!rewrapped.equals(key.getKeyRef())) {
+                key.setKeyRef(rewrapped);
                 keys++;
             }
         }

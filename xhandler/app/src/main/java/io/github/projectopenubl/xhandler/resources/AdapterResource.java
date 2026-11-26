@@ -7,7 +7,7 @@ import io.github.projectopenubl.xhandler.utils.SfsAdapter;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.managers.EmitService;
@@ -100,7 +100,7 @@ public class AdapterResource {
         SfsAdapter.Converted converted = SfsAdapter.convert(request.fileName(), request.cab(), request.det());
         String ruc = QuarkusTransaction.requiringNew().call(() -> {
             access.enter(tenantId, Role.OPERATOR);
-            return CompanyResource.find(companyId).ruc;
+            return CompanyResource.find(companyId).getRuc();
         });
         if (!ruc.equals(converted.ruc())) {
             throw ApiException.invalid("invalid_document", "El RUC del archivo no es el de la empresa.", null);
@@ -120,7 +120,7 @@ public class AdapterResource {
     @Transactional
     public Response createToken(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid TokenRequest request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.find(companyId);
+        CompanyEntity company = CompanyResource.find(companyId);
         byte[] raw = new byte[24];
         RANDOM.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
@@ -128,10 +128,10 @@ public class AdapterResource {
         em.createNativeQuery("""
                         INSERT INTO xhandler.adapter_token (id, tenant_id, company_id, kind, token_hash, label, created_by)
                         VALUES (:id, :t, :c, 'nubefact', :h, :l, :by)""")
-                .setParameter("id", id).setParameter("t", tenantId).setParameter("c", company.id).setParameter("h", hash(token))
+                .setParameter("id", id).setParameter("t", tenantId).setParameter("c", company.getId()).setParameter("h", hash(token))
                 .setParameter("l", request.label()).setParameter("by", scope.actor().auditName()).executeUpdate();
         auditor.record(scope, "adapter_token.created", "company", companyId, Map.of("kind", "nubefact", "label", request.label()));
-        return Response.status(201).entity(new NubefactToken(id, token, "/api/v1/public/nubefact/" + company.id)).build();
+        return Response.status(201).entity(new NubefactToken(id, token, "/api/v1/public/nubefact/" + company.getId())).build();
     }
 
     /** The company's adapter tokens (never the token itself). */

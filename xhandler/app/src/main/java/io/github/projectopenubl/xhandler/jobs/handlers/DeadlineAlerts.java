@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEvent;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
 
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
@@ -29,7 +29,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 public class DeadlineAlerts implements JobHandler {
 
     /** Fired with the tenant open, in the alert's transaction (tenant notifications observe it). */
-    public record DocumentAtRisk(Document document) {}
+    public record DocumentAtRisk(DocumentEntity document) {}
 
     private final EntityManager em;
     private final TenantAccess access;
@@ -68,18 +68,18 @@ public class DeadlineAlerts implements JobHandler {
         for (AtRisk risk : documents) {
             boolean sent = QuarkusTransaction.requiringNew().call(() -> {
                 access.enterAsPlatform(risk.tenantId());
-                Document doc = Document.findById(risk.documentId(), LockModeType.PESSIMISTIC_WRITE);
-                if (doc == null || doc.deadlineAlertedAt != null || (doc.definitive() && !"exception".equals(doc.status))) {
+                DocumentEntity doc = DocumentEntity.findById(risk.documentId(), LockModeType.PESSIMISTIC_WRITE);
+                if (doc == null || doc.getDeadlineAlertedAt() != null || (doc.definitive() && !"exception".equals(doc.getStatus()))) {
                     return false;
                 }
-                doc.deadlineAlertedAt = Instant.now();
-                boolean late = doc.deadlineAt.isBefore(doc.deadlineAlertedAt);
-                DocumentEvent.record(doc, null, late ? "legal deadline passed without SUNAT's answer" : "legal deadline at risk",
+                doc.setDeadlineAlertedAt(Instant.now());
+                boolean late = doc.getDeadlineAt().isBefore(doc.getDeadlineAlertedAt());
+                DocumentEventEntity.record(doc, null, late ? "legal deadline passed without SUNAT's answer" : "legal deadline at risk",
                         "platform:worker", context.correlationId());
                 Map<String, Object> data = new java.util.LinkedHashMap<>(WebhookEvents.documentData(doc));
-                data.put("deadline_at", doc.deadlineAt.toString());
+                data.put("deadline_at", doc.getDeadlineAt().toString());
                 data.put("late", late);
-                webhooks.publish(doc.tenantId, "document.delayed", "xh:document:" + doc.id, WebhookEvents.DOCUMENT_SCHEMA, data);
+                webhooks.publish(doc.getTenantId(), "document.delayed", "xh:document:" + doc.getId(), WebhookEvents.DOCUMENT_SCHEMA, data);
                 atRisk.fire(new DocumentAtRisk(doc));
                 return true;
             });

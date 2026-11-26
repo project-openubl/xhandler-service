@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.jobs.Jobs;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Job;
+import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
@@ -72,7 +72,7 @@ public class JobResource {
             params.put("name", name);
         }
         query.append(" order by createdAt desc");
-        List<Job> page = Job.<Job>find(query.toString(), params).range(from, from + size - 1).list();
+        List<JobEntity> page = JobEntity.<JobEntity>find(query.toString(), params).range(from, from + size - 1).list();
         return new Page<>(page.stream().map(JobResource::view).toList(), size, from);
     }
 
@@ -82,7 +82,7 @@ public class JobResource {
     @Transactional
     public JobView get(@PathParam("tenantId") UUID tenantId, @PathParam("jobId") UUID jobId) {
         access.enter(tenantId, Role.VIEWER);
-        Job job = Job.findById(jobId);
+        JobEntity job = JobEntity.findById(jobId);
         if (job == null) {
             throw ApiException.notFound();
         }
@@ -95,24 +95,24 @@ public class JobResource {
     @Transactional
     public JobView cancel(@PathParam("tenantId") UUID tenantId, @PathParam("jobId") UUID jobId) {
         access.enter(tenantId, Role.OPERATOR);
-        Job job = Job.findById(jobId);
+        JobEntity job = JobEntity.findById(jobId);
         if (job == null) {
             throw ApiException.notFound();
         }
-        if (!"waiting".equals(job.state) && !"running".equals(job.state)) {
+        if (!"waiting".equals(job.getState()) && !"running".equals(job.getState())) {
             throw ApiException.conflict("job_finished", "El trabajo ya terminó.");
         }
-        if ("document.attempt".equals(job.name)) {
+        if ("document.attempt".equals(job.getName())) {
             // SUNAT attempts are controlled through the document (hold/release), never canceled
             throw ApiException.conflict("job_not_cancelable", "Los envíos a SUNAT se controlan desde el documento.");
         }
         jobs.cancel(jobId);
-        Job.getEntityManager().refresh(job);
+        JobEntity.getEntityManager().refresh(job);
         return view(job);
     }
 
-    static JobView view(Job j) {
-        return new JobView(j.id, "xh:job:" + j.id, j.name, j.state, j.priorityClass, j.createdAt, j.unblockedAt, j.startedAt,
-                j.finishedAt, j.worker, j.attempt, List.of(j.reservedResources), j.createdResources, j.result, j.error, j.correlationId);
+    static JobView view(JobEntity j) {
+        return new JobView(j.getId(), "xh:job:" + j.getId(), j.getName(), j.getState(), j.getPriorityClass(), j.getCreatedAt(), j.getUnblockedAt(), j.getStartedAt(),
+                j.getFinishedAt(), j.getWorker(), j.getAttempt(), List.of(j.getReservedResources()), j.getCreatedResources(), j.getResult(), j.getError(), j.getCorrelationId());
     }
 }

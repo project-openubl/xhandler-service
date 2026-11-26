@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.managers;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Series;
+import io.github.projectopenubl.xhandler.models.jpa.entities.SeriesEntity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -122,14 +122,14 @@ public class Numbering {
      */
     @Transactional(Transactional.TxType.MANDATORY)
     public String defaultSerie(UUID companyId, String sunatEnv, String tipoComprobante, String prefix) {
-        List<Series> candidates = Series.list(
+        List<SeriesEntity> candidates = SeriesEntity.list(
                 "companyId = ?1 and sunatEnv = ?2 and tipoComprobante = ?3 and active order by isDefault desc, serie",
                 companyId, sunatEnv, tipoComprobante);
         return candidates.stream()
-                .filter(s -> prefix == null || s.serie.startsWith(prefix))
+                .filter(s -> prefix == null || s.getSerie().startsWith(prefix))
                 .findFirst()
                 .or(() -> candidates.stream().findFirst())
-                .map(s -> s.serie)
+                .map(s -> s.getSerie())
                 .orElseThrow(() -> ApiException.invalid("series_not_found",
                         "La empresa no tiene una serie activa para el tipo de comprobante " + tipoComprobante + ".", null));
     }

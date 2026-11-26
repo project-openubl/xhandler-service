@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
-import io.github.projectopenubl.xhandler.models.jpa.entities.OseEndpoint;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.OseEndpointEntity;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -65,9 +65,9 @@ public class RouteResource {
     @Transactional
     public RouteView set(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid RouteChange change) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.findForUpdate(companyId);
+        CompanyEntity company = CompanyResource.findForUpdate(companyId);
         if ("sunat".equals(change.submissionRoute())) {
-            if (company.oseObligated) {
+            if (company.isOseObligated()) {
                 throw ApiException.conflict("ose_obligated", "La empresa está obligada a emitir a través de un OSE.");
             }
         } else {
@@ -79,29 +79,29 @@ public class RouteResource {
             if (ose.perceptionUrl() != null) {
                 egress.check(ose.perceptionUrl());
             }
-            OseEndpoint endpoint = OseEndpoint.of(company.id).orElseGet(() -> {
-                OseEndpoint e = new OseEndpoint();
-                e.id = Ids.newId();
-                e.tenantId = company.tenantId;
-                e.companyId = company.id;
-                e.createdAt = Instant.now();
+            OseEndpointEntity endpoint = OseEndpointEntity.of(company.getId()).orElseGet(() -> {
+                OseEndpointEntity e = new OseEndpointEntity();
+                e.setId(Ids.newId());
+                e.setTenantId(company.getTenantId());
+                e.setCompanyId(company.getId());
+                e.setCreatedAt(Instant.now());
                 return e;
             });
-            endpoint.name = ose.name().strip();
-            endpoint.invoiceUrl = ose.invoiceUrl();
-            endpoint.perceptionUrl = ose.perceptionUrl();
-            endpoint.updatedAt = Instant.now();
+            endpoint.setName(ose.name().strip());
+            endpoint.setInvoiceUrl(ose.invoiceUrl());
+            endpoint.setPerceptionUrl(ose.perceptionUrl());
+            endpoint.setUpdatedAt(Instant.now());
             endpoint.persist();
             credentials.store(scope, company, "ose", Map.of("username", ose.username(), "password", ose.password()), ose.name());
         }
-        company.submissionRoute = change.submissionRoute();
+        company.setSubmissionRoute(change.submissionRoute());
         auditor.record(scope, "company.route_changed", "company", companyId, Map.of("route", change.submissionRoute()));
         return view(company);
     }
 
-    static RouteView view(Company company) {
-        OseEndpoint ose = OseEndpoint.of(company.id).orElse(null);
-        return new RouteView(company.submissionRoute, company.oseObligated, ose == null ? null : ose.name,
-                ose == null ? null : ose.invoiceUrl, ose == null ? null : ose.perceptionUrl);
+    static RouteView view(CompanyEntity company) {
+        OseEndpointEntity ose = OseEndpointEntity.of(company.getId()).orElse(null);
+        return new RouteView(company.getSubmissionRoute(), company.isOseObligated(), ose == null ? null : ose.getName(),
+                ose == null ? null : ose.getInvoiceUrl(), ose == null ? null : ose.getPerceptionUrl());
     }
 }

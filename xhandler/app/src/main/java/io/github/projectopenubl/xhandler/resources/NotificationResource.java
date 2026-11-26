@@ -6,7 +6,7 @@ import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Tenant;
+import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.persistence.EntityManager;
@@ -125,11 +125,11 @@ public class NotificationResource {
     @Transactional
     public NotificationSettings getSettings(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        Tenant tenant = Tenant.findById(tenantId);
+        TenantEntity tenant = TenantEntity.findById(tenantId);
         if (tenant == null) {
             throw ApiException.notFound();
         }
-        return new NotificationSettings(tenant.notificationEmail);
+        return new NotificationSettings(tenant.getNotificationEmail());
     }
 
     @Operation(operationId = "updateNotificationSettings")
@@ -138,10 +138,10 @@ public class NotificationResource {
     @Transactional
     public NotificationSettings settings(@PathParam("tenantId") UUID tenantId, @Valid NotificationSettings settings) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Tenant tenant = Tenant.findById(tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
-        tenant.notificationEmail = settings.notificationEmail() == null || settings.notificationEmail().isBlank()
-                ? null : settings.notificationEmail().strip();
+        TenantEntity tenant = TenantEntity.findById(tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        tenant.setNotificationEmail(settings.notificationEmail() == null || settings.notificationEmail().isBlank()
+                ? null : settings.notificationEmail().strip());
         auditor.record(scope, "tenant.notification_email_changed", "tenant", tenantId);
-        return new NotificationSettings(tenant.notificationEmail);
+        return new NotificationSettings(tenant.getNotificationEmail());
     }
 }

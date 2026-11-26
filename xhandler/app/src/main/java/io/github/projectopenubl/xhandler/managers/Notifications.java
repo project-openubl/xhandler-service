@@ -4,12 +4,12 @@ import io.github.projectopenubl.xhandler.jobs.handlers.NotificationEmailJob;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.jobs.handlers.DeadlineAlerts;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Tenant;
+import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -62,34 +62,34 @@ public class Notifications {
                     .setParameter("title", title).setParameter("body", body).setParameter("document", documentId)
                     .executeUpdate();
         }
-        Tenant tenant = Tenant.findById(tenantId);
-        if (email && tenant != null && tenant.notificationEmail != null) {
+        TenantEntity tenant = TenantEntity.findById(tenantId);
+        if (email && tenant != null && tenant.getNotificationEmail() != null) {
             jobs.enqueue(new TenantScope(tenantId, Actor.PLATFORM, Role.PLATFORM), NotificationEmailJob.NAME, 3,
-                    Map.of("to", tenant.notificationEmail, "title", title, "body", body), List.of(), null);
+                    Map.of("to", tenant.getNotificationEmail(), "title", title, "body", body), List.of(), null);
         }
     }
 
     void onStatusChanged(@Observes DocumentStatusChanged change) {
-        Document d = change.document();
+        DocumentEntity d = change.document();
         if (d.isSummary()) {
             return;
         }
-        if ("exception".equals(d.status)) {
-            publish(d.tenantId, DOCUMENT_EXCEPTION, "Documento con error: " + d.serieNumero(),
-                    "SUNAT no aceptó procesar el documento " + d.serieNumero() + ": " + nz(d.sunatDescription)
-                            + ". Corrija la causa y reenvíelo.", d.id);
-        } else if ("rejected".equals(d.status) && d.deliveredAt != null) {
-            publish(d.tenantId, REJECTED_AFTER_DELIVERY, "Documento rechazado ya entregado: " + d.serieNumero(),
-                    "SUNAT rechazó el documento " + d.serieNumero() + ", que ya fue entregado al comprador: " + nz(d.sunatDescription)
-                            + ". Avise al comprador.", d.id);
+        if ("exception".equals(d.getStatus())) {
+            publish(d.getTenantId(), DOCUMENT_EXCEPTION, "Documento con error: " + d.serieNumero(),
+                    "SUNAT no aceptó procesar el documento " + d.serieNumero() + ": " + nz(d.getSunatDescription())
+                            + ". Corrija la causa y reenvíelo.", d.getId());
+        } else if ("rejected".equals(d.getStatus()) && d.getDeliveredAt() != null) {
+            publish(d.getTenantId(), REJECTED_AFTER_DELIVERY, "Documento rechazado ya entregado: " + d.serieNumero(),
+                    "SUNAT rechazó el documento " + d.serieNumero() + ", que ya fue entregado al comprador: " + nz(d.getSunatDescription())
+                            + ". Avise al comprador.", d.getId());
         }
     }
 
     void onAtRisk(@Observes DeadlineAlerts.DocumentAtRisk risk) {
-        Document d = risk.document();
-        publish(d.tenantId, DOCUMENT_AT_RISK, "Documento cerca de su plazo: " + d.serieNumero(),
-                "El documento " + d.serieNumero() + " aún no tiene respuesta de SUNAT y su plazo legal vence el " + d.deadlineAt
-                        + ". Se sigue reintentando.", d.id);
+        DocumentEntity d = risk.document();
+        publish(d.getTenantId(), DOCUMENT_AT_RISK, "Documento cerca de su plazo: " + d.serieNumero(),
+                "El documento " + d.serieNumero() + " aún no tiene respuesta de SUNAT y su plazo legal vence el " + d.getDeadlineAt()
+                        + ". Se sigue reintentando.", d.getId());
     }
 
     private static String nz(String value) {

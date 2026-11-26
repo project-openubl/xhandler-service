@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.files.FileStore;
@@ -44,7 +44,7 @@ public class AccessLinks {
 
     /** Creates a link; the token is only ever returned here. Runs with the document's tenant open. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public String create(Document document) {
+    public String create(DocumentEntity document) {
         byte[] raw = new byte[16];
         RANDOM.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
@@ -52,8 +52,8 @@ public class AccessLinks {
                         INSERT INTO xhandler.access_token (id, tenant_id, document_id, token_hash, expires_at)
                         VALUES (:id, :tenant, :document, :hash, :expires)""")
                 .setParameter("id", Ids.newId())
-                .setParameter("tenant", document.tenantId)
-                .setParameter("document", document.id)
+                .setParameter("tenant", document.getTenantId())
+                .setParameter("document", document.getId())
                 .setParameter("hash", hash(token))
                 .setParameter("expires", Instant.now().plus(validity))
                 .executeUpdate();

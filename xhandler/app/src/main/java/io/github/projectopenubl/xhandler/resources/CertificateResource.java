@@ -2,12 +2,12 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.keys.CertificateImporter;
 import io.github.projectopenubl.xhandler.keys.KeyVault;
-import io.github.projectopenubl.xhandler.models.jpa.entities.SigningKey;
+import io.github.projectopenubl.xhandler.models.jpa.entities.SigningKeyEntity;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -61,7 +61,7 @@ public class CertificateResource {
             @RestForm("password") String password) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         // Serializes concurrent uploads for the same company
-        Company company = CompanyResource.findForUpdate(companyId);
+        CompanyEntity company = CompanyResource.findForUpdate(companyId);
         if (file == null || password == null) {
             throw ApiException.invalid("invalid_request", "Debe enviar el archivo .pfx y su contraseña.", null);
         }
@@ -76,20 +76,20 @@ public class CertificateResource {
             Arrays.fill(pkcs12, (byte) 0);
         }
 
-        java.util.Optional<SigningKey> previous = SigningKey.active(company.id);
-        previous.ifPresent(p -> p.status = "replaced");
+        java.util.Optional<SigningKeyEntity> previous = SigningKeyEntity.active(company.getId());
+        previous.ifPresent(p -> p.setStatus("replaced"));
         // The previous key must stop being "active" before the new one is inserted (unique index)
-        SigningKey.flush();
+        SigningKeyEntity.flush();
 
-        SigningKey key = new SigningKey();
-        key.id = Ids.newId();
-        key.tenantId = tenantId;
-        key.companyId = company.id;
-        key.keyRef = vault.storePrivateKey(imported.privateKey(), imported.certificate());
+        SigningKeyEntity key = new SigningKeyEntity();
+        key.setId(Ids.newId());
+        key.setTenantId(tenantId);
+        key.setCompanyId(company.getId());
+        key.setKeyRef(vault.storePrivateKey(imported.privateKey(), imported.certificate()));
         // Keep the vault in step with the database: drop the new key if the transaction rolls
         // back, and the replaced one once it commits
-        String newRef = key.keyRef;
-        String replacedRef = previous.map(p -> p.keyRef).orElse(null);
+        String newRef = key.getKeyRef();
+        String replacedRef = previous.map(p -> p.getKeyRef()).orElse(null);
         transactions.registerInterposedSynchronization(new jakarta.transaction.Synchronization() {
             @Override
             public void beforeCompletion() {}
@@ -106,24 +106,24 @@ public class CertificateResource {
             }
         });
         try {
-            key.certificate = imported.certificate().getEncoded();
+            key.setCertificate(imported.certificate().getEncoded());
         } catch (CertificateEncodingException e) {
             throw ApiException.invalid("invalid_certificate", "El certificado digital no es válido.", e.getMessage());
         }
-        key.subject = imported.certificate().getSubjectX500Principal().getName();
-        key.issuer = imported.certificate().getIssuerX500Principal().getName();
-        key.serial = imported.certificate().getSerialNumber().toString(16);
-        key.ruc = imported.ruc().orElse(null);
-        key.validFrom = imported.certificate().getNotBefore().toInstant();
-        key.validUntil = imported.certificate().getNotAfter().toInstant();
+        key.setSubject(imported.certificate().getSubjectX500Principal().getName());
+        key.setIssuer(imported.certificate().getIssuerX500Principal().getName());
+        key.setSerial(imported.certificate().getSerialNumber().toString(16));
+        key.setRuc(imported.ruc().orElse(null));
+        key.setValidFrom(imported.certificate().getNotBefore().toInstant());
+        key.setValidUntil(imported.certificate().getNotAfter().toInstant());
         key.persist();
 
         // A matching RUC is informative only: anyone can make a self-signed certificate with any
         // RUC. The RUC is verified by a SUNAT SOL login (P3), or later by checking the chain against
         // the CAs SUNAT accepts.
-        boolean rucMatches = company.ruc.equals(key.ruc);
-        auditor.record(scope, "certificate.imported", "signing_key", key.id,
-                Map.of("company_id", company.id.toString(), "serial", key.serial, "ruc_matches", rucMatches));
+        boolean rucMatches = company.getRuc().equals(key.getRuc());
+        auditor.record(scope, "certificate.imported", "signing_key", key.getId(),
+                Map.of("company_id", company.getId().toString(), "serial", key.getSerial(), "ruc_matches", rucMatches));
         return view(key, company);
     }
 
@@ -132,12 +132,12 @@ public class CertificateResource {
     @Transactional
     public CertificateView get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
-        Company company = CompanyResource.find(companyId);
-        return SigningKey.active(company.id).map(k -> view(k, company)).orElseThrow(ApiException::notFound);
+        CompanyEntity company = CompanyResource.find(companyId);
+        return SigningKeyEntity.active(company.getId()).map(k -> view(k, company)).orElseThrow(ApiException::notFound);
     }
 
-    private static CertificateView view(SigningKey k, Company company) {
-        return new CertificateView(k.subject, k.issuer, k.serial, k.ruc, k.validFrom, k.validUntil, company.ruc.equals(k.ruc));
+    private static CertificateView view(SigningKeyEntity k, CompanyEntity company) {
+        return new CertificateView(k.getSubject(), k.getIssuer(), k.getSerial(), k.getRuc(), k.getValidFrom(), k.getValidUntil(), company.getRuc().equals(k.getRuc()));
     }
 
     private static byte[] readFile(FileUpload file) {

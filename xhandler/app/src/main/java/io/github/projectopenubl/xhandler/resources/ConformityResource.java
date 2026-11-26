@@ -5,7 +5,7 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -69,7 +69,7 @@ public class ConformityResource {
         Object[] r = rows.get(0);
         Map<String, Object> creditNote = null;
         if ("objected".equals(r[4])) {
-            creditNote = creditNote13(Document.findById(documentId));
+            creditNote = creditNote13(DocumentEntity.findById(documentId));
         }
         return view(r, creditNote);
     }
@@ -130,17 +130,17 @@ public class ConformityResource {
      * The guided correction after an objection: a credit note type 13 (ajustes de montos y/o fechas
      * de pago) on the factura, to complete with the corrected cuotas and send to {@code POST /documents}.
      */
-    static Map<String, Object> creditNote13(Document d) {
+    static Map<String, Object> creditNote13(DocumentEntity d) {
         Map<String, Object> cliente = new LinkedHashMap<>();
-        cliente.put("tipo_documento_identidad", d.customerTipo);
-        cliente.put("numero_documento_identidad", d.customerNumero);
-        cliente.put("nombre", d.customerNombre);
+        cliente.put("tipo_documento_identidad", d.getCustomerTipo());
+        cliente.put("numero_documento_identidad", d.getCustomerNumero());
+        cliente.put("nombre", d.getCustomerNombre());
         Map<String, Object> spec = new LinkedHashMap<>();
         spec.put("tipo_nota", "13");
         spec.put("comprobante_afectado_tipo", "01");
         spec.put("comprobante_afectado_serie_numero", d.serieNumero());
         spec.put("descripcion_sustento", "Ajuste del monto neto pendiente de pago y/o de las fechas de vencimiento");
-        spec.put("moneda", d.moneda);
+        spec.put("moneda", d.getMoneda());
         spec.put("cliente", cliente);
         spec.put("forma_pago", Map.of("tipo", "Credito", "cuotas", List.of()));
         spec.put("detalles", List.of());

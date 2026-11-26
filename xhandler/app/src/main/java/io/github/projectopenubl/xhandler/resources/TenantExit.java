@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Job;
+import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
@@ -13,7 +13,7 @@ import io.github.projectopenubl.xhandler.pdf.DocumentPdf;
 import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Tenant;
+import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -104,8 +104,8 @@ public class TenantExit {
         UUID id = Ids.newId();
         em.createNativeQuery("INSERT INTO xhandler.tenant_export (id, tenant_id, requested_by) VALUES (:id, :t, :by)")
                 .setParameter("id", id).setParameter("t", tenantId).setParameter("by", scope.actor().auditName()).executeUpdate();
-        Job job = jobs.enqueue(scope, Export.NAME, 4, Map.of("export_id", id.toString()), List.of("export:" + tenantId), null);
-        em.createNativeQuery("UPDATE xhandler.tenant_export SET job_id = :j WHERE id = :id").setParameter("j", job.id).setParameter("id", id)
+        JobEntity job = jobs.enqueue(scope, Export.NAME, 4, Map.of("export_id", id.toString()), List.of("export:" + tenantId), null);
+        em.createNativeQuery("UPDATE xhandler.tenant_export SET job_id = :j WHERE id = :id").setParameter("j", job.getId()).setParameter("id", id)
                 .executeUpdate();
         auditor.record(scope, "tenant.export_requested", "tenant", tenantId, Map.of());
         return Response.status(202).entity(view(id)).build();
@@ -160,11 +160,11 @@ public class TenantExit {
     @Transactional
     public ExitView exit(@PathParam("tenantId") UUID tenantId, @Valid ExitRequest request) {
         TenantScope scope = access.enter(tenantId, Role.OWNER);
-        Tenant tenant = Tenant.findById(tenantId);
-        if (!"active".equals(tenant.status)) {
+        TenantEntity tenant = TenantEntity.findById(tenantId);
+        if (!"active".equals(tenant.getStatus())) {
             throw ApiException.conflict("not_active", "La organización no está activa.");
         }
-        if (!tenant.name.equals(request.confirmName())) {
+        if (!tenant.getName().equals(request.confirmName())) {
             throw ApiException.invalid("invalid_request", "Escriba el nombre exacto de la organización para confirmar.", null);
         }
         long open = ((Number) em.createNativeQuery("""
@@ -181,7 +181,7 @@ public class TenantExit {
             throw ApiException.conflict("export_required",
                     "Descargue primero una exportación completa, posterior al último comprobante (de los últimos 30 días).");
         }
-        Instant deleteAfter = tenant.archivePlan ? null : Instant.now().plus(DELETE_AFTER);
+        Instant deleteAfter = tenant.isArchivePlan() ? null : Instant.now().plus(DELETE_AFTER);
         em.createNativeQuery("""
                         UPDATE xhandler.tenant SET exit_requested_at = now(), delete_after = :d, status = 'exited', updated_at = now()
                         WHERE id = :id""").setParameter("d", deleteAfter).setParameter("id", tenantId).executeUpdate();

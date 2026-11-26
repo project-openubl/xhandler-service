@@ -9,7 +9,7 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
 import io.github.projectopenubl.xhandler.managers.RegisterRows;
@@ -96,18 +96,18 @@ public class SireResource {
             @PathParam("book") String book, @PathParam("period") String period) {
         check(book, period);
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        Company company = CompanyResource.find(companyId);
-        if ("beta".equals(company.sunatEnv)) {
+        CompanyEntity company = CompanyResource.find(companyId);
+        if ("beta".equals(company.getSunatEnv())) {
             throw ApiException.conflict("sire_not_available", "SUNAT no tiene ambiente de pruebas para SIRE.");
         }
         int created = em.createNativeQuery("""
                         INSERT INTO xhandler.sire_period (id, tenant_id, company_id, sunat_env, book, period, status, requested_by)
                         VALUES (:id, :t, :c, :env, :b, :p, 'requested', :by) ON CONFLICT (company_id, sunat_env, book, period) DO NOTHING""")
-                .setParameter("id", Ids.newId()).setParameter("t", tenantId).setParameter("c", companyId).setParameter("env", company.sunatEnv)
+                .setParameter("id", Ids.newId()).setParameter("t", tenantId).setParameter("c", companyId).setParameter("env", company.getSunatEnv())
                 .setParameter("b", book).setParameter("p", period).setParameter("by", scope.actor().auditName()).executeUpdate();
         Object[] existing = (Object[]) em.createNativeQuery("""
                         SELECT id, status FROM xhandler.sire_period WHERE company_id = :c AND sunat_env = :env AND book = :b AND period = :p FOR UPDATE""")
-                .setParameter("c", companyId).setParameter("env", company.sunatEnv).setParameter("b", book).setParameter("p", period)
+                .setParameter("c", companyId).setParameter("env", company.getSunatEnv()).setParameter("b", book).setParameter("p", period)
                 .getSingleResult();
         UUID id = (UUID) existing[0];
         if (created == 0) {
@@ -147,8 +147,8 @@ public class SireResource {
             @PathParam("period") String period, ReplaceRequest request) {
         check(book, period);
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.find(companyId);
-        UUID id = find(companyId, company.sunatEnv, book, period);
+        CompanyEntity company = CompanyResource.find(companyId);
+        UUID id = find(companyId, company.getSunatEnv(), book, period);
         boolean acknowledge = request != null && Boolean.TRUE.equals(request.acknowledgeDifferences());
         boolean confirmed = request != null && Boolean.TRUE.equals(request.confirmNotReceived());
         Object[] row = (Object[]) em.createNativeQuery("SELECT status, cast(reconciliation AS text) FROM xhandler.sire_period WHERE id = :id FOR UPDATE")
@@ -172,12 +172,12 @@ public class SireResource {
             throw ApiException.conflict("sire_differences",
                     "La propuesta de SUNAT no coincide con los comprobantes registrados. Revise la conciliación y confirme las diferencias.");
         }
-        long unresolved = "rvie".equals(book) ? registers.unresolved(companyId, company.sunatEnv, period) : 0;
+        long unresolved = "rvie".equals(book) ? registers.unresolved(companyId, company.getSunatEnv(), period) : 0;
         if (unresolved > 0) {
             throw ApiException.conflict("sire_unresolved_documents",
                     "Hay " + unresolved + " comprobantes del periodo sin respuesta definitiva de SUNAT. Espere a que se resuelvan.");
         }
-        List<RegisterRows.Row> rows = "rvie".equals(book) ? registers.sales(companyId, company.sunatEnv, period) : registers.purchases(companyId, period);
+        List<RegisterRows.Row> rows = "rvie".equals(book) ? registers.sales(companyId, company.getSunatEnv(), period) : registers.purchases(companyId, period);
         long missing = rows.stream().filter(RegisterRows.Row::amountsMissing).count();
         if (missing > 0) {
             throw ApiException.conflict("amounts_pending",
@@ -201,8 +201,8 @@ public class SireResource {
             @PathParam("period") String period) {
         check(book, period);
         access.enter(tenantId, Role.VIEWER);
-        Company company = CompanyResource.find(companyId);
-        return view(find(companyId, company.sunatEnv, book, period));
+        CompanyEntity company = CompanyResource.find(companyId);
+        return view(find(companyId, company.getSunatEnv(), book, period));
     }
 
     /** The company's SIRE periods in its current environment, the latest period first. */
@@ -216,7 +216,7 @@ public class SireResource {
             throw ApiException.invalid("invalid_request", "book debe ser rvie o rce.", "book");
         }
         access.enter(tenantId, Role.VIEWER);
-        Company company = CompanyResource.find(companyId);
+        CompanyEntity company = CompanyResource.find(companyId);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
         @SuppressWarnings("unchecked")
@@ -225,7 +225,7 @@ public class SireResource {
                                updated_at
                         FROM xhandler.sire_period WHERE company_id = :c AND sunat_env = :env AND (CAST(:b AS text) IS NULL OR book = :b)
                         ORDER BY period DESC, book LIMIT :l OFFSET :o""")
-                .setParameter("c", companyId).setParameter("env", company.sunatEnv).setParameter("b", book).setParameter("l", size)
+                .setParameter("c", companyId).setParameter("env", company.getSunatEnv()).setParameter("b", book).setParameter("l", size)
                 .setParameter("o", start).getResultList();
         return new Page<>(rows.stream().map(r -> new SirePeriodSummary((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], (String) r[4],
                 (String) r[5], (Boolean) r[6], (Boolean) r[7], Times.toInstant(r[8]), Times.toInstant(r[9]))).toList(), size, start);
@@ -243,8 +243,8 @@ public class SireResource {
             @PathParam("period") String period, @PathParam("kind") String kind) {
         check(book, period);
         TenantScope scope = access.enter(tenantId, Role.VIEWER);
-        Company company = CompanyResource.find(companyId);
-        UUID id = find(companyId, company.sunatEnv, book, period);
+        CompanyEntity company = CompanyResource.find(companyId);
+        UUID id = find(companyId, company.getSunatEnv(), book, period);
         String column = switch (kind) {
             case "proposal" -> "proposal_ref";
             case "replacement" -> "replacement_ref";

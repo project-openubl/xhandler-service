@@ -4,7 +4,7 @@ import io.github.projectopenubl.xhandler.managers.Entitlements;
 
 import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Tenant;
+import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.transaction.Transactional;
@@ -43,8 +43,8 @@ public class BillingResource {
     @Transactional
     public BillingView get(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        Tenant tenant = Tenant.findById(tenantId);
-        return new BillingView(entitlements.usage(tenantId), tenant.billingRuc, tenant.billingName, tenant.billingEmail);
+        TenantEntity tenant = TenantEntity.findById(tenantId);
+        return new BillingView(entitlements.usage(tenantId), tenant.getBillingRuc(), tenant.getBillingName(), tenant.getBillingEmail());
     }
 
     @Operation(operationId = "updateBillingDetails")
@@ -52,10 +52,10 @@ public class BillingResource {
     @Transactional
     public BillingView details(@PathParam("tenantId") UUID tenantId, @Valid BillingDetails details) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Tenant tenant = Tenant.findById(tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
-        tenant.billingRuc = details.billingRuc();
-        tenant.billingName = details.billingName();
-        tenant.billingEmail = details.billingEmail();
+        TenantEntity tenant = TenantEntity.findById(tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        tenant.setBillingRuc(details.billingRuc());
+        tenant.setBillingName(details.billingName());
+        tenant.setBillingEmail(details.billingEmail());
         auditor.record(scope, "tenant.billing_updated", "tenant", tenantId);
         return get(tenantId);
     }

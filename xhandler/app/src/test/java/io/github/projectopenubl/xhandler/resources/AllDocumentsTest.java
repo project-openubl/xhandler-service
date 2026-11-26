@@ -151,9 +151,9 @@ class AllDocumentsTest {
                 .body("kind", equalTo("delivered_use_credit_note"));
 
         String old = docs.pending(tenant, company, "t-" + UUID.randomUUID() + ":invoice", d -> {
-            d.status = "accepted";
-            d.nextAttemptAt = null;
-            d.fechaEmision = Deadlines.todayInLima().minusDays(8);
+            d.setStatus("accepted");
+            d.setNextAttemptAt(null);
+            d.setFechaEmision(Deadlines.todayInLima().minusDays(8));
         }).id().toString();
         as("alice").body(voidRequest()).post(base + "/documents/" + old + "/void").then().statusCode(409)
                 .body("kind", equalTo("void_window_passed"));
@@ -239,9 +239,9 @@ class AllDocumentsTest {
     void the_voiding_window_includes_the_seventh_day() {
         summariesByTicket(null);
         String day7 = docs.pending(tenant, company, "t-" + UUID.randomUUID() + ":invoice", d -> {
-            d.status = "accepted";
-            d.nextAttemptAt = null;
-            d.fechaEmision = Deadlines.todayInLima().minusDays(7);
+            d.setStatus("accepted");
+            d.setNextAttemptAt(null);
+            d.setFechaEmision(Deadlines.todayInLima().minusDays(7));
         }).id().toString();
         as("alice").body(voidRequest()).post(base + "/documents/" + day7 + "/void").then().statusCode(202);
     }

@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 
 import static io.github.projectopenubl.xhandler.Api.as;
 import static io.github.projectopenubl.xhandler.Api.createCompany;
@@ -72,9 +72,9 @@ class CompanyTest {
     private void verify(UUID tenant, UUID company) {
         io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            Company c = Company.findById(company);
-            c.rucVerifiedAt = java.time.Instant.now();
-            Company.flush();
+            CompanyEntity c = CompanyEntity.findById(company);
+            c.setRucVerifiedAt(java.time.Instant.now());
+            CompanyEntity.flush();
         });
     }
 

@@ -1,9 +1,9 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.CredentialService;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Credential;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CredentialEntity;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -51,9 +51,9 @@ public class CredentialResource {
     @Transactional
     public List<CredentialView> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
-        Company company = CompanyResource.find(companyId);
-        List<Credential> list = Credential.list("companyId = ?1 order by kind", company.id);
-        return list.stream().map(c -> new CredentialView(c.kind, c.label, c.updatedAt)).toList();
+        CompanyEntity company = CompanyResource.find(companyId);
+        List<CredentialEntity> list = CredentialEntity.list("companyId = ?1 order by kind", company.getId());
+        return list.stream().map(c -> new CredentialView(c.getKind(), c.getLabel(), c.getUpdatedAt())).toList();
     }
 
     @Operation(operationId = "setSolCredentials")
@@ -63,10 +63,10 @@ public class CredentialResource {
     public CredentialView putSol(
             @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SolCredentials request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.find(companyId);
-        Credential stored = credentials.store(scope, company, "sol",
+        CompanyEntity company = CompanyResource.find(companyId);
+        CredentialEntity stored = credentials.store(scope, company, "sol",
                 Map.of("username", request.username(), "password", request.password()), mask(request.username()));
-        return new CredentialView(stored.kind, stored.label, Instant.now());
+        return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
     }
 
     /** GRE REST API (DESIGN.md §3.1): the SOL user plus the API client created in SOL. */
@@ -80,10 +80,10 @@ public class CredentialResource {
     public CredentialView putGre(
             @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid GreCredentials request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.find(companyId);
-        Credential stored = credentials.store(scope, company, "gre", Map.of("username", request.username(), "password",
+        CompanyEntity company = CompanyResource.find(companyId);
+        CredentialEntity stored = credentials.store(scope, company, "gre", Map.of("username", request.username(), "password",
                 request.password(), "client_id", request.clientId(), "client_secret", request.clientSecret()), mask(request.username()));
-        return new CredentialView(stored.kind, stored.label, Instant.now());
+        return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
     }
 
     /**
@@ -100,12 +100,12 @@ public class CredentialResource {
     public CredentialView putSire(
             @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SireCredentials request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.find(companyId);
-        Credential stored = credentials.store(scope, company, "sire", Map.of("username", request.username(), "password",
+        CompanyEntity company = CompanyResource.find(companyId);
+        CredentialEntity stored = credentials.store(scope, company, "sire", Map.of("username", request.username(), "password",
                 request.password(), "client_id", request.clientId(), "client_secret", request.clientSecret()), mask(request.username()));
         // SIRE periods waiting for credentials resume where they stopped
-        sire.resumeAfterCredentials(company.id);
-        return new CredentialView(stored.kind, stored.label, Instant.now());
+        sire.resumeAfterCredentials(company.getId());
+        return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
     }
 
     /** The tenant's own SMTP server for document emails (DESIGN.md §11.6). */
@@ -120,14 +120,14 @@ public class CredentialResource {
     public CredentialView putSmtp(
             @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SmtpCredentials request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.find(companyId);
+        CompanyEntity company = CompanyResource.find(companyId);
         // A tenant-supplied host: it must resolve to public addresses (DESIGN.md §16)
         egress.checkHost(request.host());
         entitlements.requireCustomSmtp(company);
-        Credential stored = credentials.store(scope, company, "smtp", Map.of("host", request.host(), "port", String.valueOf(request.port()),
+        CredentialEntity stored = credentials.store(scope, company, "smtp", Map.of("host", request.host(), "port", String.valueOf(request.port()),
                 "username", request.username(), "password", request.password(), "from", request.from(),
                 "start_tls", String.valueOf(!Boolean.FALSE.equals(request.startTls()))), request.from());
-        return new CredentialView(stored.kind, stored.label, Instant.now());
+        return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
     }
 
     /** A commercial RUC/DNI lookup provider (DESIGN.md §17): URL with {tipo}/{numero}, and the tenant's token. */
@@ -140,14 +140,14 @@ public class CredentialResource {
     public CredentialView putLookup(
             @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid LookupCredentials request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.find(companyId);
+        CompanyEntity company = CompanyResource.find(companyId);
         egress.check(request.url().replace("{tipo}", "ruc").replace("{numero}", "20000000001"));
         Map<String, String> fields = new java.util.HashMap<>(Map.of("url", request.url()));
         if (request.token() != null) {
             fields.put("token", request.token());
         }
-        Credential stored = credentials.store(scope, company, "lookup", fields, java.net.URI.create(request.url().replace("{", "").replace("}", "")).getHost());
-        return new CredentialView(stored.kind, stored.label, Instant.now());
+        CredentialEntity stored = credentials.store(scope, company, "lookup", fields, java.net.URI.create(request.url().replace("{", "").replace("}", "")).getHost());
+        return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
     }
 
     /** "20123456789MODDATOS" → "2012…ATOS" */

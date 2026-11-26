@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.AuditLog;
+import io.github.projectopenubl.xhandler.models.jpa.entities.AuditLogEntity;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -18,15 +18,15 @@ public class Auditor {
 
     @Transactional(Transactional.TxType.MANDATORY)
     public void record(TenantScope scope, String action, String objectType, Object objectId, Map<String, Object> details) {
-        AuditLog entry = new AuditLog();
-        entry.id = Ids.newId();
-        entry.at = Instant.now();
-        entry.tenantId = scope.tenantId();
-        entry.actor = scope.actor().auditName() + (scope.role() == io.github.projectopenubl.xhandler.security.Role.SUPPORT ? " (support)" : "");
-        entry.action = action;
-        entry.objectType = objectType;
-        entry.objectId = objectId == null ? null : objectId.toString();
-        entry.details = details;
+        AuditLogEntity entry = new AuditLogEntity();
+        entry.setId(Ids.newId());
+        entry.setAt(Instant.now());
+        entry.setTenantId(scope.tenantId());
+        entry.setActor(scope.actor().auditName() + (scope.role() == io.github.projectopenubl.xhandler.security.Role.SUPPORT ? " (support)" : ""));
+        entry.setAction(action);
+        entry.setObjectType(objectType);
+        entry.setObjectId(objectId == null ? null : objectId.toString());
+        entry.setDetails(details);
         entry.persist();
     }
 

@@ -1,9 +1,9 @@
 package io.github.projectopenubl.xhandler.keys;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.SigningKey;
+import io.github.projectopenubl.xhandler.models.jpa.entities.SigningKeyEntity;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -42,19 +42,19 @@ public class SigningService {
      * Must run with the company's tenant open (reads its signing key). Beta and the SUNAT fake
      * accept SUNAT's public demo key when the company has no certificate; production never does.
      */
-    public Signed sign(Company company, String xml) {
-        return sign(company, company.sunatEnv, xml);
+    public Signed sign(CompanyEntity company, String xml) {
+        return sign(company, company.getSunatEnv(), xml);
     }
 
     /** Signs for a given environment (a document's own, which may differ after a switch). */
-    public Signed sign(Company company, String sunatEnv, String xml) {
+    public Signed sign(CompanyEntity company, String sunatEnv, String xml) {
         return sign(company, sunatEnv, xml, null);
     }
 
     /** {@code tipoComprobante}: GRE is never signed as PSE (it is always sent by the issuer itself). */
-    public Signed sign(Company company, String sunatEnv, String xml, String tipoComprobante) {
+    public Signed sign(CompanyEntity company, String sunatEnv, String xml, String tipoComprobante) {
         boolean guia = "09".equals(tipoComprobante) || "31".equals(tipoComprobante);
-        if ("pse".equals(company.emissionMode) && !guia) {
+        if ("pse".equals(company.getEmissionMode()) && !guia) {
             // As PSE the platform signs with its own certificate (RS 199-2015 art. 5); the issuer stays liable
             Optional<PlatformKeys.Key> pse = platformKeys.active("pse")
                     .filter(k -> "production".equals(sunatEnv) || k.validUntil().isAfter(java.time.Instant.now()));
@@ -68,7 +68,7 @@ public class SigningService {
                 throw ApiException.invalid("no_platform_certificate", "La plataforma aún no tiene su certificado de PSE.", null);
             }
         }
-        Optional<SigningKey> key = SigningKey.active(company.id);
+        Optional<SigningKeyEntity> key = SigningKeyEntity.active(company.getId());
         if (key.isEmpty()) {
             if (!"production".equals(sunatEnv)) {
                 EngineModels.SignResponse demo = engine.signWithDemoKey(xml);
@@ -77,10 +77,10 @@ public class SigningService {
             throw ApiException.invalid("no_certificate", "La empresa no tiene un certificado digital.", null);
         }
         EngineModels.SignPrepareResponse prepared = engine.signPrepare(xml);
-        String keyRef = key.get().keyRef;
+        String keyRef = key.get().getKeyRef();
         byte[] data = Base64.getDecoder().decode(prepared.dataToSign());
         byte[] signature = hsm.call(() -> vault.sign(keyRef, data));
-        EngineModels.SignResponse signed = engine.signFinalize(xml, signature, key.get().certificate);
-        return new Signed(signed.xml(), signed.digestValue(), key.get().id);
+        EngineModels.SignResponse signed = engine.signFinalize(xml, signature, key.get().getCertificate());
+        return new Signed(signed.xml(), signed.digestValue(), key.get().getId());
     }
 }

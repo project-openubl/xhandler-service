@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.managers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
@@ -81,7 +81,7 @@ public class SireService {
                 ((Number) r[8]).intValue());
     }
 
-    private Optional<EngineModels.ApiCredentials> apiCredentials(TenantScope scope, Company company, String purpose) {
+    private Optional<EngineModels.ApiCredentials> apiCredentials(TenantScope scope, CompanyEntity company, String purpose) {
         return credentials.read(scope, company, "sire", purpose)
                 .map(f -> new EngineModels.ApiCredentials(f.get("client_id"), f.get("client_secret"), f.get("username"), f.get("password")));
     }
@@ -158,7 +158,7 @@ public class SireService {
     /** Asks SUNAT for the proposal of a period in {@code requested} without a ticket; one caller at a time. */
     public void requestProposal(UUID tenantId, UUID id) {
         String claim = CLAIM + UUID.randomUUID();
-        record Call(Period period, Company company, EngineModels.ApiCredentials creds) {}
+        record Call(Period period, CompanyEntity company, EngineModels.ApiCredentials creds) {}
         Call call = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(tenantId);
             int claimed = em.createNativeQuery("""
@@ -171,7 +171,7 @@ public class SireService {
                 return null;
             }
             Period p = load(id);
-            Company company = Company.findById(p.companyId());
+            CompanyEntity company = CompanyEntity.findById(p.companyId());
             return new Call(p, company, apiCredentials(scope, company, "sire:" + id).orElse(null));
         });
         if (call == null) {
@@ -198,7 +198,7 @@ public class SireService {
                 if (transition(tenantId, id, "requested", "proposal_ticket", claim, "credentials",
                         Map.of("proposal_ticket", "", "resume_status", "requested", "detail", "SUNAT rechazó las credenciales de la API SIRE."))) {
                     notify(tenantId, "sire.credentials", "SIRE: credenciales rechazadas",
-                            "SUNAT rechazó las credenciales de la API SIRE de " + call.company().razonSocial + ". Actualícelas para continuar.");
+                            "SUNAT rechazó las credenciales de la API SIRE de " + call.company().getRazonSocial() + ". Actualícelas para continuar.");
                 }
             }
             default -> {
@@ -210,11 +210,11 @@ public class SireService {
 
     /** Follows the ticket of a requested proposal or a submitted replacement, and recovers stale submissions. */
     public void poll(UUID tenantId, UUID id) {
-        record Call(Period period, Company company, EngineModels.ApiCredentials creds) {}
+        record Call(Period period, CompanyEntity company, EngineModels.ApiCredentials creds) {}
         Call call = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(tenantId);
             Period p = load(id);
-            Company company = Company.findById(p.companyId());
+            CompanyEntity company = CompanyEntity.findById(p.companyId());
             return new Call(p, company, apiCredentials(scope, company, "sire:" + id).orElse(null));
         });
         Period p = call.period();
@@ -270,7 +270,7 @@ public class SireService {
             if (transition(tenantId, id, p.status(), ticketColumn, ticket, "error", Map.of("detail",
                     "SUNAT observó el " + (proposal ? "pedido de propuesta" : "reemplazo") + ". Revise el detalle en SUNAT Operaciones en Línea."))) {
                 notify(tenantId, "sire.error", "SIRE: SUNAT observó el registro",
-                        "El registro " + p.book().toUpperCase() + " " + p.period() + " de " + call.company().razonSocial + " tiene observaciones de SUNAT.");
+                        "El registro " + p.book().toUpperCase() + " " + p.period() + " de " + call.company().getRazonSocial() + " tiene observaciones de SUNAT.");
             }
             return;
         }
@@ -278,7 +278,7 @@ public class SireService {
             proposalReady(tenantId, p, ticket, status);
         } else if (transition(tenantId, id, "submitted", ticketColumn, ticket, "accepted", progressed(Map.of("detail", "")))) {
             notify(tenantId, "sire.accepted", "SIRE: registro aceptado",
-                    "SUNAT aceptó el registro " + p.book().toUpperCase() + " " + p.period() + " de " + call.company().razonSocial + ".");
+                    "SUNAT aceptó el registro " + p.book().toUpperCase() + " " + p.period() + " de " + call.company().getRazonSocial() + ".");
         }
     }
 
@@ -311,11 +311,11 @@ public class SireService {
 
     /** Builds the replacement from the stored rows and submits it (a period in {@code submitting}). */
     public void replace(UUID tenantId, UUID id) {
-        record Call(Period period, Company company, EngineModels.ApiCredentials creds, List<RegisterRows.Row> rows) {}
+        record Call(Period period, CompanyEntity company, EngineModels.ApiCredentials creds, List<RegisterRows.Row> rows) {}
         Call call = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(tenantId);
             Period p = load(id);
-            Company company = Company.findById(p.companyId());
+            CompanyEntity company = CompanyEntity.findById(p.companyId());
             List<RegisterRows.Row> rows = "rvie".equals(p.book())
                     ? registers.sales(p.companyId(), p.sunatEnv(), p.period())
                     : registers.purchases(p.companyId(), p.period());
@@ -330,7 +330,7 @@ public class SireService {
                     Map.of("resume_status", "proposal_ready", "detail", "Registre las credenciales de la API SIRE de la empresa."));
             return;
         }
-        RegisterFormats.File file = RegisterFormats.sire(p.book(), call.company().ruc, call.company().razonSocial, p.period(), call.rows());
+        RegisterFormats.File file = RegisterFormats.sire(p.book(), call.company().getRuc(), call.company().getRazonSocial(), p.period(), call.rows());
         FileStore.Stored stored = files.put(tenantId, file.content());
         EngineModels.SireTicketResponse response;
         try {
