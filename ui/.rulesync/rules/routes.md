@@ -17,13 +17,13 @@ globs:
 ## Groups
 
 - `_authenticated/` holds every page that needs a session; its `beforeLoad` starts the OIDC
-  login. `_public/` holds the pages anyone opens ([ADR 0003](../../docs/adr/0003-public-and-authenticated-routes.md));
+  login. `_public/` holds the pages anyone opens ([ADR 0003](../../../docs/adr/0003-public-and-authenticated-routes.md));
   `RootLayout` renders them in `PublicLayout`, and they only call public endpoints through
   `xhandlerPublicClient`.
-- Paths are Spanish and follow the hierarchy of [ADR 0002](../../docs/adr/0002-navigation-partner-tenant-company.md):
+- Paths are Spanish and follow the hierarchy of [ADR 0002](../../../docs/adr/0002-navigation-partner-tenant-company.md):
   `/organizaciones/$tenantId/empresas/$companyId`, `/padron/…`, `/perfil`, `/p/documentos/$token`.
 - `padron.ts` 404s every searchpe page when searchpe isn't deployed; a new optional product gets
-  the same guard ([ADR 0001](../../docs/adr/0001-one-shell-two-backends.md)).
+  the same guard ([ADR 0001](../../../docs/adr/0001-one-shell-two-backends.md)).
 
 ## Route files
 

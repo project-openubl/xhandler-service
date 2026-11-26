@@ -35,7 +35,7 @@ start() { # name, command...
 }
 
 build() {
-  (cd "$ROOT/xhandler" && ./mvnw -B -q package -DskipTests -pl app -am)
+  (cd "$ROOT" && ./mvnw -B -q -f xhandler package -DskipTests -pl app -am)
   (cd "$ROOT" && ./mvnw -B -q package -DskipTests -pl searchpe)
   (cd "$ROOT/xhandler/engine" && cargo build --release --bins)
 }

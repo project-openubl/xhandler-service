@@ -30,7 +30,7 @@
 
     <files>
         <file>
-            <source>LICENSE</source>
+            <source>../LICENSE</source>
             <outputDirectory>./</outputDirectory>
         </file>
         <file>

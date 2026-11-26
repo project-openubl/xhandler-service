@@ -152,8 +152,8 @@ Searchpe needs PostgreSQL. With the [Crunchy PostgreSQL operator](https://operat
 curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.46.0/install.sh | bash -s v0.46.0
 kubectl create -f https://operatorhub.io/install/postgresql.yaml
 kubectl create namespace openubl
-kubectl apply -n openubl -f ../scripts/postgresql.yaml   # wait for its pods to be ready
-kubectl apply -n openubl -f ../scripts/searchpe.yaml
+kubectl apply -n openubl -f ../hack/minikube/postgresql.yaml   # wait for its pods to be ready
+kubectl apply -n openubl -f ../hack/minikube/searchpe.yaml
 ```
 
 To run the operator in the cluster instead, build its image where the cluster can pull it, and deploy it to the

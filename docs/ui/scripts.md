@@ -16,7 +16,7 @@ Run from `ui/`. Workspace scripts run with `-w <workspace>` or `-ws`.
 `openapi:refresh` needs the backends built first, from the repository root:
 
 ```bash
-(cd xhandler && ./mvnw -q -pl app package -DskipTests)   # xhandler/app/target/openapi/openapi.json
+./mvnw -q -f xhandler -pl app package -DskipTests      # xhandler/app/target/openapi/openapi.json
 ./mvnw -q -pl searchpe package -DskipTests \
   -Dquarkus.smallrye-openapi.store-schema-directory=target/openapi   # searchpe/target/openapi/openapi.json
 ```
@@ -39,4 +39,4 @@ Run from `ui/`. Workspace scripts run with `-w <workspace>` or `-ws`.
 | `npm run lint:fast`   | oxlint, the fast inner loop; `lint:fast:fix` fixes                     |
 | `npm run format:fast` | oxfmt check; `format:fast:fix` writes (run `format:fix` after it)      |
 | `npm test`            | Vitest Browser Mode (client)                                           |
-| `npm run test:e2e`    | Playwright against a running stack ([e2e/README.md](../e2e/README.md)) |
+| `npm run test:e2e`    | Playwright against a running stack ([e2e/README.md](../../ui/e2e/README.md)) |

@@ -12,14 +12,14 @@ their own: a company, a series, a webhook) and **modal forms** (actions and smal
 
 - Form state and validation are react-hook-form with a yup schema (`yupResolver`); zod is for
   URL and storage state only ([list-state](list-state.md)).
-- Labels, helper texts and validation messages are Spanish ([ADR 0005](../../docs/adr/0005-spanish-ui.md)):
+- Labels, helper texts and validation messages are Spanish ([ADR 0005](../../../docs/adr/0005-spanish-ui.md)):
   pass the message to each yup rule (`string().required("Ingresa el RUC")`), never yup's English
   defaults.
 - SUNAT formats are validated client-side where the format is fixed (RUC 11 digits, DNI 8,
   serie `F001`); the server's answer still decides.
 
 **A submission failure is shown _in the form_, not as a toast**
-([ADR 0006](../../docs/adr/0006-api-error-display.md)): an inline alert at the top of `<Form>`,
+([ADR 0006](../../../docs/adr/0006-api-error-display.md)): an inline alert at the top of `<Form>`,
 and the form stays for retry. Success toasts and list/detail error toasts stay toasts.
 
 - **`useSubmitError`** (`hooks/useSubmitError.ts`) returns `submitError`, `setSubmitError` and

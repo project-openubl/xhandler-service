@@ -35,19 +35,19 @@ Toasts must fire even if the component unmounts mid-request.
 ## Jobs
 
 - A write that starts an xhandler job reports it once, when the response arrives
-  ([ADR 0007](../../docs/adr/0007-job-reporting.md)); no toast is ever raised by polling a job
+  ([ADR 0007](../../../docs/adr/0007-job-reporting.md)); no toast is ever raised by polling a job
   or a padrón version.
 
 ## Variables and message
 
 - A mutation's variables are exactly what the request needs: no field only for the toast.
   Delete and cancel take the entity itself (typed with the generated type).
-- Messages are Spanish ([ADR 0005](../../docs/adr/0005-spanish-ui.md)), built from `data`, the
+- Messages are Spanish ([ADR 0005](../../../docs/adr/0005-spanish-ui.md)), built from `data`, the
   `variables`, or a value fixed for the component's lifetime. **Never close over per-call
   state** (a `cancelTarget` cleared mid-flight reads as `null`).
 - Error toasts spread `getMutationErrorMessage({ error, fallback: "No se pudo …" })` into a
   `variant: "danger"` toast; it carries the server's message and detail
-  ([ADR 0006](../../docs/adr/0006-api-error-display.md)).
+  ([ADR 0006](../../../docs/adr/0006-api-error-display.md)).
 
 ## Checklist
 

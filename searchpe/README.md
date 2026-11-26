@@ -4,11 +4,11 @@ Consulta RUC sobre el `padrón reducido` de la SUNAT. Sirve solo su API; la inte
 del repositorio ([ui/](../ui)).
 
 ```bash
-./mvnw quarkus:dev -pl searchpe     # desde la raíz; Dev Services levanta PostgreSQL
+(cd searchpe && ../mvnw quarkus:dev)     # desde la raíz: http://localhost:8081
 ```
 
-Contra el stack local (`hack/compose.yaml`) y su realm de Keycloak, ver el
-[AGENTS.md](../AGENTS.md) raíz y `hack/ui-e2e-stack.sh`.
+Dev Services levantan PostgreSQL y comparten el Keycloak de xhandler-service (puerto 8180, con
+login y permisos activos). Ver [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 Despliegue: con el operador, tipo `Searchpe` ([operator/](../operator)).
 

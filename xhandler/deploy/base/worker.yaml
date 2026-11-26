@@ -110,7 +110,7 @@ spec:
                 secretKeyRef: { name: xhandler-db, key: password }
             # The app logs in as a non-owner member of xhandler_app (DatabaseRoleCheck
             # refuses anything else). Migrations run separately, with the owner role
-            # (see hack/postgres/init.sql for the role layout).
+            # (see hack/postgres/xhandler.sql for the role layout).
             - name: QUARKUS_FLYWAY_MIGRATE_AT_START
               value: "false"
             - name: QUARKUS_OIDC_AUTH_SERVER_URL

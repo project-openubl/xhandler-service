@@ -6,7 +6,7 @@
 # - Automatic failover in seconds; the app reconnects (§10.4, §25.1).
 # - Point-in-time recovery to object storage; weekly restore tests (§16).
 # - Roles: the schema owner (migrations only) and a login that is a member of
-#   xhandler_app (see hack/postgres/init.sql); the app refuses to run as owner.
+#   xhandler_app (see hack/postgres/xhandler.sql); the app refuses to run as owner.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:

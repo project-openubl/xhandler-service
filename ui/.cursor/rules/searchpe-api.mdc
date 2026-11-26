@@ -7,14 +7,14 @@ globs: client/src/app/queries/searchpe/**,client/src/app/hooks/**,client/src/app
 
 Before wiring an endpoint, read its operation in `client/openapi/searchpe.json` (or the
 generated client `@app/client/searchpe`). Behaviour notes are in
-`docs/internals/searchpe-api-notes.md`.
+`docs/ui/internals/searchpe-api-notes.md`.
 
 ## Shape
 
 - Base path `/api`, called through the generated client (base URL `/api/searchpe`); JSON is
   camelCase (JSON-B) as documented. The health check (`/q/health/ready`) is the one call outside
   the spec.
-- searchpe is **optional** ([ADR 0001](../../docs/adr/0001-one-shell-two-backends.md)): code that
+- searchpe is **optional** ([ADR 0001](../../../docs/adr/0001-one-shell-two-backends.md)): code that
   can run without it checks `ENV.SEARCHPE_ENABLED` (queries that the shell runs everywhere set
   `enabled` from it); searchpe routes are 404 without it.
 - Errors are `{ message }` or a framework body: use `getMutationErrorMessage`.
@@ -43,7 +43,7 @@ generated client `@app/client/searchpe`). Behaviour notes are in
   `search` for contribuyentes, `version:write` for versions, `admin:app` for everything. An
   anonymous whoami means authorization is off: everything is allowed.
 - No user management: `/admin/*` and `/current-user/*` are dropped from the generated client
-  ([ADR 0004](../../docs/adr/0004-identity-and-permissions.md)).
+  ([ADR 0004](../../../docs/adr/0004-identity-and-permissions.md)).
 
 ## Checklist
 

@@ -13,11 +13,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+X="$ROOT/xhandler"
 COMPOSE="${COMPOSE:-podman compose}"
 WORK="$(mktemp -d)"
 PIDS=()
 RUC=20123456789
-PFX="$ROOT/app/src/test/resources/certificates/valid-$RUC.pfx"
+PFX="$X/app/src/test/resources/certificates/valid-$RUC.pfx"
 
 cleanup() {
   local status=$?
@@ -29,7 +30,7 @@ cleanup() {
     done
   fi
   for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
-  $COMPOSE -f "$ROOT/../hack/compose.yaml" down >/dev/null 2>&1 || true
+  $COMPOSE -f "$ROOT/hack/compose.yaml" down >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -44,19 +45,19 @@ wait_for() { # url, name
 
 echo "==> dependencies (postgres, keycloak, lgtm)"
 # Only what this flow needs from the shared stack (the cleanup stops the stack: see above)
-$COMPOSE -f "$ROOT/../hack/compose.yaml" up -d postgres keycloak lgtm
+$COMPOSE -f "$ROOT/hack/compose.yaml" up -d postgres keycloak lgtm
 wait_for http://localhost:3000/api/health "grafana"
 wait_for http://localhost:8180/realms/xhandler/.well-known/openid-configuration "keycloak"
 
 echo "==> engine"
-(cd "$ROOT/engine" && cargo build --release --quiet)
+(cd "$X/engine" && cargo build --release --quiet)
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-  "$ROOT/engine/target/release/xhandler-engine" >"$WORK/engine.log" 2>&1 &
+  "$X/engine/target/release/xhandler-engine" >"$WORK/engine.log" 2>&1 &
 PIDS+=($!)
 wait_for http://localhost:8090/health "engine"
 
 echo "==> app"
-(cd "$ROOT" && ./mvnw -B -q package -DskipTests)
+"$ROOT/mvnw" -B -q -f "$X" package -DskipTests
 QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/xhandler \
 QUARKUS_DATASOURCE_USERNAME=xhandler_login \
 QUARKUS_DATASOURCE_PASSWORD=xhandler_login \
@@ -70,7 +71,7 @@ XHANDLER_VAULT_SOFTWARE_MASTER_KEYS_E2E="$(head -c 32 /dev/urandom | base64)" \
 XHANDLER_STORAGE_KIND=filesystem \
 XHANDLER_STORAGE_DIR="$WORK/files" \
 XHANDLER_STORAGE_S3_ALLOW_FILESYSTEM_IN_PRODUCTION=true \
-  java -jar "$ROOT/app/target/quarkus-app/quarkus-run.jar" >"$WORK/app.log" 2>&1 &
+  java -jar "$X/app/target/quarkus-app/quarkus-run.jar" >"$WORK/app.log" 2>&1 &
 PIDS+=($!)
 wait_for http://localhost:8080/q/health/ready "app"
 
@@ -96,7 +97,7 @@ api -X POST "http://localhost:8080/api/v1/tenants/$TENANT/companies/$COMPANY/ser
 
 echo "==> emit: numbered, validated and signed through the vault; sent by a worker"
 jq --arg serie "$SERIE" '{document: (.spec |= (del(.serie_numero) | del(.proveedor))), serie: $serie}' \
-  "$ROOT/examples/invoice.json" >"$WORK/emit.json"
+  "$X/examples/invoice.json" >"$WORK/emit.json"
 api -X POST "http://localhost:8080/api/v1/tenants/$TENANT/companies/$COMPANY/documents" \
   -H 'content-type: application/json' -H "Idempotency-Key: $(uuidgen 2>/dev/null || date +%s%N)" \
   --data @"$WORK/emit.json" | tee "$WORK/emitted.json" | jq -c '{serie_numero, status, digest_value}'

@@ -1,7 +1,7 @@
 /**
  * In-place patches applied to the committed OpenAPI specs before generation (hey-api's
  * `parser.patch.input`). The committed files stay byte-identical to the Maven builds; every
- * deviation is listed here with its reason (docs/internals/api-clients.md).
+ * deviation is listed here with its reason (docs/ui/internals/api-clients.md).
  */
 
 interface ISpec {
@@ -44,6 +44,7 @@ const SEARCHPE_DROPPED_PATHS = [/^\/admin\//, /^\/current-user\//];
 export const patchSearchpeSpec = (spec: ISpec): void => {
   rebasePaths({
     spec,
-    keep: (path) => !SEARCHPE_DROPPED_PATHS.some((pattern) => pattern.test(path)),
+    keep: (path) =>
+      !SEARCHPE_DROPPED_PATHS.some((pattern) => pattern.test(path)),
   });
 };

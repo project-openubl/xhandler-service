@@ -27,7 +27,7 @@ Put each scenario in the **cheapest layer that can prove it**:
   detail goes in the `*-list` spec.
 - Cross-area specs (`navigation.spec.ts`) and `auth.setup.ts` sit at the `tests/` root.
 - Public pages (`tests/public/**`) run in the `public` project, with **no** session: they prove
-  no login is asked ([ADR 0003](../../docs/adr/0003-public-and-authenticated-routes.md)).
+  no login is asked ([ADR 0003](../../../docs/adr/0003-public-and-authenticated-routes.md)).
 - Shared infra lives in **`e2e/support/`**: `fixtures.ts`, `pom/`, `helpers/`. A spec imports
   `test` / `expect` from `@support/fixtures` (never `@playwright/test` or a relative path).
   Page objects are classes in `support/pom/`; list screens extend `DataViewList`.
@@ -40,7 +40,7 @@ Put each scenario in the **cheapest layer that can prove it**:
 - Use web-first assertions that retry (`await expect(locator).toBeVisible()`); no
   `page.waitForTimeout`. Wait on a real event (`page.waitForResponse`, a web-first assertion).
 - Keycloak's login form is located by role and name (`getByRole("textbox", { name:
-  /username|usuario/i })`), so a Spanish login theme works too.
+/username|usuario/i })`), so a Spanish login theme works too.
 - A list's rows are counted only once the table settled (`firstRowOrEmpty`): while loading it
   has no link either. An empty state renders inside a row, so `rows().or(emptyHeading)` matches
   twice.

@@ -14,7 +14,7 @@ globs:
 
 # List state (filters, sort, page)
 
-[ADR 0008](../../docs/adr/0008-view-state-persistence.md) decides where a list's state is kept.
+[ADR 0008](../../../docs/adr/0008-view-state-persistence.md) decides where a list's state is kept.
 In code that is **only state management**: `usePersistentState` (`@app/hooks/usePersistentState`)
 replaces `useState`; PatternFly props, debouncing and API params stay in the page.
 

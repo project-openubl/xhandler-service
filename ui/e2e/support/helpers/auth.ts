@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 
-/** The dev realm's olga holds every searchpe permission (xhandler/deploy/keycloak). */
+/** The dev realm's olga holds every searchpe permission (hack/keycloak). */
 export const E2E_USERNAME = process.env.E2E_USERNAME ?? "olga";
 export const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "olga";
 
