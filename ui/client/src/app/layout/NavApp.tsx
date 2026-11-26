@@ -7,6 +7,7 @@ import { Nav, NavExpandable, NavItem, NavList } from "@patternfly/react-core";
 
 import { useApiStatus } from "@app/hooks/useApiStatus";
 import { useAuth } from "@app/hooks/useAuth";
+import { usePlatformRoles } from "@app/hooks/usePlatformRoles";
 import { useSelectedTenantId } from "@app/hooks/useSelectedTenantId";
 import { useMyPartnersQuery } from "@app/queries/xhandler/partners";
 import { useMyTenantsQuery } from "@app/queries/xhandler/tenants";
@@ -21,6 +22,7 @@ const GROUP_OF_SEGMENT: Record<string, string> = {
   organizaciones: "comprobantes",
   socios: "comprobantes",
   estado: "comprobantes",
+  soporte: "comprobantes",
   padron: "padron",
   perfil: "cuenta",
 };
@@ -40,6 +42,7 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
   const matchRoute = useMatchRoute();
   const { xhandler, searchpe } = useApiStatus();
   const auth = useAuth();
+  const platformRoles = usePlatformRoles();
 
   // Tenant pages carry the tenant in the URL; elsewhere the last one opened (if still a
   // membership) or the only one.
@@ -107,6 +110,7 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
       label: "Datos personales",
     },
     { to: "/organizaciones/$tenantId/auditoria", label: "Auditoría" },
+    { to: "/organizaciones/$tenantId/soporte", label: "Soporte" },
   ] as const;
 
   const group = useLocation({
@@ -152,6 +156,11 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
                   isActive={!!matchRoute({ to: "/socios", fuzzy: true })}
                 >
                   <Link to="/socios">Socios</Link>
+                </NavItem>
+              ) : null}
+              {platformRoles.has("platform-support") ? (
+                <NavItem isActive={!!matchRoute({ to: "/soporte" })}>
+                  <Link to="/soporte">Acceso de soporte</Link>
                 </NavItem>
               ) : null}
               {tenantId ? (
