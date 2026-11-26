@@ -76,3 +76,13 @@ export class ServiceStatusPage extends DataViewList {
 /** A random, well-formed RUC (20 + 9 digits), so runs never collide on a shared stack. */
 export const randomRuc = (): string =>
   `20${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`;
+
+export class AuditPage extends DataViewList {
+  constructor(page: Page) {
+    super(page, "Auditoría", "Tabla de auditoría");
+  }
+
+  async goto(tenantId: string) {
+    await this.page.goto(`/organizaciones/${tenantId}/auditoria`);
+  }
+}
