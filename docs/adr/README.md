@@ -28,6 +28,7 @@ issuing); its task ADRs become [0007](0007-job-reporting.md).
 | [0008](0008-view-state-persistence.md)            | Where a screen's view state (lists) is kept                         |
 | [0009](0009-manual-issuing-drafts.md)             | Manual issuing goes through drafts without a number                 |
 | [0010](0010-public-lookup-captcha.md)             | The OSE validity page verifies with the provider's CAPTCHA widget   |
+| [0011](0011-self-service-organizations.md)        | People create their own free organization from Organizaciones       |
 
 ## Template
 

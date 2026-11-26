@@ -8,6 +8,8 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  type CreateTenant,
+  createTenant,
   getTenant,
   listTenants,
   type TenantSummary,
@@ -92,6 +94,28 @@ export const useTenantUpdateMutation = (
     onSuccess: async (data, variables) => {
       queryClient.setQueryData(tenantKeys.detail(tenantId), data);
       // The tenant switcher lists names
+      await queryClient.invalidateQueries({ queryKey: tenantKeys.mine() });
+      await options?.onSuccess?.(data, variables);
+    },
+    onError: options?.onError,
+  });
+};
+
+/**
+ * `POST /tenants`: self-service signup. A person with a verified email creates one free tenant
+ * and becomes its owner; `201` with the tenant.
+ */
+export const useCreateTenantMutation = (
+  options?: IMutationCallbacks<TenantView, CreateTenant, XhandlerAxiosError>,
+) => {
+  const queryClient = useQueryClient();
+  return useMutation<TenantView, XhandlerAxiosError, CreateTenant>({
+    mutationFn: async (body) =>
+      (await createTenant({ body, throwOnError: true })).data,
+    onSuccess: async (data, variables) => {
+      if (data.id) {
+        queryClient.setQueryData(tenantKeys.detail(data.id), data);
+      }
       await queryClient.invalidateQueries({ queryKey: tenantKeys.mine() });
       await options?.onSuccess?.(data, variables);
     },
