@@ -33,7 +33,7 @@ use Docker. The database outlives `down`: the suite passes against it run after 
 
 To work on a backend, run it with `quarkus:dev` instead of the script (no compose stack: Dev
 Services start PostgreSQL and the shared Keycloak on 8180). xhandler-service needs the engine and
-the SUNAT fake to issue; see [CONTRIBUTING.md](../../CONTRIBUTING.md#option-1-develop-with-quarkusdev-recommended):
+the SUNAT fake to issue; see [CONTRIBUTING.md](../../CONTRIBUTING.md#start-the-app):
 
 ```bash
 (cd xhandler/engine && cargo run)

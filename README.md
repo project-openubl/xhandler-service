@@ -18,16 +18,18 @@ El comportamiento está definido en [DESIGN.md](./docs/DESIGN.md).
 
 ## Empezar
 
-Requisitos: Java 25, Rust, Node 22, Go y Podman o Docker.
+Requisitos: Java 25, Rust, Node 22 y Podman o Docker. Desde la raíz, una terminal por línea:
 
 ```bash
-podman compose -f hack/compose.yaml up -d                        # PostgreSQL, Keycloak, Grafana
-hack/ui-e2e-stack.sh build && hack/ui-e2e-stack.sh up            # todos los servicios
-(cd ui && cp .env.example .env && npm ci && npm run start:dev)   # http://localhost:3000
+(cd xhandler/engine && cargo run)                    # motor
+(cd xhandler/engine && cargo run --bin sunat-fake)   # SUNAT simulada
+./mvnw -f xhandler quarkus:dev -pl app               # xhandler-service
+./mvnw quarkus:dev -pl searchpe                      # searchpe
+(cd ui && cp .env.example .env && npm ci && npm run start:dev)
 ```
 
-Usuarios de prueba: `alice/alice`, `bob/bob`; administradora `olga/olga`. Para levantar cada
-servicio por separado, ver [CONTRIBUTING.md](./CONTRIBUTING.md).
+Abre http://localhost:3000 e ingresa como `olga` / `olga`. Detalles en
+[CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Desplegar
 
