@@ -156,10 +156,10 @@ class RecoveryTest {
         }
         // The reconciler registered the endpoint when it saw the backlog; drain one at a time
         await().atMost(WAIT).until(() -> !"none".equals(breaker()));
-        QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery(
+        QuarkusTransaction.requiringNew().run(() -> em.createNativeStatement(
                         "UPDATE xhandler.sunat_endpoint SET concurrency_cap = 1 WHERE id = :id")
                 .setParameter("id", endpoint)
-                .executeUpdate());
+                .execute());
         await().atMost(WAIT).until(() -> "open".equals(breaker()));
         // No attempt is in flight once the breaker is open (it creates none)
         await().atMost(WAIT).until(() -> outstandingAttempts() == 0);
@@ -199,9 +199,9 @@ class RecoveryTest {
 
     UUID startGhostJob(UUID documentId, String ghost, UUID job, java.util.function.LongConsumer beforeCommit) {
         QuarkusTransaction.requiringNew().run(() -> {
-            em.createNativeQuery("INSERT INTO xhandler.worker (name, role, last_heartbeat) VALUES (:w, 'worker', now() - interval '1 hour')")
+            em.createNativeStatement("INSERT INTO xhandler.worker (name, role, last_heartbeat) VALUES (:w, 'worker', now() - interval '1 hour')")
                     .setParameter("w", ghost)
-                    .executeUpdate();
+                    .execute();
             em.createNativeQuery("SELECT xhandler.enqueue_platform_job(:id, 'test.never', CAST(1 AS smallint), "
                             + "CAST(:args AS jsonb), CAST(:res AS text[]))")
                     .setParameter("id", job)

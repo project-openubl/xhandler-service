@@ -206,8 +206,8 @@ class OseTest {
         // Old forwarded submissions go, with their files
         EngineStub.reset();
         String xmlRef = QuarkusTransaction.requiringNew().call(() -> {
-            em.createNativeQuery("UPDATE xhandler.ose_submission SET forward_status = 'forwarded', purge_after = now() - interval '1 day' WHERE name = :n")
-                    .setParameter("n", first).executeUpdate();
+            em.createNativeStatement("UPDATE xhandler.ose_submission SET forward_status = 'forwarded', purge_after = now() - interval '1 day' WHERE name = :n")
+                    .setParameter("n", first).execute();
             return (String) em.createNativeQuery("SELECT xml_ref FROM xhandler.ose_submission WHERE name = :n").setParameter("n", first).getSingleResult();
         });
         purge.run(new JobContext(UUID.randomUUID(), null, "ose.purge", 1, new JsonMapper().createObjectNode(),

@@ -97,16 +97,16 @@ public class JpaSeriesProvider implements SeriesProvider {
 
     @Override
     public int moveNextNumber(UUID seriesId, long nextNumber) {
-        return repository.getEntityManager().createNativeQuery("""
+        return repository.getEntityManager().createNativeStatement("""
                         UPDATE xhandler.series SET next_number = :next, updated_at = now()
                         WHERE id = :id AND next_number <= :next""")
-                .setParameter("next", nextNumber).setParameter("id", seriesId).executeUpdate();
+                .setParameter("next", nextNumber).setParameter("id", seriesId).execute();
     }
 
     @Override
     public void setActive(UUID seriesId, boolean active) {
-        repository.getEntityManager().createNativeQuery("UPDATE xhandler.series SET active = :active, updated_at = now() WHERE id = :id")
-                .setParameter("active", active).setParameter("id", seriesId).executeUpdate();
+        repository.getEntityManager().createNativeStatement("UPDATE xhandler.series SET active = :active, updated_at = now() WHERE id = :id")
+                .setParameter("active", active).setParameter("id", seriesId).execute();
     }
 
     private static List<SeriesModel> wrap(List<SeriesEntity> entities) {

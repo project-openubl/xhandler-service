@@ -237,10 +237,10 @@ class ConsoleApiTest {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
             for (String[] p : List.of(new String[] {"rvie", "202601"}, new String[] {"rce", "202602"}, new String[] {"rvie", "202602"})) {
-                em.createNativeQuery("""
+                em.createNativeStatement("""
                                 INSERT INTO xhandler.sire_period (id, tenant_id, company_id, sunat_env, book, period, status, requested_by)
                                 VALUES (gen_random_uuid(), :t, :c, 'fake', :b, :p, 'requested', 'test')""")
-                        .setParameter("t", tenant).setParameter("c", company).setParameter("b", p[0]).setParameter("p", p[1]).executeUpdate();
+                        .setParameter("t", tenant).setParameter("c", company).setParameter("b", p[0]).setParameter("p", p[1]).execute();
             }
         });
         String base = "/api/v1/tenants/" + tenant + "/companies/" + company + "/sire";

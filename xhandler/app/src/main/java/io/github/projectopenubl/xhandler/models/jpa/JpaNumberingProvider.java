@@ -47,14 +47,14 @@ public class JpaNumberingProvider implements NumberingProvider {
     @Override
     public void upsertSeriesCounter(UUID id, UUID tenantId, UUID companyId, String sunatEnv, String tipoComprobante, String serie,
             long nextNumber) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.series (id, tenant_id, company_id, sunat_env, tipo_comprobante, serie, next_number)
                         VALUES (:id, :t, :c, :env, :tipo, :serie, :next)
                         ON CONFLICT (company_id, sunat_env, tipo_comprobante, serie)
                         DO UPDATE SET next_number = greatest(series.next_number, excluded.next_number), updated_at = now()""")
                 .setParameter("id", id).setParameter("t", tenantId)
                 .setParameter("c", companyId).setParameter("env", sunatEnv).setParameter("tipo", tipoComprobante)
-                .setParameter("serie", serie).setParameter("next", nextNumber).executeUpdate();
+                .setParameter("serie", serie).setParameter("next", nextNumber).execute();
     }
 
     @Override

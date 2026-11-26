@@ -27,11 +27,11 @@ public class JpaOseProvider implements OseProvider {
 
     @Override
     public void addClient(UUID id, String issuerRuc, String username, String passwordHash, UUID tenantId, String createdBy) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.ose_client (id, issuer_ruc, username, password_hash, tenant_id, created_by)
                         VALUES (:id, :ruc, :u, :h, :t, :by)""")
                 .setParameter("id", id).setParameter("ruc", issuerRuc).setParameter("u", username)
-                .setParameter("h", passwordHash).setParameter("t", tenantId).setParameter("by", createdBy).executeUpdate();
+                .setParameter("h", passwordHash).setParameter("t", tenantId).setParameter("by", createdBy).execute();
         em.flush();
     }
 
@@ -68,43 +68,43 @@ public class JpaOseProvider implements OseProvider {
 
     @Override
     public void markLogin(UUID id) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         UPDATE xhandler.ose_client SET failed_attempts = 0, last_login_at = now()
                         WHERE id = :id AND (failed_attempts > 0 OR last_login_at IS NULL OR last_login_at < now() - interval '1 minute')""")
-                .setParameter("id", id).executeUpdate();
+                .setParameter("id", id).execute();
     }
 
     @Override
     public int suspendClient(UUID id) {
-        return em.createNativeQuery("UPDATE xhandler.ose_client SET status = 'suspended' WHERE id = :id").setParameter("id", id)
-                .executeUpdate();
+        return em.createNativeStatement("UPDATE xhandler.ose_client SET status = 'suspended' WHERE id = :id").setParameter("id", id)
+                .execute();
     }
 
     @Override
     public int activateClient(UUID id) {
-        return em.createNativeQuery(
+        return em.createNativeStatement(
                         "UPDATE xhandler.ose_client SET status = 'active', failed_attempts = 0, locked_until = NULL WHERE id = :id")
-                .setParameter("id", id).executeUpdate();
+                .setParameter("id", id).execute();
     }
 
     @Override
     public int resetClientPassword(UUID id, String passwordHash) {
-        return em.createNativeQuery(
+        return em.createNativeStatement(
                         "UPDATE xhandler.ose_client SET password_hash = :h, failed_attempts = 0, locked_until = NULL WHERE id = :id")
-                .setParameter("h", passwordHash).setParameter("id", id).executeUpdate();
+                .setParameter("h", passwordHash).setParameter("id", id).execute();
     }
 
     @Override
     public void deleteAssociations() {
-        em.createNativeQuery("DELETE FROM xhandler.ose_association").executeUpdate();
+        em.createNativeStatement("DELETE FROM xhandler.ose_association").execute();
     }
 
     @Override
     public void addAssociation(String ruc, LocalDate startsOn, LocalDate endsOn) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.ose_association (ruc, starts_on, ends_on) VALUES (:r, :s, :e)
                         ON CONFLICT (ruc) DO UPDATE SET starts_on = excluded.starts_on, ends_on = excluded.ends_on, imported_at = now()""")
-                .setParameter("r", ruc).setParameter("s", startsOn).setParameter("e", endsOn).executeUpdate();
+                .setParameter("r", ruc).setParameter("s", startsOn).setParameter("e", endsOn).execute();
     }
 
     @Override
@@ -117,14 +117,14 @@ public class JpaOseProvider implements OseProvider {
 
     @Override
     public void deleteBlockedList(String list) {
-        em.createNativeQuery("DELETE FROM xhandler.blocked_issuer WHERE list = :l").setParameter("l", list).executeUpdate();
+        em.createNativeStatement("DELETE FROM xhandler.blocked_issuer WHERE list = :l").setParameter("l", list).execute();
     }
 
     @Override
     public void addBlockedIssuer(String ruc, String list, LocalDate listedOn) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.blocked_issuer (ruc, list, listed_on) VALUES (:r, :l, :d) ON CONFLICT (ruc, list) DO NOTHING""")
-                .setParameter("r", ruc).setParameter("l", list).setParameter("d", listedOn).executeUpdate();
+                .setParameter("r", ruc).setParameter("l", list).setParameter("d", listedOn).execute();
     }
 
     @Override
@@ -143,7 +143,7 @@ public class JpaOseProvider implements OseProvider {
 
     @Override
     public void addSubmission(NewSubmission s) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.ose_submission (id, ose_client_id, issuer_ruc, tipo, serie, numero, name, channel, ticket,
                             received_at, result, response_code, description, sha256, xml_ref, cdr_ref, cdr_issued_at, forward_status,
                             next_attempt_at, purge_after)
@@ -157,28 +157,28 @@ public class JpaOseProvider implements OseProvider {
                 .setParameter("xml", s.xmlRef()).setParameter("cdr", s.cdrRef())
                 .setParameter("issued", s.cdrIssuedAt()).setParameter("forward", s.forwardStatus())
                 .setParameter("next", s.nextAttemptAt()).setParameter("purge", s.purgeAfter())
-                .executeUpdate();
+                .execute();
     }
 
     @Override
     public void addTicketItem(String ticket, UUID clientId, UUID submissionId) {
-        em.createNativeQuery("INSERT INTO xhandler.ose_ticket_item (ticket, ose_client_id, submission_id) VALUES (:t, :c, :s)")
-                .setParameter("t", ticket).setParameter("c", clientId).setParameter("s", submissionId).executeUpdate();
+        em.createNativeStatement("INSERT INTO xhandler.ose_ticket_item (ticket, ose_client_id, submission_id) VALUES (:t, :c, :s)")
+                .setParameter("t", ticket).setParameter("c", clientId).setParameter("s", submissionId).execute();
     }
 
     @Override
     public void linkTicketItem(String ticket, UUID clientId, UUID submissionId) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.ose_ticket_item (ticket, ose_client_id, submission_id) VALUES (:t, :c, :s) ON CONFLICT DO NOTHING""")
-                .setParameter("t", ticket).setParameter("c", clientId).setParameter("s", submissionId).executeUpdate();
+                .setParameter("t", ticket).setParameter("c", clientId).setParameter("s", submissionId).execute();
     }
 
     @Override
     public void countValidation(UUID clientId, LocalDate day) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.ose_usage (ose_client_id, day, validations) VALUES (:c, :d, 1)
                         ON CONFLICT (ose_client_id, day) DO UPDATE SET validations = ose_usage.validations + 1""")
-                .setParameter("c", clientId).setParameter("d", day).executeUpdate();
+                .setParameter("c", clientId).setParameter("d", day).execute();
     }
 
     @Override
@@ -246,16 +246,16 @@ public class JpaOseProvider implements OseProvider {
 
     @Override
     public int markReforward(UUID id) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.ose_submission SET forward_status = 'pending', next_attempt_at = now()
-                        WHERE id = :id AND result = 'cdr' AND forward_status = 'rejected'""").setParameter("id", id).executeUpdate();
+                        WHERE id = :id AND result = 'cdr' AND forward_status = 'rejected'""").setParameter("id", id).execute();
     }
 
     @Override
     public int unblockDueForwards() {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.ose_submission SET forward_status = 'pending'
-                        WHERE forward_status = 'blocked' AND next_attempt_at <= now()""").executeUpdate();
+                        WHERE forward_status = 'blocked' AND next_attempt_at <= now()""").execute();
     }
 
     @Override
@@ -275,46 +275,46 @@ public class JpaOseProvider implements OseProvider {
 
     @Override
     public int releaseForward(UUID id, UUID lease) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.ose_submission SET next_attempt_at = now(), forward_lease = NULL
                         WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                .setParameter("id", id).setParameter("lease", lease).executeUpdate();
+                .setParameter("id", id).setParameter("lease", lease).execute();
     }
 
     @Override
     public int retryForward(UUID id, UUID lease, String error, String wait) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.ose_submission SET forward_attempts = forward_attempts + 1, last_error = :e,
                             next_attempt_at = now() + cast(:wait AS interval)
                         WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                .setParameter("e", error).setParameter("wait", wait).setParameter("id", id).setParameter("lease", lease).executeUpdate();
+                .setParameter("e", error).setParameter("wait", wait).setParameter("id", id).setParameter("lease", lease).execute();
     }
 
     @Override
     public int markForwarded(UUID id, UUID lease, String ack) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.ose_submission SET forward_status = 'forwarded', forwarded_at = now(), sunat_ack = :ack,
                             forward_attempts = forward_attempts + 1, next_attempt_at = NULL, last_error = NULL
                         WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                .setParameter("ack", ack).setParameter("id", id).setParameter("lease", lease).executeUpdate();
+                .setParameter("ack", ack).setParameter("id", id).setParameter("lease", lease).execute();
     }
 
     @Override
     public int markForwardRejected(UUID id, UUID lease, String error) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.ose_submission SET forward_status = 'rejected', forward_attempts = forward_attempts + 1,
                             next_attempt_at = NULL, last_error = :e
                         WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                .setParameter("e", error).setParameter("id", id).setParameter("lease", lease).executeUpdate();
+                .setParameter("e", error).setParameter("id", id).setParameter("lease", lease).execute();
     }
 
     @Override
     public int markForwardBlocked(UUID id, UUID lease, String error) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.ose_submission SET forward_status = 'blocked', forward_attempts = forward_attempts + 1,
                             next_attempt_at = now() + interval '10 minutes', last_error = :e
                         WHERE id = :id AND forward_status = 'pending' AND forward_lease = :lease""")
-                .setParameter("e", error).setParameter("id", id).setParameter("lease", lease).executeUpdate();
+                .setParameter("e", error).setParameter("id", id).setParameter("lease", lease).execute();
     }
 
     @Override

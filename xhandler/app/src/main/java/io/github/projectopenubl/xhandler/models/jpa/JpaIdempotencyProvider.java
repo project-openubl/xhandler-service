@@ -20,14 +20,14 @@ public class JpaIdempotencyProvider implements IdempotencyProvider {
 
     @Override
     public boolean insertKey(UUID tenantId, String key, String requestHash, UUID claim) {
-        int inserted = em.createNativeQuery("""
+        int inserted = em.createNativeStatement("""
                         INSERT INTO xhandler.idempotency_key (tenant_id, key, request_hash, claim) VALUES (:tenant, :key, :hash, :claim)
                         ON CONFLICT (tenant_id, key) DO NOTHING""")
                 .setParameter("tenant", tenantId)
                 .setParameter("key", key)
                 .setParameter("hash", requestHash)
                 .setParameter("claim", claim)
-                .executeUpdate();
+                .execute();
         return inserted == 1;
     }
 
@@ -46,16 +46,16 @@ public class JpaIdempotencyProvider implements IdempotencyProvider {
 
     @Override
     public void takeOverKey(UUID tenantId, String key, UUID claim) {
-        em.createNativeQuery("UPDATE xhandler.idempotency_key SET created_at = now(), claim = :claim WHERE tenant_id = :tenant AND key = :key")
+        em.createNativeStatement("UPDATE xhandler.idempotency_key SET created_at = now(), claim = :claim WHERE tenant_id = :tenant AND key = :key")
                 .setParameter("claim", claim)
                 .setParameter("tenant", tenantId)
                 .setParameter("key", key)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
     public int completeKey(UUID tenantId, String key, UUID claim, int status, String body) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.idempotency_key SET status_code = :status, response = CAST(:body AS jsonb), completed_at = now()
                         WHERE tenant_id = :tenant AND key = :key AND claim = :claim AND status_code IS NULL""")
                 .setParameter("status", status)
@@ -63,16 +63,16 @@ public class JpaIdempotencyProvider implements IdempotencyProvider {
                 .setParameter("tenant", tenantId)
                 .setParameter("key", key)
                 .setParameter("claim", claim)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
     public void deleteKey(UUID tenantId, String key, UUID claim) {
-        em.createNativeQuery(
+        em.createNativeStatement(
                         "DELETE FROM xhandler.idempotency_key WHERE tenant_id = :tenant AND key = :key AND claim = :claim AND status_code IS NULL")
                 .setParameter("tenant", tenantId)
                 .setParameter("key", key)
                 .setParameter("claim", claim)
-                .executeUpdate();
+                .execute();
     }
 }

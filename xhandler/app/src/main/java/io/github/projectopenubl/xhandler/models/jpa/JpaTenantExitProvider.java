@@ -28,23 +28,23 @@ public class JpaTenantExitProvider implements TenantExitProvider {
 
     @Override
     public void addExport(UUID id, UUID tenantId, String requestedBy) {
-        em.createNativeQuery("INSERT INTO xhandler.tenant_export (id, tenant_id, requested_by) VALUES (:id, :t, :by)")
-                .setParameter("id", id).setParameter("t", tenantId).setParameter("by", requestedBy).executeUpdate();
+        em.createNativeStatement("INSERT INTO xhandler.tenant_export (id, tenant_id, requested_by) VALUES (:id, :t, :by)")
+                .setParameter("id", id).setParameter("t", tenantId).setParameter("by", requestedBy).execute();
     }
 
     @Override
     public void setExportJob(UUID id, UUID jobId) {
-        em.createNativeQuery("UPDATE xhandler.tenant_export SET job_id = :j WHERE id = :id").setParameter("j", jobId).setParameter("id", id)
-                .executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.tenant_export SET job_id = :j WHERE id = :id").setParameter("j", jobId).setParameter("id", id)
+                .execute();
     }
 
     @Override
     public int failInterruptedExports() {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.tenant_export e SET status = 'failed', detail = 'La exportación se interrumpió. Solicítela de nuevo.',
                             done_at = now()
                         WHERE e.status = 'pending' AND e.job_id IS NOT NULL
-                          AND (SELECT state FROM xhandler.job_summary(e.job_id)) IN ('failed', 'canceled')""").executeUpdate();
+                          AND (SELECT state FROM xhandler.job_summary(e.job_id)) IN ('failed', 'canceled')""").execute();
     }
 
     @Override
@@ -76,15 +76,15 @@ public class JpaTenantExitProvider implements TenantExitProvider {
 
     @Override
     public void markExportDone(UUID id, String partsJson, int documents) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         UPDATE xhandler.tenant_export SET status = 'done', parts = cast(:p AS jsonb), documents = :n, done_at = now()
-                        WHERE id = :id""").setParameter("p", partsJson).setParameter("n", documents).setParameter("id", id).executeUpdate();
+                        WHERE id = :id""").setParameter("p", partsJson).setParameter("n", documents).setParameter("id", id).execute();
     }
 
     @Override
     public void markExportFailed(UUID id, String detail) {
-        em.createNativeQuery("UPDATE xhandler.tenant_export SET status = 'failed', detail = :d, done_at = now() WHERE id = :id")
-                .setParameter("d", detail).setParameter("id", id).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.tenant_export SET status = 'failed', detail = :d, done_at = now() WHERE id = :id")
+                .setParameter("d", detail).setParameter("id", id).execute();
     }
 
     @Override
@@ -104,9 +104,9 @@ public class JpaTenantExitProvider implements TenantExitProvider {
 
     @Override
     public void markExited(UUID tenantId, Instant deleteAfter) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         UPDATE xhandler.tenant SET exit_requested_at = now(), delete_after = :d, status = 'exited', updated_at = now()
-                        WHERE id = :id""").setParameter("d", deleteAfter).setParameter("id", tenantId).executeUpdate();
+                        WHERE id = :id""").setParameter("d", deleteAfter).setParameter("id", tenantId).execute();
     }
 
     @Override

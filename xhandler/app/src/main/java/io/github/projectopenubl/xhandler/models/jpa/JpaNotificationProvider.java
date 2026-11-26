@@ -31,12 +31,12 @@ public class JpaNotificationProvider implements NotificationProvider {
 
     @Override
     public void addNotification(UUID id, UUID tenantId, String kind, String title, String body, UUID documentId) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.notification (id, tenant_id, kind, title, body, document_id)
                         VALUES (:id, :tenant, :kind, :title, :body, :document)""")
                 .setParameter("id", id).setParameter("tenant", tenantId).setParameter("kind", kind)
                 .setParameter("title", title).setParameter("body", body).setParameter("document", documentId)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
@@ -51,14 +51,14 @@ public class JpaNotificationProvider implements NotificationProvider {
 
     @Override
     public boolean markNotificationRead(UUID id) {
-        int updated = em.createNativeQuery("UPDATE xhandler.notification SET read_at = coalesce(read_at, now()) WHERE id = :id")
-                .setParameter("id", id).executeUpdate();
+        int updated = em.createNativeStatement("UPDATE xhandler.notification SET read_at = coalesce(read_at, now()) WHERE id = :id")
+                .setParameter("id", id).execute();
         return updated != 0;
     }
 
     @Override
     public void markAllNotificationsRead() {
-        em.createNativeQuery("UPDATE xhandler.notification SET read_at = now() WHERE read_at IS NULL").executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.notification SET read_at = now() WHERE read_at IS NULL").execute();
     }
 
     @Override
@@ -71,11 +71,11 @@ public class JpaNotificationProvider implements NotificationProvider {
 
     @Override
     public void setNotificationPreference(UUID tenantId, String kind, boolean email, boolean inApp) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.notification_preference (tenant_id, kind, email, in_app) VALUES (:t, :k, :e, :i)
                         ON CONFLICT (tenant_id, kind) DO UPDATE SET email = excluded.email, in_app = excluded.in_app""")
                 .setParameter("t", tenantId).setParameter("k", kind).setParameter("e", email).setParameter("i", inApp)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
@@ -89,8 +89,8 @@ public class JpaNotificationProvider implements NotificationProvider {
 
     @Override
     public void markCertificateExpiryNotified(UUID signingKeyId, int days) {
-        em.createNativeQuery("UPDATE xhandler.signing_key SET expiry_notified_days = :d WHERE id = :id")
-                .setParameter("d", days).setParameter("id", signingKeyId).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.signing_key SET expiry_notified_days = :d WHERE id = :id")
+                .setParameter("d", days).setParameter("id", signingKeyId).execute();
     }
 
     @Override
@@ -104,15 +104,15 @@ public class JpaNotificationProvider implements NotificationProvider {
 
     @Override
     public List<EndpointChange> detectEndpointChanges() {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.endpoint_alert (endpoint, state)
                         SELECT e.id, 'suspect' FROM xhandler.sunat_endpoint e
                         WHERE (e.id LIKE 'production:%' OR e.id LIKE 'ose:%') AND e.breaker_state <> 'closed'
                         ON CONFLICT (endpoint) DO UPDATE SET state = 'suspect', at = now()
-                        WHERE endpoint_alert.state = 'up'""").executeUpdate();
-        em.createNativeQuery("""
+                        WHERE endpoint_alert.state = 'up'""").execute();
+        em.createNativeStatement("""
                         UPDATE xhandler.endpoint_alert a SET state = 'up', at = now() FROM xhandler.sunat_endpoint e
-                        WHERE e.id = a.endpoint AND a.state = 'suspect' AND e.breaker_state = 'closed'""").executeUpdate();
+                        WHERE e.id = a.endpoint AND a.state = 'suspect' AND e.breaker_state = 'closed'""").execute();
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery("""
                         SELECT a.endpoint, CASE WHEN a.state = 'suspect' THEN 'down' ELSE 'up' END
@@ -125,8 +125,8 @@ public class JpaNotificationProvider implements NotificationProvider {
 
     @Override
     public void setEndpointAlertState(String endpoint, String state) {
-        em.createNativeQuery("UPDATE xhandler.endpoint_alert SET state = :s, at = now() WHERE endpoint = :e")
-                .setParameter("e", endpoint).setParameter("s", state).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.endpoint_alert SET state = :s, at = now() WHERE endpoint = :e")
+                .setParameter("e", endpoint).setParameter("s", state).execute();
     }
 
     @Override

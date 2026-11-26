@@ -87,9 +87,9 @@ class DataProtectionTest {
     void sql(String statement, Map<String, Object> params) {
         QuarkusTransaction.requiringNew().run(() -> {
             em.createNativeQuery("SELECT set_config('app.tenant_id', :t, true)").setParameter("t", params.get("t").toString()).getSingleResult();
-            var query = em.createNativeQuery(statement);
+            var query = em.createNativeStatement(statement);
             params.forEach(query::setParameter);
-            query.executeUpdate();
+            query.execute();
         });
     }
 

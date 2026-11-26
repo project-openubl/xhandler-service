@@ -67,37 +67,37 @@ public class JpaBillingProvider implements BillingProvider {
 
     @Override
     public void upsertEntitlement(UUID tenantId, String planCode, String source) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.entitlement (tenant_id, plan_code, source, synced_at) VALUES (:t, :c, :s, now())
                         ON CONFLICT (tenant_id) DO UPDATE SET plan_code = excluded.plan_code, source = excluded.source, synced_at = now()""")
-                .setParameter("t", tenantId).setParameter("c", planCode).setParameter("s", source).executeUpdate();
+                .setParameter("t", tenantId).setParameter("c", planCode).setParameter("s", source).execute();
     }
 
     @Override
     public void ensureEntitlement(UUID tenantId) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.entitlement (tenant_id, plan_code) VALUES (:t, 'free') ON CONFLICT (tenant_id) DO NOTHING""")
-                .setParameter("t", tenantId).executeUpdate();
+                .setParameter("t", tenantId).execute();
     }
 
     @Override
     public int markQuotaNotified(UUID tenantId, int percent, String period) {
         String column = percent >= 100 ? "notified_100" : "notified_80";
-        return em.createNativeQuery("UPDATE xhandler.entitlement SET " + column + " = :p WHERE tenant_id = :t AND "
+        return em.createNativeStatement("UPDATE xhandler.entitlement SET " + column + " = :p WHERE tenant_id = :t AND "
                         + column + " IS DISTINCT FROM :p")
-                .setParameter("p", period).setParameter("t", tenantId).executeUpdate();
+                .setParameter("p", period).setParameter("t", tenantId).execute();
     }
 
     @Override
     public void addUsageEvent(UUID id, UUID tenantId, String type, String propertiesJson) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.usage_event_outbox (id, tenant_id, event_type, properties)
                         VALUES (:id, :tenant, :type, CAST(:properties AS jsonb))""")
                 .setParameter("id", id)
                 .setParameter("tenant", tenantId)
                 .setParameter("type", type)
                 .setParameter("properties", propertiesJson)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
@@ -132,16 +132,16 @@ public class JpaBillingProvider implements BillingProvider {
 
     @Override
     public boolean addLagoInvoice(String lagoInvoiceId, UUID tenantId) {
-        int inserted = em.createNativeQuery(
+        int inserted = em.createNativeStatement(
                         "INSERT INTO xhandler.lago_invoice (lago_invoice_id, tenant_id) VALUES (:id, :t) ON CONFLICT DO NOTHING")
-                .setParameter("id", lagoInvoiceId).setParameter("t", tenantId).executeUpdate();
+                .setParameter("id", lagoInvoiceId).setParameter("t", tenantId).execute();
         return inserted == 1;
     }
 
     @Override
     public void setLagoInvoiceDocument(String lagoInvoiceId, UUID documentId) {
-        em.createNativeQuery("UPDATE xhandler.lago_invoice SET document_id = :d WHERE lago_invoice_id = :id")
-                .setParameter("d", documentId).setParameter("id", lagoInvoiceId).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.lago_invoice SET document_id = :d WHERE lago_invoice_id = :id")
+                .setParameter("d", documentId).setParameter("id", lagoInvoiceId).execute();
     }
 
     @Override

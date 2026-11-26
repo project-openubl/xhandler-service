@@ -23,7 +23,7 @@ public class JpaPrivacyProvider implements PrivacyProvider {
     @Override
     public void addRequest(UUID id, UUID tenantId, String subjectDocType, String subjectDocNumber, String subjectName, String kind, String channel,
             String details, Instant receivedAt, Instant forwardDueAt, Instant forwardedAt, Instant responseDueAt, String createdBy) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.data_subject_request (id, tenant_id, subject_doc_type, subject_doc_number, subject_name, kind, channel,
                             details, received_at, forward_due_at, forwarded_at, response_due_at, created_by)
                         VALUES (:id, :t, :dt, :dn, :name, :kind, :channel, :details, :now, :forwardDue, :forwarded, :due, :by)""")
@@ -31,7 +31,7 @@ public class JpaPrivacyProvider implements PrivacyProvider {
                 .setParameter("dn", subjectDocNumber).setParameter("name", subjectName).setParameter("kind", kind)
                 .setParameter("channel", channel).setParameter("details", details).setParameter("now", receivedAt)
                 .setParameter("forwardDue", forwardDueAt).setParameter("forwarded", forwardedAt)
-                .setParameter("due", responseDueAt).setParameter("by", createdBy).executeUpdate();
+                .setParameter("due", responseDueAt).setParameter("by", createdBy).execute();
     }
 
     @Override
@@ -58,10 +58,10 @@ public class JpaPrivacyProvider implements PrivacyProvider {
 
     @Override
     public int closeRequest(UUID id, String resolution, String closedBy) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.data_subject_request SET status = 'closed', resolution = :r, closed_at = now(), closed_by = :by
                         WHERE id = :id AND status = 'open'""")
-                .setParameter("r", resolution).setParameter("by", closedBy).setParameter("id", id).executeUpdate();
+                .setParameter("r", resolution).setParameter("by", closedBy).setParameter("id", id).execute();
     }
 
     @Override
@@ -100,9 +100,9 @@ public class JpaPrivacyProvider implements PrivacyProvider {
 
     @Override
     public int markReminded(UUID id) {
-        return em.createNativeQuery(
+        return em.createNativeStatement(
                         "UPDATE xhandler.data_subject_request SET reminded_at = now() WHERE id = :id AND reminded_at IS NULL AND status = 'open'")
-                .setParameter("id", id).executeUpdate();
+                .setParameter("id", id).execute();
     }
 
     @Override
@@ -116,23 +116,23 @@ public class JpaPrivacyProvider implements PrivacyProvider {
     }
 
     private int updateTenant(UUID tenantId, String set, boolean value) {
-        return em.createNativeQuery("UPDATE xhandler.tenant SET " + set + ", updated_at = now() WHERE id = :id AND deleted_at IS NULL")
-                .setParameter("v", value).setParameter("id", tenantId).executeUpdate();
+        return em.createNativeStatement("UPDATE xhandler.tenant SET " + set + ", updated_at = now() WHERE id = :id AND deleted_at IS NULL")
+                .setParameter("v", value).setParameter("id", tenantId).execute();
     }
 
     @Override
     public void scheduleExitedTenantDeletion(UUID tenantId) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         UPDATE xhandler.tenant SET delete_after = greatest(exit_requested_at + interval '730 days', now() + interval '30 days')
                         WHERE id = :id AND status = 'exited' AND delete_after IS NULL AND deleted_at IS NULL""")
-                .setParameter("id", tenantId).executeUpdate();
+                .setParameter("id", tenantId).execute();
     }
 
     @Override
     public int cancelExit(UUID tenantId) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.tenant SET exit_requested_at = NULL, delete_after = NULL, status = 'active', updated_at = now()
-                        WHERE id = :id AND status = 'exited' AND deleted_at IS NULL""").setParameter("id", tenantId).executeUpdate();
+                        WHERE id = :id AND status = 'exited' AND deleted_at IS NULL""").setParameter("id", tenantId).execute();
     }
 
     @Override

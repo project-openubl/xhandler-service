@@ -25,18 +25,18 @@ public class JpaReportProvider implements ReportProvider {
     @Override
     public void addReport(UUID id, UUID tenantId, UUID companyId, String sunatEnv, String register, String format, String period,
             String requestedBy) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.report (id, tenant_id, company_id, sunat_env, register, format, period, requested_by)
                         VALUES (:id, :t, :c, :env, :register, :format, :period, :by)""")
                 .setParameter("id", id).setParameter("t", tenantId).setParameter("c", companyId).setParameter("env", sunatEnv)
                 .setParameter("register", register).setParameter("format", format).setParameter("period", period)
-                .setParameter("by", requestedBy).executeUpdate();
+                .setParameter("by", requestedBy).execute();
     }
 
     @Override
     public void setReportJob(UUID id, UUID jobId) {
-        em.createNativeQuery("UPDATE xhandler.report SET job_id = :job WHERE id = :id").setParameter("job", jobId).setParameter("id", id)
-                .executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.report SET job_id = :job WHERE id = :id").setParameter("job", jobId).setParameter("id", id)
+                .execute();
     }
 
     @Override
@@ -87,11 +87,11 @@ public class JpaReportProvider implements ReportProvider {
 
     @Override
     public void finishReport(UUID id, String status, String fileRef, String fileName, Integer rows, String detail) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         UPDATE xhandler.report SET status = :s, file_ref = :ref, file_name = :name, rows = :rows, detail = :detail, done_at = now()
                         WHERE id = :id""")
                 .setParameter("s", status).setParameter("ref", fileRef).setParameter("name", fileName).setParameter("rows", rows)
-                .setParameter("detail", detail).setParameter("id", id).executeUpdate();
+                .setParameter("detail", detail).setParameter("id", id).execute();
     }
 
     @Override

@@ -21,11 +21,11 @@ public class JpaAdapterTokenProvider implements AdapterTokenProvider {
 
     @Override
     public void addNubefactToken(UUID id, UUID tenantId, UUID companyId, String tokenHash, String label, String createdBy) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.adapter_token (id, tenant_id, company_id, kind, token_hash, label, created_by)
                         VALUES (:id, :t, :c, 'nubefact', :h, :l, :by)""")
                 .setParameter("id", id).setParameter("t", tenantId).setParameter("c", companyId).setParameter("h", tokenHash)
-                .setParameter("l", label).setParameter("by", createdBy).executeUpdate();
+                .setParameter("l", label).setParameter("by", createdBy).execute();
     }
 
     @Override
@@ -41,8 +41,8 @@ public class JpaAdapterTokenProvider implements AdapterTokenProvider {
 
     @Override
     public boolean revokeAdapterToken(UUID tokenId, UUID companyId) {
-        int revoked = em.createNativeQuery("UPDATE xhandler.adapter_token SET revoked_at = now() WHERE id = :id AND company_id = :c AND revoked_at IS NULL")
-                .setParameter("id", tokenId).setParameter("c", companyId).executeUpdate();
+        int revoked = em.createNativeStatement("UPDATE xhandler.adapter_token SET revoked_at = now() WHERE id = :id AND company_id = :c AND revoked_at IS NULL")
+                .setParameter("id", tokenId).setParameter("c", companyId).execute();
         return revoked != 0;
     }
 

@@ -122,7 +122,7 @@ class TenancyTest {
         RuntimeException e = org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, () ->
                 QuarkusTransaction.requiringNew().run(() -> {
                     access.enterAsPlatform(tenant);
-                    em.createNativeQuery("UPDATE xhandler.audit_log SET action = 'x'").executeUpdate();
+                    em.createNativeStatement("UPDATE xhandler.audit_log SET action = 'x'").execute();
                 }));
         assertTrue(rootMessage(e).contains("permission denied"), rootMessage(e));
     }

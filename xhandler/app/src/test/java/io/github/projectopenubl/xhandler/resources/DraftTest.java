@@ -272,8 +272,8 @@ class DraftTest {
         // 30 days after deletion a draft is purged for good; younger deletions and live drafts stay
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            em.createNativeQuery("UPDATE xhandler.document_draft SET deleted_at = now() - interval '31 days' WHERE id = :id")
-                    .setParameter("id", UUID.fromString(expired)).executeUpdate();
+            em.createNativeStatement("UPDATE xhandler.document_draft SET deleted_at = now() - interval '31 days' WHERE id = :id")
+                    .setParameter("id", UUID.fromString(expired)).execute();
         });
         Map<String, Object> result = purge.run(new JobContext(UUID.randomUUID(), null, "drafts.purge", 1,
                 new JsonMapper().createObjectNode(), null, () -> false));

@@ -55,25 +55,25 @@ public class JpaCatalogProvider implements CatalogProvider {
 
     @Override
     public void addEntry(UUID id, UUID tenantId, UUID companyId, String kind, String key, String data, String deviceId) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.catalog_entry (id, tenant_id, company_id, kind, key, data, device_id)
                         VALUES (:id, :t, :c, :k, :key, CAST(:data AS jsonb), :device)""")
                 .setParameter("id", id).setParameter("t", tenantId).setParameter("c", companyId).setParameter("k", kind)
                 .setParameter("key", key).setParameter("data", data)
                 .setParameter("device", deviceId)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
     public void updateEntry(UUID id, String key, String data) {
-        em.createNativeQuery("UPDATE xhandler.catalog_entry SET key = :key, data = CAST(:data AS jsonb), updated_at = now() WHERE id = :id")
-                .setParameter("key", key).setParameter("data", data).setParameter("id", id).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.catalog_entry SET key = :key, data = CAST(:data AS jsonb), updated_at = now() WHERE id = :id")
+                .setParameter("key", key).setParameter("data", data).setParameter("id", id).execute();
     }
 
     @Override
     public void deleteEntry(UUID id) {
-        em.createNativeQuery("UPDATE xhandler.catalog_entry SET deleted_at = now(), updated_at = now() WHERE id = :id")
-                .setParameter("id", id).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.catalog_entry SET deleted_at = now(), updated_at = now() WHERE id = :id")
+                .setParameter("id", id).execute();
     }
 
     @Override

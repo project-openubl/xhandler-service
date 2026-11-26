@@ -44,18 +44,18 @@ public class JpaPseProvider implements PseProvider {
 
     @Override
     public void addAuthorization(UUID id, UUID tenantId, UUID companyId, LocalDate authorizedAt, String evidenceRef, String registeredBy) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.pse_authorization (id, tenant_id, company_id, authorized_at, evidence_ref, registered_by)
                         VALUES (:id, :t, :c, :at, :e, :by)""")
                 .setParameter("id", id).setParameter("t", tenantId).setParameter("c", companyId).setParameter("at", authorizedAt)
-                .setParameter("e", evidenceRef).setParameter("by", registeredBy).executeUpdate();
+                .setParameter("e", evidenceRef).setParameter("by", registeredBy).execute();
     }
 
     @Override
     public int revokeAuthorizations(UUID companyId, String revokedBy) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.pse_authorization SET revoked_at = now(), revoked_by = :by WHERE company_id = :c AND revoked_at IS NULL""")
-                .setParameter("by", revokedBy).setParameter("c", companyId).executeUpdate();
+                .setParameter("by", revokedBy).setParameter("c", companyId).execute();
     }
 
     @Override

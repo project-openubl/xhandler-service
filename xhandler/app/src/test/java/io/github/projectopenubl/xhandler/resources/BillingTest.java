@@ -152,9 +152,9 @@ class BillingTest {
         EngineStub.LAGO_PLAN.set("business");
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            io.quarkus.hibernate.orm.panache.Panache.getEntityManager().createNativeQuery(
+            io.quarkus.hibernate.orm.panache.Panache.getEntityManager().createNativeStatement(
                     "UPDATE xhandler.entitlement SET source = 'lago', synced_at = now() - interval '30 days' WHERE tenant_id = :t")
-                    .setParameter("t", tenant).executeUpdate();
+                    .setParameter("t", tenant).execute();
         });
         entitlementSync.run(context("billing.entitlement-sync"));
         as("alice").get("/api/v1/tenants/" + tenant + "/billing").then().body("usage.plan.code", equalTo("business"))

@@ -30,7 +30,7 @@ public class JpaMaintenanceProvider implements MaintenanceProvider {
 
     @Override
     public int deleteOldRateBuckets() {
-        return em.createNativeQuery("DELETE FROM xhandler.public_lookup_counter WHERE bucket < now() - interval '1 day'").executeUpdate();
+        return em.createNativeStatement("DELETE FROM xhandler.public_lookup_counter WHERE bucket < now() - interval '1 day'").execute();
     }
 
     @Override

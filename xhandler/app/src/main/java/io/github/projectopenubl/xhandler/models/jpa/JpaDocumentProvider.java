@@ -176,9 +176,9 @@ public class JpaDocumentProvider implements DocumentProvider {
     @Override
     public int revokeAccessLinks(UUID documentId) {
         return repository.getEntityManager()
-                .createNativeQuery("UPDATE xhandler.access_token SET expires_at = now() WHERE document_id = :id AND expires_at > now()")
+                .createNativeStatement("UPDATE xhandler.access_token SET expires_at = now() WHERE document_id = :id AND expires_at > now()")
                 .setParameter("id", documentId)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
@@ -221,7 +221,7 @@ public class JpaDocumentProvider implements DocumentProvider {
 
     @Override
     public int markVoiding(UUID documentId, UUID voidingId, String motivo, java.time.Instant reversalCommunicatedAt) {
-        return repository.getEntityManager().createNativeQuery("""
+        return repository.getEntityManager().createNativeStatement("""
                         UPDATE xhandler.document SET status_before_voiding = status, status = 'voiding', voided_by_document_id = :voiding,
                             void_reason = :motivo, reversal_communicated_at = :reversal, updated_at = now()
                         WHERE id = :id AND status IN ('accepted', 'accepted_with_observations') AND delivered_at IS NULL
@@ -230,27 +230,27 @@ public class JpaDocumentProvider implements DocumentProvider {
                 .setParameter("motivo", motivo)
                 .setParameter("reversal", reversalCommunicatedAt)
                 .setParameter("id", documentId)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
     public void addPortalDelivery(UUID id, UUID tenantId, UUID documentId) {
-        repository.getEntityManager().createNativeQuery("""
+        repository.getEntityManager().createNativeStatement("""
                         INSERT INTO xhandler.delivery (id, tenant_id, document_id, channel, result) VALUES (:id, :tenant, :document, 'portal', 'downloaded')""")
                 .setParameter("id", id)
                 .setParameter("tenant", tenantId)
                 .setParameter("document", documentId)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
     public void addSunatCall(String endpoint, boolean healthy, java.time.Instant startedAt) {
         repository.getEntityManager()
-                .createNativeQuery("INSERT INTO xhandler.sunat_call (endpoint, healthy, started_at) VALUES (:endpoint, :healthy, :started)")
+                .createNativeStatement("INSERT INTO xhandler.sunat_call (endpoint, healthy, started_at) VALUES (:endpoint, :healthy, :started)")
                 .setParameter("endpoint", endpoint)
                 .setParameter("healthy", healthy)
                 .setParameter("started", startedAt)
-                .executeUpdate();
+                .execute();
     }
 
     @Override
@@ -295,12 +295,12 @@ public class JpaDocumentProvider implements DocumentProvider {
 
     @Override
     public void setDocumentAmounts(UUID documentId, String amountsJson, String paymentTerms) {
-        repository.getEntityManager().createNativeQuery("""
+        repository.getEntityManager().createNativeStatement("""
                         UPDATE xhandler.document SET amounts = cast(:a AS jsonb),
                             payment_terms = CASE WHEN tipo_comprobante = '01' AND payment_terms IS NULL THEN :terms ELSE payment_terms END
                         WHERE id = :id AND amounts IS NULL""")
                 .setParameter("a", amountsJson).setParameter("terms", paymentTerms)
-                .setParameter("id", documentId).executeUpdate();
+                .setParameter("id", documentId).execute();
     }
 
 
@@ -318,8 +318,8 @@ public class JpaDocumentProvider implements DocumentProvider {
 
     @Override
     public void markAmountsUnreadable(UUID documentId) {
-        repository.getEntityManager().createNativeQuery(
+        repository.getEntityManager().createNativeStatement(
                         "UPDATE xhandler.document SET amounts = cast('{\"_error\": \"unreadable\"}' AS jsonb) WHERE id = :id AND amounts IS NULL")
-                .setParameter("id", documentId).executeUpdate();
+                .setParameter("id", documentId).execute();
     }
 }

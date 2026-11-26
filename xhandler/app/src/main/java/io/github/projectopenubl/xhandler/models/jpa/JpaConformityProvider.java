@@ -47,17 +47,17 @@ public class JpaConformityProvider implements ConformityProvider {
     @Override
     public void addConformity(UUID id, UUID tenantId, UUID companyId, UUID documentId, String buyerRuc, Instant acceptedAt,
             Instant windowEndsAt) {
-        em.createNativeQuery("""
+        em.createNativeStatement("""
                         INSERT INTO xhandler.conformity (id, tenant_id, company_id, document_id, buyer_ruc, accepted_at, window_ends_at)
                         VALUES (:id, :t, :c, :d, :buyer, :at, :ends) ON CONFLICT (document_id) DO NOTHING""")
                 .setParameter("id", id).setParameter("t", tenantId).setParameter("c", companyId).setParameter("d", documentId)
-                .setParameter("buyer", buyerRuc).setParameter("at", acceptedAt).setParameter("ends", windowEndsAt).executeUpdate();
+                .setParameter("buyer", buyerRuc).setParameter("at", acceptedAt).setParameter("ends", windowEndsAt).execute();
     }
 
     @Override
     public void closeConformity(UUID documentId) {
-        em.createNativeQuery("UPDATE xhandler.conformity SET state = 'closed', resolved_at = now() WHERE document_id = :d AND state = 'pending'")
-                .setParameter("d", documentId).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.conformity SET state = 'closed', resolved_at = now() WHERE document_id = :d AND state = 'pending'")
+                .setParameter("d", documentId).execute();
     }
 
     @Override
@@ -76,21 +76,21 @@ public class JpaConformityProvider implements ConformityProvider {
 
     @Override
     public int resolveConformity(UUID id, String state) {
-        return em.createNativeQuery("""
+        return em.createNativeStatement("""
                         UPDATE xhandler.conformity SET state = :s, resolved_at = now(), checked_at = now(), check_detail = NULL
-                        WHERE id = :id AND state = 'pending'""").setParameter("s", state).setParameter("id", id).executeUpdate();
+                        WHERE id = :id AND state = 'pending'""").setParameter("s", state).setParameter("id", id).execute();
     }
 
     @Override
     public int markReminded(UUID id) {
-        return em.createNativeQuery("UPDATE xhandler.conformity SET reminded_at = now() WHERE id = :id AND reminded_at IS NULL")
-                .setParameter("id", id).executeUpdate();
+        return em.createNativeStatement("UPDATE xhandler.conformity SET reminded_at = now() WHERE id = :id AND reminded_at IS NULL")
+                .setParameter("id", id).execute();
     }
 
     @Override
     public void stampConformity(UUID id, String detail) {
-        em.createNativeQuery("UPDATE xhandler.conformity SET checked_at = now(), check_detail = :d WHERE id = :id")
-                .setParameter("d", detail).setParameter("id", id).executeUpdate();
+        em.createNativeStatement("UPDATE xhandler.conformity SET checked_at = now(), check_detail = :d WHERE id = :id")
+                .setParameter("d", detail).setParameter("id", id).execute();
     }
 
     private static ConformityRow row(Object[] r) {
