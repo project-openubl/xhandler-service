@@ -1,7 +1,8 @@
 package io.github.projectopenubl.xhandler.keys;
 
-import io.github.projectopenubl.xhandler.api.ApiException;
-import io.github.projectopenubl.xhandler.api.Ids;
+import io.github.projectopenubl.xhandler.utils.Times;
+import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
+import io.github.projectopenubl.xhandler.utils.Ids;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
@@ -77,7 +78,7 @@ public class PlatformKeys {
                         "SELECT id, purpose, key_ref, certificate, subject, ruc, valid_until FROM xhandler.platform_key WHERE purpose = :p AND status = 'active'")
                 .setParameter("p", purpose).getResultList();
         return rows.stream().findFirst().map(r -> new Key((UUID) r[0], (String) r[1], (String) r[2], (byte[]) r[3], (String) r[4],
-                (String) r[5], io.github.projectopenubl.xhandler.status.StatusResource.toInstant(r[6])));
+                (String) r[5], Times.toInstant(r[6])));
     }
 
     /** SHA256withRSA inside the vault, on the HSM executor. */

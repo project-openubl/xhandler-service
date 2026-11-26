@@ -1,7 +1,9 @@
 package io.github.projectopenubl.xhandler.jobs;
 
-import io.github.projectopenubl.xhandler.api.Ids;
-import io.github.projectopenubl.xhandler.tenancy.TenantScope;
+import io.github.projectopenubl.xhandler.models.jpa.entities.Job;
+
+import io.github.projectopenubl.xhandler.utils.Ids;
+import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import java.time.Instant;

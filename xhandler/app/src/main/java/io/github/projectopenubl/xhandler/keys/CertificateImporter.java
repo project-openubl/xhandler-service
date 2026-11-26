@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.keys;
 
-import io.github.projectopenubl.xhandler.api.ApiException;
+import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -19,17 +19,17 @@ import javax.crypto.BadPaddingException;
  * Reads a PKCS#12 (.pfx) keystore. The keystore and its password are only in memory here, never
  * logged or stored (DESIGN.md §6); the caller moves the key into the {@link KeyVault}.
  */
-final class CertificateImporter {
+public final class CertificateImporter {
 
     /** RUC in the subject: "RUC 20123456789", "RUC:2012...", or organizationIdentifier "VATPE-2012...". */
     private static final Pattern RUC_LABELED = Pattern.compile("(?:RUC|VATPE)[^0-9]{0,3}(\\d{11})(?!\\d)");
     private static final Pattern RUC_ANY = Pattern.compile("\\b((?:10|15|16|17|20)\\d{9})\\b");
 
-    record Imported(PrivateKey privateKey, X509Certificate certificate, Optional<String> ruc) {}
+    public record Imported(PrivateKey privateKey, X509Certificate certificate, Optional<String> ruc) {}
 
     private CertificateImporter() {}
 
-    static Imported read(byte[] pkcs12, char[] password, Instant now) {
+    public static Imported read(byte[] pkcs12, char[] password, Instant now) {
         KeyStore keyStore;
         try {
             keyStore = KeyStore.getInstance("PKCS12");

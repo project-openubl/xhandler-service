@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.keys;
 
-import io.github.projectopenubl.xhandler.api.ApiException;
+import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.quarkus.runtime.ShutdownEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;

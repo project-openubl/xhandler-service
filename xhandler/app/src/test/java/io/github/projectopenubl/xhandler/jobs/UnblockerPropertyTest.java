@@ -3,7 +3,7 @@ package io.github.projectopenubl.xhandler.jobs;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.projectopenubl.xhandler.engine.EngineStub;
+import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;

@@ -142,7 +142,7 @@ public class JobStore {
     /** A platform job (no tenant), e.g. from the admin API. */
     @Transactional(Transactional.TxType.MANDATORY)
     public UUID enqueuePlatform(String name, int priorityClass, Map<String, Object> args, List<String> resources) {
-        UUID id = io.github.projectopenubl.xhandler.api.Ids.newId();
+        UUID id = io.github.projectopenubl.xhandler.utils.Ids.newId();
         em.createNativeQuery("SELECT xhandler.enqueue_platform_job(:id, :name, CAST(:priority AS smallint), CAST(:args AS jsonb), CAST(:resources AS text[]))")
                 .setParameter("id", id)
                 .setParameter("name", name)
