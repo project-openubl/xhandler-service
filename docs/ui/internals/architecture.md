@@ -1,7 +1,7 @@
 # Architecture
 
 A high-level map of how the UI is structured. For the design decisions behind it see
-[docs/adr/](../../adr/); for the coding rules see [.rulesync/rules/](../../../ui/.rulesync/rules/).
+[docs/adr/](../../adr/); for the coding rules see [.rulesync/rules/](../../../.rulesync/rules/).
 
 ```mermaid
 flowchart LR

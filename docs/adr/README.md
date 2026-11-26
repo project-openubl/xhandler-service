@@ -6,7 +6,7 @@ from them. Records describe the product, never the code.
 **For AI agents:** before changing a screen or a flow, pick the records that apply from their
 `description` (`grep -H '^description:' docs/adr/0*.md`) and follow their `## Rules`. The
 rules are a pass/fail checklist for how the running UI behaves. Where a rule maps to code, a
-self-contained code rule in [.rulesync/rules/](../../ui/.rulesync/rules/) restates it for the code.
+self-contained code rule in [.rulesync/rules/](../../.rulesync/rules/) restates it for the code.
 
 To change a decision, add a new record with the next number, set the old one's `status` to
 `Superseded by NNNN`, and update the code rules that cover the changed behaviour.

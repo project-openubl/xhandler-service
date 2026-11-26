@@ -13,4 +13,4 @@
 - [environment-variables.md](environment-variables.md): runtime, build-time and dev/test env vars
 
 Coding conventions (rules) and step-by-step how-tos (skills) live in
-[ui/.rulesync/](../../ui/.rulesync/); see the root [AGENTS.md](../../AGENTS.md).
+[.rulesync/](../../.rulesync/) at the repository root; see the root [AGENTS.md](../../AGENTS.md).

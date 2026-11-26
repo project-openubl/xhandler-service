@@ -1024,7 +1024,7 @@ xhandler-ui (`ui/` at the root of this monorepo, separate container) is the only
 - **Guidance**:
   - the root `AGENTS.md` (the only agent guide of the monorepo);
   - `docs/adr/` (what the UI does, each ADR with `## Rules`; design changes need a new or superseding ADR);
-  - `.rulesync/` rules and skills generated into `.claude/` and `.cursor/`;
+  - `.rulesync/` rules and skills (at the repository root) generated into the root `.claude/` and `.cursor/`;
   - `docs/ui/` (internals, scripts, tech stack, environment variables).
 - **Tooling**: oxlint/oxfmt for the fast loop; ESLint, tsc and Prettier as the gate; husky and commitlint; PatternFly skills.
 - **Adaptations**: Pulp-specific rules are rewritten (e.g. `pulp-api` → `xhandler-api`). Plugin concepts are adapted where useful (document types as data, after pulp-ui-2 ADR 0001) or dropped, and the U0 ADRs record which.

@@ -3,8 +3,6 @@ node_modules
 */dist/
 dist
 coverage
-.claude
-.cursor
 .vscode
 .idea
 e2e/test-results

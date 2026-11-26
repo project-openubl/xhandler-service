@@ -28,6 +28,7 @@ hack/       dev and CI tooling only
   xhandler-e2e.sh    full flow against SUNAT beta
   load/              k6 load tests
   minikube/          manifests of the CI minikube e2e
+.rulesync/  agent rules and skills (source); generates .claude/, .cursor/, .mcp.json
 ```
 
 ## Commands
@@ -104,8 +105,8 @@ Run commands from `ui/`. Four npm workspaces: `common/`, `client/` (Vite SPA, `@
 mirror `client/src/app/pages/`). The browser calls `/api/xhandler/*` and `/api/searchpe/*` on its
 own origin; searchpe is optional (no `SEARCHPE_API_URL`, no section).
 
-- Coding rules and skills live in `ui/.rulesync/`; `npm run rules` generates `ui/.claude/` and
-  `ui/.cursor/`. Never edit the generated copies. Check a change against the `## Checklist` of
+- Coding rules and skills live in `.rulesync/` at the repository root; `npm run rules` (from
+  `ui/`) generates the root `.claude/`, `.cursor/` and `.mcp.json`. Never edit the generated copies. Check a change against the `## Checklist` of
   every rule matching the changed files.
 - Never edit generated code: `client/src/app/client/`, `routeTree.gen.ts`. Regenerate the API
   clients with `npm run openapi:refresh` after an xhandler or searchpe API change.

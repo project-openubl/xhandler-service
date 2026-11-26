@@ -9,7 +9,7 @@ Run from `ui/`. Workspace scripts run with `-w <workspace>` or `-ws`.
 | `npm ci`                  | Installs, then `prepare` runs `generate`                                      |
 | `npm run generate`        | Generates both API clients from `client/openapi/*.json` (hey-api)             |
 | `npm run openapi:refresh` | Copies the specs from the Maven builds into `client/openapi/` and regenerates |
-| `npm run rules`           | Regenerates `.claude/` and `.cursor/` from `.rulesync/`                       |
+| `npm run rules`           | Regenerates the root `.claude/`, `.cursor/`, `.mcp.json` from `.rulesync/`    |
 | `npm run oxlint:sync`     | Regenerates `.oxlintrc.json` from `eslint.config.mjs`                         |
 | `npm run hooks:install`   | Points the repository's git hooks at `ui/.husky` (lint-staged + commitlint)   |
 
