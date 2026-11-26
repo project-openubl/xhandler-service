@@ -7,7 +7,7 @@ import { listSearch } from "@app/utils/listState";
 const { validateSearch, search } = listSearch(JOB_LIST_STATE);
 
 export const Route = createFileRoute(
-  "/_authenticated/organizaciones/$tenantId/trabajos",
+  "/_authenticated/organizaciones/$tenantId/trabajos/",
 )({
   validateSearch,
   search,

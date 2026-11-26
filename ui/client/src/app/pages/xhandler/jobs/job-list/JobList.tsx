@@ -1,6 +1,7 @@
 import type React from "react";
 import { useState } from "react";
 
+import { Link } from "@tanstack/react-router";
 import dayjs from "dayjs";
 
 import {
@@ -34,6 +35,7 @@ import {
 import { useDebouncedValue } from "@app/hooks/useDebouncedValue";
 import { useNotifications } from "@app/hooks/useNotifications";
 import { usePersistentState } from "@app/hooks/usePersistentState";
+import { useSelectedTenantId } from "@app/hooks/useSelectedTenantId";
 import { useTenantRole } from "@app/hooks/useTenantRole";
 import {
   isJobCancelable,
@@ -68,6 +70,7 @@ const jobErrorText = (job: JobView): string | undefined => {
 
 /** The tenant's background jobs, shaped like Pulp's tasks (ADR 0007). */
 export const JobList: React.FC = () => {
+  const tenantId = useSelectedTenantId();
   const { addNotification } = useNotifications();
   const { can, disabledProps } = useTenantRole();
   const [cancelTarget, setCancelTarget] = useState<JobView | null>(null);
@@ -145,7 +148,19 @@ export const JobList: React.FC = () => {
   const rows = jobs.map((job) => ({
     id: job.id ?? "",
     row: [
-      { cell: job.name ?? "-", props: { modifier: "truncate" as const } },
+      {
+        cell: job.id ? (
+          <Link
+            to="/organizaciones/$tenantId/trabajos/$jobId"
+            params={{ tenantId, jobId: job.id }}
+          >
+            {job.name ?? job.id}
+          </Link>
+        ) : (
+          (job.name ?? "-")
+        ),
+        props: { modifier: "truncate" as const },
+      },
       { cell: <JobStateLabel state={job.state} /> },
       { cell: formatTime(job.created_at) },
       { cell: formatTime(job.finished_at) },

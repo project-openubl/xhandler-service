@@ -5,10 +5,12 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  useSuspenseQuery,
 } from "@tanstack/react-query";
 
 import {
   cancelJob,
+  getJob,
   type JobView,
   listJobs,
   type ListJobsData,
@@ -95,6 +97,43 @@ export const useJobsListQuery = ({
   const tenantId = useSelectedTenantId();
   return useQuery(jobsListQueryOptions({ tenantId, params, options }));
 };
+
+type JobDetailOptions = Omit<
+  UseQueryOptions<JobView, XhandlerAxiosError>,
+  "queryKey" | "queryFn"
+>;
+
+/** `GET …/jobs/{id}`: one job, `404` when unknown or another tenant's. */
+export const jobDetailQueryOptions = ({
+  tenantId,
+  jobId,
+  options,
+}: {
+  tenantId: string;
+  jobId: string;
+  options?: JobDetailOptions;
+}) =>
+  queryOptions<JobView, XhandlerAxiosError>({
+    ...options,
+    queryKey: jobKeys.detail(tenantId, jobId),
+    queryFn: async () =>
+      (await getJob({ path: { tenantId, jobId }, throwOnError: true })).data,
+  });
+
+export const useSuspenseJobDetailQuery = ({
+  jobId,
+  options,
+}: {
+  jobId: string;
+  options?: JobDetailOptions;
+}) => {
+  const tenantId = useSelectedTenantId();
+  return useSuspenseQuery(jobDetailQueryOptions({ tenantId, jobId, options }));
+};
+
+/** A job resource (`document:{id}`, DESIGN.md §10.2) as a document id, when it names one. */
+export const documentIdOfResource = (resource: string): string | undefined =>
+  /^document:([0-9a-f-]{36})$/i.exec(resource)?.[1];
 
 /** `POST …/jobs/{id}/cancel`: answers the job, now `canceling` or `canceled`. */
 export const useJobCancelMutation = (
