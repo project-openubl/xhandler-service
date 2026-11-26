@@ -3,7 +3,7 @@ package io.github.projectopenubl.xhandler.managers;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.ReportProvider;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -61,39 +61,24 @@ public class RegisterRows {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final TypeReference<Map<String, String>> MAP = new TypeReference<>() {};
 
-    private final EntityManager em;
+    private final ReportProvider reportProvider;
 
-    public RegisterRows(EntityManager em) {
-        this.em = em;
+    public RegisterRows(ReportProvider reportProvider) {
+        this.reportProvider = reportProvider;
     }
 
     /** With the tenant open. {@code period} is YYYYMM. */
     @Transactional(Transactional.TxType.MANDATORY)
     public List<Row> sales(UUID companyId, String sunatEnv, String period) {
         YearMonth month = month(period);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT d.fecha_emision, d.tipo_comprobante, d.serie, d.numero, d.customer_tipo, d.customer_numero, d.customer_nombre,
-                               d.moneda,
-                               coalesce(d.tipo_cambio, CASE WHEN d.moneda = 'USD' THEN (SELECT r.venta FROM xhandler.exchange_rate r
-                                   WHERE r.day <= d.fecha_emision ORDER BY r.day DESC LIMIT 1) END),
-                               cast(d.amounts AS text), d.total, d.status,
-                               a.fecha_emision, a.tipo_comprobante, a.serie, a.numero
-                        FROM xhandler.document d LEFT JOIN xhandler.document a ON a.id = d.affected_document_id
-                        WHERE d.company_id = :c AND d.sunat_env = :env AND d.tipo_comprobante IN ('01', '03', '07', '08')
-                          AND d.fecha_emision BETWEEN :from AND :to
-                          AND d.status IN ('accepted', 'accepted_with_observations', 'voiding', 'voided')
-                        ORDER BY d.fecha_emision, d.tipo_comprobante, d.serie, d.numero""")
-                .setParameter("c", companyId).setParameter("env", sunatEnv)
-                .setParameter("from", month.atDay(1)).setParameter("to", month.atEndOfMonth())
-                .getResultList();
+        List<ReportProvider.SalesRow> rows = reportProvider.getSalesRows(companyId, sunatEnv, month.atDay(1), month.atEndOfMonth());
         List<Row> out = new ArrayList<>(rows.size());
-        for (Object[] r : rows) {
-            String tipo = (String) r[1];
-            boolean voided = "voided".equals(r[11]);
-            out.add(row(date(r[0]), tipo, (String) r[2], ((Number) r[3]).longValue(), (String) r[4], (String) r[5], (String) r[6],
-                    (String) r[7], (BigDecimal) r[8], (String) r[9], (BigDecimal) r[10], voided,
-                    date(r[12]), (String) r[13], (String) r[14], r[15] == null ? null : ((Number) r[15]).longValue()));
+        for (ReportProvider.SalesRow r : rows) {
+            String tipo = r.tipo();
+            boolean voided = "voided".equals(r.status());
+            out.add(row(r.fecha(), tipo, r.serie(), r.numero(), r.customerTipo(), r.customerNumero(), r.customerNombre(),
+                    r.moneda(), r.tipoCambio(), r.amounts(), r.total(), voided,
+                    r.affectedFecha(), r.affectedTipo(), r.affectedSerie(), r.affectedNumero()));
         }
         return out;
     }
@@ -102,21 +87,10 @@ public class RegisterRows {
     @Transactional(Transactional.TxType.MANDATORY)
     public List<Row> purchases(UUID companyId, String period) {
         YearMonth month = month(period);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT fecha_emision, tipo_comprobante, serie, numero, supplier_ruc, supplier_name, moneda, cast(amounts AS text), total,
-                               affected_serie_numero, affected_tipo,
-                               CASE WHEN moneda = 'USD' THEN (SELECT r.venta FROM xhandler.exchange_rate r
-                                   WHERE r.day <= reception.fecha_emision ORDER BY r.day DESC LIMIT 1) END
-                        FROM xhandler.reception
-                        WHERE company_id = :c AND fecha_emision BETWEEN :from AND :to AND tipo_comprobante IN ('01', '03', '07', '08')
-                          AND validity_state NOT IN ('not_found', 'voided', 'rejected')
-                        ORDER BY fecha_emision, supplier_ruc, tipo_comprobante, serie, numero""")
-                .setParameter("c", companyId).setParameter("from", month.atDay(1)).setParameter("to", month.atEndOfMonth())
-                .getResultList();
+        List<ReportProvider.PurchaseRow> rows = reportProvider.getPurchaseRows(companyId, month.atDay(1), month.atEndOfMonth());
         List<Row> out = new ArrayList<>(rows.size());
-        for (Object[] r : rows) {
-            String affected = (String) r[9];
+        for (ReportProvider.PurchaseRow r : rows) {
+            String affected = r.affectedSerieNumero();
             String affectedSerie = null;
             Long affectedNumero = null;
             if (affected != null && affected.contains("-")) {
@@ -127,8 +101,8 @@ public class RegisterRows {
                     affectedNumero = null;
                 }
             }
-            out.add(row(date(r[0]), (String) r[1], (String) r[2], ((Number) r[3]).longValue(), "6", (String) r[4], (String) r[5],
-                    (String) r[6], (BigDecimal) r[11], (String) r[7], (BigDecimal) r[8], false, null, (String) r[10], affectedSerie,
+            out.add(row(r.fecha(), r.tipo(), r.serie(), r.numero(), "6", r.supplierRuc(), r.supplierName(),
+                    r.moneda(), r.tipoCambio(), r.amounts(), r.total(), false, null, r.affectedTipo(), affectedSerie,
                     affectedNumero));
         }
         return out;
@@ -163,12 +137,7 @@ public class RegisterRows {
     @Transactional(Transactional.TxType.MANDATORY)
     public long unresolved(UUID companyId, String sunatEnv, String period) {
         YearMonth month = month(period);
-        return ((Number) em.createNativeQuery("""
-                        SELECT count(*) FROM xhandler.document
-                        WHERE company_id = :c AND sunat_env = :env AND tipo_comprobante IN ('01', '03', '07', '08')
-                          AND fecha_emision BETWEEN :from AND :to AND status IN ('pending_send', 'in_progress', 'unknown', 'exception')""")
-                .setParameter("c", companyId).setParameter("env", sunatEnv).setParameter("from", month.atDay(1))
-                .setParameter("to", month.atEndOfMonth()).getSingleResult()).longValue();
+        return reportProvider.countUnresolvedDocuments(companyId, sunatEnv, month.atDay(1), month.atEndOfMonth());
     }
 
     public static YearMonth month(String period) {
@@ -177,12 +146,5 @@ public class RegisterRows {
                     null);
         }
         return YearMonth.of(Integer.parseInt(period.substring(0, 4)), Integer.parseInt(period.substring(4)));
-    }
-
-    private static LocalDate date(Object value) {
-        if (value == null) {
-            return null;
-        }
-        return value instanceof LocalDate d ? d : ((java.sql.Date) value).toLocalDate();
     }
 }

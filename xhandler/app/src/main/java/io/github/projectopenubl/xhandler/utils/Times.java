@@ -22,4 +22,12 @@ public final class Times {
         }
         throw new IllegalArgumentException("not a timestamp: " + value.getClass());
     }
+
+    /** A {@code date} column read through a native query (LocalDate or java.sql.Date); null stays null. */
+    public static java.time.LocalDate toLocalDate(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return value instanceof java.time.LocalDate d ? d : ((java.sql.Date) value).toLocalDate();
+    }
 }

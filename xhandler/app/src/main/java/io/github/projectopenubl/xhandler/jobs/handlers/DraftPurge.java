@@ -2,9 +2,9 @@ package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
+import io.github.projectopenubl.xhandler.models.MaintenanceProvider;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import java.time.Duration;
 import java.util.Map;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -21,11 +21,11 @@ public class DraftPurge implements JobHandler {
     static final String NAME = "drafts.purge";
     private static final int BATCH = 1000;
 
-    private final EntityManager em;
+    private final MaintenanceProvider maintenance;
     private final int days;
 
-    public DraftPurge(EntityManager em, @ConfigProperty(name = "xhandler.drafts.purge-after", defaultValue = "30d") Duration purgeAfter) {
-        this.em = em;
+    public DraftPurge(MaintenanceProvider maintenance, @ConfigProperty(name = "xhandler.drafts.purge-after", defaultValue = "30d") Duration purgeAfter) {
+        this.maintenance = maintenance;
         this.days = (int) Math.max(1, purgeAfter.toDays());
     }
 
@@ -38,9 +38,7 @@ public class DraftPurge implements JobHandler {
     public Map<String, Object> run(JobContext context) {
         int purged = 0;
         for (int batch = 0; batch < 100; batch++) {
-            int n = QuarkusTransaction.requiringNew().call(() -> ((Number) em.createNativeQuery(
-                            "SELECT xhandler.purge_deleted_drafts(:days, :limit)")
-                    .setParameter("days", days).setParameter("limit", BATCH).getSingleResult()).intValue());
+            int n = QuarkusTransaction.requiringNew().call(() -> maintenance.purgeDeletedDrafts(days, BATCH));
             purged += n;
             if (n < BATCH) {
                 break;

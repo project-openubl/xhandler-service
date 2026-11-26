@@ -42,4 +42,13 @@ public interface SeriesProvider {
     boolean seriesExists(UUID companyId, UUID seriesId);
 
     boolean seriesExists(UUID companyId, String sunatEnv, String tipoComprobante, String serie);
+
+    /**
+     * Moves the series counter forward to {@code nextNumber} (never back), bypassing the session;
+     * returns how many rows changed.
+     */
+    int moveNextNumber(UUID seriesId, long nextNumber);
+
+    /** Activates or deactivates the series, bypassing the session. */
+    void setActive(UUID seriesId, boolean active);
 }

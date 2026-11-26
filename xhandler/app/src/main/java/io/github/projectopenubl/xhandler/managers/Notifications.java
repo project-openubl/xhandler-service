@@ -14,7 +14,7 @@ import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.NotificationProvider;
 import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.Map;
@@ -40,31 +40,25 @@ public class Notifications {
     public static final String CONFORMITY_OBJECTED = "conformity.objected";
     public static final String SIRE_DEADLINE = "sire.deadline";
 
-    private final EntityManager em;
+    private final NotificationProvider notificationProvider;
     private final Jobs jobs;
 
-    public Notifications(EntityManager em, Jobs jobs, TenantProvider tenantProvider) {
+    public Notifications(NotificationProvider notificationProvider, Jobs jobs, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
-        this.em = em;
+        this.notificationProvider = notificationProvider;
         this.jobs = jobs;
     }
 
     /** With the tenant open. */
     @Transactional(Transactional.TxType.MANDATORY)
     public void publish(UUID tenantId, String kind, String title, String body, UUID documentId) {
-        List<?> preference = em.createNativeQuery("SELECT email, in_app FROM xhandler.notification_preference WHERE kind = :k")
-                .setParameter("k", kind).getResultList();
+        java.util.Optional<NotificationProvider.NotificationPreference> preference = notificationProvider.getNotificationPreference(kind);
         // Legal notices (data-subject requests) can't be muted
         boolean mandatory = kind.startsWith("privacy.");
-        boolean email = mandatory || preference.isEmpty() || Boolean.TRUE.equals(((Object[]) preference.get(0))[0]);
-        boolean inApp = mandatory || preference.isEmpty() || Boolean.TRUE.equals(((Object[]) preference.get(0))[1]);
+        boolean email = mandatory || preference.isEmpty() || Boolean.TRUE.equals(preference.get().email());
+        boolean inApp = mandatory || preference.isEmpty() || Boolean.TRUE.equals(preference.get().inApp());
         if (inApp) {
-            em.createNativeQuery("""
-                            INSERT INTO xhandler.notification (id, tenant_id, kind, title, body, document_id)
-                            VALUES (:id, :tenant, :kind, :title, :body, :document)""")
-                    .setParameter("id", Ids.newId()).setParameter("tenant", tenantId).setParameter("kind", kind)
-                    .setParameter("title", title).setParameter("body", body).setParameter("document", documentId)
-                    .executeUpdate();
+            notificationProvider.addNotification(Ids.newId(), tenantId, kind, title, body, documentId);
         }
         TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
         if (email && tenant != null && tenant.getNotificationEmail() != null) {

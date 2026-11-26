@@ -13,8 +13,7 @@ import io.github.projectopenubl.xhandler.keys.SecretBox;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
+import io.github.projectopenubl.xhandler.models.WebhookQueueProvider;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -55,19 +54,19 @@ public class WebhookDeliveryJob implements JobHandler {
     static final Duration HARD_DEADLINE = Duration.ofSeconds(15);
     static final Duration RUN_DEADLINE = Duration.ofSeconds(60);
 
-    private final EntityManager em;
+    private final WebhookQueueProvider webhookQueueProvider;
     private final TenantAccess access;
     private final SecretBox box;
     private final Egress egress;
     private final ObjectMapper json;
     private final io.github.projectopenubl.xhandler.managers.Auditor auditor;
 
-    public WebhookDeliveryJob(EntityManager em, TenantAccess access, SecretBox box, Egress egress, ObjectMapper json,
+    public WebhookDeliveryJob(WebhookQueueProvider webhookQueueProvider, TenantAccess access, SecretBox box, Egress egress, ObjectMapper json,
             io.github.projectopenubl.xhandler.managers.Auditor auditor, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider) {
         this.webhookSubscriptionProvider = webhookSubscriptionProvider;
         this.webhookDeliveryProvider = webhookDeliveryProvider;
         this.auditor = auditor;
-        this.em = em;
+        this.webhookQueueProvider = webhookQueueProvider;
         this.access = access;
         this.box = box;
         this.egress = egress;
@@ -82,14 +81,8 @@ public class WebhookDeliveryJob implements JobHandler {
     @Override
     public Map<String, Object> run(JobContext context) throws Exception {
         record Leased(UUID id, UUID tenantId, int attempts) {}
-        List<Leased> due = QuarkusTransaction.requiringNew().call(() -> {
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = em.createNativeQuery(
-                            "SELECT id, tenant_id, attempts FROM xhandler.lease_webhook_deliveries(:n, interval '2 minutes')")
-                    .setParameter("n", BATCH)
-                    .getResultList();
-            return rows.stream().map(r -> new Leased((UUID) r[0], (UUID) r[1], ((Number) r[2]).intValue())).toList();
-        });
+        List<Leased> due = QuarkusTransaction.requiringNew().call(() -> webhookQueueProvider.leaseWebhookDeliveries(BATCH).stream()
+                .map(r -> new Leased(r.id(), r.tenantId(), r.attempts())).toList());
         int delivered = 0;
         try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<Boolean>> results = new ArrayList<>();

@@ -1,11 +1,10 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.utils.Times;
+import io.github.projectopenubl.xhandler.models.StatusProvider;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.keys.KeyVault;
 import io.github.projectopenubl.xhandler.files.FileStore;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -58,19 +57,19 @@ public class StatusResource {
 
     static final List<String> ENVIRONMENTS = List.of("production", "beta", "fake");
 
-    private final EntityManager em;
+    private final StatusProvider statusProvider;
     private final Engine engine;
     private final FileStore files;
     private final KeyVault vault;
     private final String version;
 
     public StatusResource(
-            EntityManager em,
+            StatusProvider statusProvider,
             Engine engine,
             FileStore files,
             KeyVault vault,
             @ConfigProperty(name = "quarkus.application.version", defaultValue = "dev") String version) {
-        this.em = em;
+        this.statusProvider = statusProvider;
         this.engine = engine;
         this.files = files;
         this.vault = vault;
@@ -81,14 +80,8 @@ public class StatusResource {
     @GET
     @Transactional
     public Status status() {
-        @SuppressWarnings("unchecked")
-        List<Object[]> workers = em.createNativeQuery(
-                        "SELECT role, count(*) FROM xhandler.worker WHERE last_heartbeat > now() - interval '30 seconds' GROUP BY role ORDER BY role")
-                .getResultList();
-        @SuppressWarnings("unchecked")
-        List<Object[]> queues = em.createNativeQuery(
-                        "SELECT priority_class, waiting, unblocked, running, oldest_unblocked FROM xhandler.queue_stats() ORDER BY priority_class")
-                .getResultList();
+        List<StatusProvider.WorkerCount> workers = statusProvider.getOnlineWorkers();
+        List<StatusProvider.QueueStats> queues = statusProvider.getQueueStats();
         EngineModels.InfoResponse info = null;
         try {
             info = engine.info();
@@ -103,26 +96,22 @@ public class StatusResource {
         }
         return new Status(
                 new Versions(version, info == null ? null : info.engineVersion(), info == null ? null : info.xhandlerRustRev()),
-                workers.stream().map(w -> new Workers((String) w[0], ((Number) w[1]).longValue())).toList(),
+                workers.stream().map(w -> new Workers(w.role(), w.online())).toList(),
                 true,
                 files.healthy(),
                 vaultOk,
                 info != null,
-                queues.stream().map(q -> new Queue(((Number) q[0]).intValue(), ((Number) q[1]).longValue(), ((Number) q[2]).longValue(),
-                        ((Number) q[3]).longValue(), Times.toInstant(q[4]))).toList(),
+                queues.stream().map(q -> new Queue(q.priorityClass(), q.waiting(), q.unblocked(), q.running(), q.oldestUnblocked())).toList(),
                 sunat());
     }
 
     /** SUNAT's endpoints only: a third-party OSE ({@code ose:…}) is no platform-wide status. */
     private List<SunatEnvironment> sunat() {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, breaker_state, breaker_until, paused FROM xhandler.sunat_endpoint WHERE id NOT LIKE 'ose:%' ORDER BY id""")
-                .getResultList();
+        List<StatusProvider.EndpointState> rows = statusProvider.getSunatEndpoints();
         return ENVIRONMENTS.stream().map(env -> {
             List<SunatEndpoint> endpoints = rows.stream()
-                    .filter(r -> ((String) r[0]).startsWith(env + ":"))
-                    .map(r -> new SunatEndpoint(((String) r[0]).substring(env.length() + 1), (String) r[1], Times.toInstant(r[2]), (Boolean) r[3]))
+                    .filter(r -> r.id().startsWith(env + ":"))
+                    .map(r -> new SunatEndpoint(r.id().substring(env.length() + 1), r.breakerState(), r.breakerUntil(), r.paused()))
                     .toList();
             boolean available = endpoints.stream().allMatch(e -> "closed".equals(e.breakerState()) && !e.paused());
             return new SunatEnvironment(env, available, endpoints);

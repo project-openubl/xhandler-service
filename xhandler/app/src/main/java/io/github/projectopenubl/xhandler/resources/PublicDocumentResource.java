@@ -15,7 +15,6 @@ import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.GET;
@@ -64,10 +63,9 @@ public class PublicDocumentResource {
     private final AccessLinks links;
     private final TenantAccess access;
     private final FileStore files;
-    private final EntityManager em;
     private final io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf;
 
-    public PublicDocumentResource(AccessLinks links, TenantAccess access, FileStore files, EntityManager em,
+    public PublicDocumentResource(AccessLinks links, TenantAccess access, FileStore files,
             io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
@@ -77,7 +75,6 @@ public class PublicDocumentResource {
         this.links = links;
         this.access = access;
         this.files = files;
-        this.em = em;
     }
 
     @Operation(operationId = "getPublicDocument")
@@ -145,12 +142,7 @@ public class PublicDocumentResource {
     /** First download by the buyer: the document counts as delivered (voiding is then refused, §9.3). */
     private void markDelivered(java.util.UUID documentId) {
         DocumentModel doc = documentProvider.getDocumentForUpdate(documentId).orElse(null);
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.delivery (id, tenant_id, document_id, channel, result) VALUES (:id, :tenant, :document, 'portal', 'downloaded')""")
-                .setParameter("id", Ids.newId())
-                .setParameter("tenant", doc.getTenantId())
-                .setParameter("document", doc.getId())
-                .executeUpdate();
+        documentProvider.addPortalDelivery(Ids.newId(), doc.getTenantId(), doc.getId());
         if (doc.getDeliveredAt() == null) {
             doc.setDeliveredAt(Instant.now());
             doc.setDeliveredSource("service");

@@ -1,13 +1,12 @@
 package io.github.projectopenubl.xhandler.clients;
 
+import io.github.projectopenubl.xhandler.models.OseProvider;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.List;
 import java.util.UUID;
 import org.jboss.logging.Logger;
 
@@ -36,10 +35,10 @@ public class OseClients {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String DUMMY = "sha256$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
-    private final EntityManager em;
+    private final OseProvider oseProvider;
 
-    public OseClients(EntityManager em) {
-        this.em = em;
+    public OseClients(OseProvider oseProvider) {
+        this.oseProvider = oseProvider;
     }
 
     public Client authenticate(String username, String password) {
@@ -47,40 +46,28 @@ public class OseClients {
                 || password.length() > 200) {
             throw new Unauthorized();
         }
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery("""
-                        SELECT id, issuer_ruc, username, tenant_id, password_hash, status FROM xhandler.ose_client WHERE username = :u""")
-                .setParameter("u", username).getResultList());
-        Object[] r = rows.isEmpty() ? null : rows.get(0);
+        OseProvider.ClientLogin r = QuarkusTransaction.requiringNew().call(() -> oseProvider.getClientLogin(username)).orElse(null);
         // Always one verification, whatever the user's state
-        boolean matches = verify(password, r == null ? DUMMY : (String) r[4]);
+        boolean matches = verify(password, r == null ? DUMMY : r.passwordHash());
         if (r == null) {
             throw new Unauthorized();
         }
-        UUID id = (UUID) r[0];
-        if (!matches || !"active".equals(r[5])) {
-            int failures = QuarkusTransaction.requiringNew().call(() -> ((Number) em.createNativeQuery(
-                            "UPDATE xhandler.ose_client SET failed_attempts = failed_attempts + 1 WHERE id = :id RETURNING failed_attempts")
-                    .setParameter("id", id).getSingleResult()).intValue());
+        UUID id = r.id();
+        if (!matches || !"active".equals(r.status())) {
+            int failures = QuarkusTransaction.requiringNew().call(() -> oseProvider.countFailedLogin(id));
             if (failures % ALERT_FAILURES == 0) {
                 Logger.getLogger("xhandler.audit.platform").warnf("OSE user %s has %d consecutive failed logins", username, failures);
             }
             throw new Unauthorized();
         }
-        QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery("""
-                        UPDATE xhandler.ose_client SET failed_attempts = 0, last_login_at = now()
-                        WHERE id = :id AND (failed_attempts > 0 OR last_login_at IS NULL OR last_login_at < now() - interval '1 minute')""")
-                .setParameter("id", id).executeUpdate());
-        return new Client(id, (String) r[1], (String) r[2], (UUID) r[3]);
+        QuarkusTransaction.requiringNew().run(() -> oseProvider.markLogin(id));
+        return new Client(id, r.issuerRuc(), r.username(), r.tenantId());
     }
 
     /** By username only: the SFTP server authenticated the user already. */
     public java.util.Optional<Client> byUsername(String username) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery(
-                        "SELECT id, issuer_ruc, username, tenant_id FROM xhandler.ose_client WHERE username = :u AND status = 'active'")
-                .setParameter("u", username).getResultList());
-        return rows.stream().findFirst().map(r -> new Client((UUID) r[0], (String) r[1], (String) r[2], (UUID) r[3]));
+        return QuarkusTransaction.requiringNew().call(() -> oseProvider.getActiveClient(username))
+                .map(r -> new Client(r.id(), r.issuerRuc(), r.username(), r.tenantId()));
     }
 
     public static String newPassword() {

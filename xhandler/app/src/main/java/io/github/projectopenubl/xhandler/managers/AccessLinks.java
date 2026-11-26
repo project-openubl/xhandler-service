@@ -5,14 +5,13 @@ import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.AccessLinkProvider;
 import jakarta.transaction.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -29,15 +28,15 @@ public class AccessLinks {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private final EntityManager em;
+    private final AccessLinkProvider accessLinkProvider;
     private final String publicBaseUrl;
     private final Duration validity;
 
     public AccessLinks(
-            EntityManager em,
+            AccessLinkProvider accessLinkProvider,
             @ConfigProperty(name = "xhandler.public-url", defaultValue = "http://localhost:8080") String publicBaseUrl,
             @ConfigProperty(name = "xhandler.access-link.validity", defaultValue = "366d") Duration validity) {
-        this.em = em;
+        this.accessLinkProvider = accessLinkProvider;
         this.publicBaseUrl = publicBaseUrl.replaceAll("/+$", "");
         this.validity = validity;
     }
@@ -48,15 +47,7 @@ public class AccessLinks {
         byte[] raw = new byte[16];
         RANDOM.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.access_token (id, tenant_id, document_id, token_hash, expires_at)
-                        VALUES (:id, :tenant, :document, :hash, :expires)""")
-                .setParameter("id", Ids.newId())
-                .setParameter("tenant", document.getTenantId())
-                .setParameter("document", document.getId())
-                .setParameter("hash", hash(token))
-                .setParameter("expires", Instant.now().plus(validity))
-                .executeUpdate();
+        accessLinkProvider.addAccessLink(Ids.newId(), document.getTenantId(), document.getId(), hash(token), Instant.now().plus(validity));
         return token;
     }
 
@@ -74,11 +65,7 @@ public class AccessLinks {
         if (token == null || !token.matches("[A-Za-z0-9_-]{22}")) {
             return Optional.empty();
         }
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT tenant_id, document_id FROM xhandler.access_token_document(:hash)")
-                .setParameter("hash", hash(token))
-                .getResultList();
-        return rows.stream().findFirst().map(r -> new Resolved((UUID) r[0], (UUID) r[1]));
+        return accessLinkProvider.getLinkedDocument(hash(token)).map(r -> new Resolved(r.tenantId(), r.documentId()));
     }
 
     static String hash(String token) {

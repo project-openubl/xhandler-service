@@ -1,7 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
-import io.github.projectopenubl.xhandler.utils.Times;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -13,7 +12,7 @@ import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.CatalogProvider;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.DELETE;
@@ -63,15 +62,15 @@ public class CatalogResource {
             "address", List.of());
 
     private final TenantAccess access;
-    private final EntityManager em;
+    private final CatalogProvider catalogProvider;
     private final ObjectMapper json;
     private final io.github.projectopenubl.xhandler.managers.Auditor auditor;
 
-    public CatalogResource(TenantAccess access, EntityManager em, ObjectMapper json, io.github.projectopenubl.xhandler.managers.Auditor auditor, CompanyManager companyManager) {
+    public CatalogResource(TenantAccess access, CatalogProvider catalogProvider, ObjectMapper json, io.github.projectopenubl.xhandler.managers.Auditor auditor, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.auditor = auditor;
         this.access = access;
-        this.em = em;
+        this.catalogProvider = catalogProvider;
         this.json = json;
     }
 
@@ -86,17 +85,7 @@ public class CatalogResource {
         auditPersonalData(scope, kind, companyId, "list");
         int size = Page.limit(limit);
         int from = Page.offset(offset);
-        // Searches values people look for (not JSON keys): key, name, description, document, plate
-        String filter = q == null || q.isBlank() ? "" : " AND (key ILIKE :q OR data ->> 'nombre' ILIKE :q OR data ->> 'descripcion' ILIKE :q"
-                + " OR data ->> 'numero_documento_identidad' ILIKE :q OR data ->> 'placa' ILIKE :q OR data ->> 'direccion' ILIKE :q)";
-        var query = em.createNativeQuery("SELECT id, kind, key, CAST(data AS text), created_at, updated_at FROM xhandler.catalog_entry "
-                        + "WHERE company_id = :c AND kind = :k AND deleted_at IS NULL" + filter + " ORDER BY key LIMIT :l OFFSET :o")
-                .setParameter("c", companyId).setParameter("k", kind).setParameter("l", size).setParameter("o", from);
-        if (!filter.isEmpty()) {
-            query.setParameter("q", "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%");
-        }
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = query.getResultList();
+        List<CatalogProvider.CatalogRow> rows = catalogProvider.searchEntries(companyId, kind, q, size, from);
         return new Page<>(rows.stream().map(this::entry).toList(), size, from);
     }
 
@@ -148,8 +137,7 @@ public class CatalogResource {
         access.enter(tenantId, Role.OPERATOR);
         check(kind);
         find(companyId, kind, id);
-        em.createNativeQuery("UPDATE xhandler.catalog_entry SET deleted_at = now(), updated_at = now() WHERE id = :id")
-                .setParameter("id", id).executeUpdate();
+        catalogProvider.deleteEntry(id);
         return Response.noContent().build();
     }
 
@@ -170,18 +158,12 @@ public class CatalogResource {
         UUID entryId = id != null ? id : Ids.newId();
         try {
             if (id == null) {
-                em.createNativeQuery("""
-                                INSERT INTO xhandler.catalog_entry (id, tenant_id, company_id, kind, key, data, device_id)
-                                VALUES (:id, :t, :c, :k, :key, CAST(:data AS jsonb), :device)""")
-                        .setParameter("id", entryId).setParameter("t", tenantId).setParameter("c", companyId).setParameter("k", kind)
-                        .setParameter("key", key).setParameter("data", data.toString())
-                        .setParameter("device", data.hasNonNull("device_id") ? data.get("device_id").asText() : null)
-                        .executeUpdate();
+                catalogProvider.addEntry(entryId, tenantId, companyId, kind, key, data.toString(),
+                        data.hasNonNull("device_id") ? data.get("device_id").asText() : null);
             } else {
-                em.createNativeQuery("UPDATE xhandler.catalog_entry SET key = :key, data = CAST(:data AS jsonb), updated_at = now() WHERE id = :id")
-                        .setParameter("key", key).setParameter("data", data.toString()).setParameter("id", id).executeUpdate();
+                catalogProvider.updateEntry(id, key, data.toString());
             }
-            em.flush();
+            catalogProvider.flush();
         } catch (PersistenceException e) {
             if (Constraints.violated(e).isPresent()) {
                 throw ApiException.conflict("catalog_entry_exists", "Ya existe un registro con esa clave: " + key + ".");
@@ -194,25 +176,16 @@ public class CatalogResource {
     /** An entry by its natural key, if present (with the tenant open). */
     @Transactional(Transactional.TxType.MANDATORY)
     public java.util.Optional<Entry> byKey(UUID companyId, String kind, String key) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT id, kind, key, CAST(data AS text), created_at, updated_at FROM xhandler.catalog_entry "
-                        + "WHERE company_id = :c AND kind = :k AND key = :key AND deleted_at IS NULL")
-                .setParameter("c", companyId).setParameter("k", kind).setParameter("key", key).getResultList();
-        return rows.stream().findFirst().map(this::entry);
+        return catalogProvider.getEntryByKey(companyId, kind, key).map(this::entry);
     }
 
     private Entry find(UUID companyId, String kind, UUID id) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT id, kind, key, CAST(data AS text), created_at, updated_at FROM xhandler.catalog_entry "
-                        + "WHERE id = :id AND company_id = :c AND kind = :k AND deleted_at IS NULL")
-                .setParameter("id", id).setParameter("c", companyId).setParameter("k", kind).getResultList();
-        return rows.stream().findFirst().map(this::entry).orElseThrow(ApiException::notFound);
+        return catalogProvider.getEntry(companyId, kind, id).map(this::entry).orElseThrow(ApiException::notFound);
     }
 
-    private Entry entry(Object[] r) {
+    private Entry entry(CatalogProvider.CatalogRow r) {
         try {
-            return new Entry((UUID) r[0], (String) r[1], (String) r[2], json.readTree((String) r[3]), Times.toInstant(r[4]),
-                    Times.toInstant(r[5]));
+            return new Entry(r.id(), r.kind(), r.key(), json.readTree(r.data()), r.createdAt(), r.updatedAt());
         } catch (IOException e) {
             throw new java.io.UncheckedIOException(e);
         }

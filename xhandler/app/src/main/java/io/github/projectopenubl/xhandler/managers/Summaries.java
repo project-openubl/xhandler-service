@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
@@ -22,7 +23,6 @@ import io.github.projectopenubl.xhandler.keys.SigningService;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -41,6 +41,8 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class Summaries {
 
+    private final JobQueueProvider jobQueueProvider;
+
     private final DocumentProvider documentProvider;
 
     private final DocumentFileProvider documentFileProvider;
@@ -58,11 +60,11 @@ public class Summaries {
     private final SignatureLog signatureLog;
     private final FileStore files;
     private final Routes routes;
-    private final EntityManager em;
     private final ObjectMapper json;
 
     public Summaries(Numbering numbering, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
-            Routes routes, EntityManager em, ObjectMapper json, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+            Routes routes, ObjectMapper json, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+        this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
         this.documentEventProvider = documentEventProvider;
@@ -72,7 +74,6 @@ public class Summaries {
         this.signatureLog = signatureLog;
         this.files = files;
         this.routes = routes;
-        this.em = em;
         this.json = json;
     }
 
@@ -216,7 +217,7 @@ public class Summaries {
         documentFileProvider.addDocumentFile(doc, "xml_signed", xml);
         documentFileProvider.addDocumentFile(doc, "input", input);
         documentEventProvider.addDocumentEvent(doc, null, "emitted", scope.actor().auditName(), correlationId);
-        em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
+        jobQueueProvider.notifyReconcile();
         return doc;
     }
 

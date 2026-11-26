@@ -13,7 +13,7 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.ReceptionProvider;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -30,16 +30,16 @@ public class ReceptionValidity implements JobHandler {
 
     private final CompanyProvider companyProvider;
 
-    private final EntityManager em;
+    private final ReceptionProvider receptionProvider;
     private final TenantAccess access;
     private final Engine engine;
     private final CredentialService credentials;
     private final PlatformCredentials platformCredentials;
 
-    public ReceptionValidity(EntityManager em, TenantAccess access, Engine engine, CredentialService credentials,
+    public ReceptionValidity(ReceptionProvider receptionProvider, TenantAccess access, Engine engine, CredentialService credentials,
             PlatformCredentials platformCredentials, CompanyProvider companyProvider) {
         this.companyProvider = companyProvider;
-        this.em = em;
+        this.receptionProvider = receptionProvider;
         this.access = access;
         this.engine = engine;
         this.credentials = credentials;
@@ -53,22 +53,17 @@ public class ReceptionValidity implements JobHandler {
 
     @Override
     public Map<String, Object> run(JobContext context) {
-        record Due(UUID tenant, UUID reception) {}
-        List<Due> due = QuarkusTransaction.requiringNew().call(() -> {
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = em.createNativeQuery("SELECT tenant_id, reception_id FROM xhandler.receptions_to_check(200)").getResultList();
-            return rows.stream().map(r -> new Due((UUID) r[0], (UUID) r[1])).toList();
-        });
+        List<ReceptionProvider.DueReception> due = QuarkusTransaction.requiringNew().call(receptionProvider::getReceptionsToCheck);
         int checked = 0;
-        for (Due d : due) {
+        for (ReceptionProvider.DueReception d : due) {
             try {
-                if (check(d.tenant(), d.reception())) {
+                if (check(d.tenantId(), d.receptionId())) {
                     checked++;
                 }
             } catch (RuntimeException e) {
                 // One reception's failure doesn't stop the rest
-                org.jboss.logging.Logger.getLogger(ReceptionValidity.class).warnf("validity check of reception %s failed: %s", d.reception(), e.toString());
-                stamp(d.tenant(), d.reception(), null);
+                org.jboss.logging.Logger.getLogger(ReceptionValidity.class).warnf("validity check of reception %s failed: %s", d.receptionId(), e.toString());
+                stamp(d.tenantId(), d.receptionId(), null);
             }
         }
         return Map.of("checked", checked, "due", due.size());
@@ -79,11 +74,9 @@ public class ReceptionValidity implements JobHandler {
         record Request(EngineModels.ValidityRequest request) {}
         Request request = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(tenantId);
-            Object[] r = (Object[]) em.createNativeQuery("""
-                            SELECT company_id, supplier_ruc, tipo_comprobante, serie, numero, fecha_emision, total FROM xhandler.reception WHERE id = :id""")
-                    .setParameter("id", receptionId).getSingleResult();
-            CompanyModel company = companyProvider.getCompany((UUID) r[0]).orElse(null);
-            if (r[5] == null || r[6] == null) {
+            ReceptionProvider.ValidityRow r = receptionProvider.getValidityRow(receptionId);
+            CompanyModel company = companyProvider.getCompany(r.companyId()).orElse(null);
+            if (r.fechaEmision() == null || r.total() == null) {
                 return null;
             }
             // The validity service is production SUNAT (the fake stands in for it in development): a
@@ -102,8 +95,8 @@ public class ReceptionValidity implements JobHandler {
                 return null;
             }
             return new Request(new EngineModels.ValidityRequest(environment, creds,
-                    new EngineModels.DocumentKey((String) r[1], (String) r[2], (String) r[3], ((Number) r[4]).longValue()), "6", company.getRuc(),
-                    (r[5] instanceof java.time.LocalDate d ? d : ((java.sql.Date) r[5]).toLocalDate()).toString(), ((BigDecimal) r[6]).toPlainString()));
+                    new EngineModels.DocumentKey(r.supplierRuc(), r.tipoComprobante(), r.serie(), r.numero()), "6", company.getRuc(),
+                    r.fechaEmision().toString(), r.total().toPlainString()));
         });
         if (request == null) {
             // Can't be checked now (no credential, no date or total): stamped, so it waits its turn
@@ -127,10 +120,7 @@ public class ReceptionValidity implements JobHandler {
     private void stamp(UUID tenantId, UUID receptionId, String state) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            em.createNativeQuery("""
-                            UPDATE xhandler.reception SET validity_state = coalesce(:s, validity_state), validity_checked_at = now(), updated_at = now()
-                            WHERE id = :id""")
-                    .setParameter("s", state).setParameter("id", receptionId).executeUpdate();
+            receptionProvider.stampValidity(receptionId, state);
         });
     }
 }

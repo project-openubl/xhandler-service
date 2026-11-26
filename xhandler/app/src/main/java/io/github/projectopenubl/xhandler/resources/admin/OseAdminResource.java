@@ -1,6 +1,5 @@
 package io.github.projectopenubl.xhandler.resources.admin;
 
-import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.security.PlatformAdmin;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -9,7 +8,7 @@ import io.github.projectopenubl.xhandler.keys.PlatformKeys;
 import io.github.projectopenubl.xhandler.clients.OseClients;
 import io.github.projectopenubl.xhandler.managers.PlatformCredentials;
 import io.github.projectopenubl.xhandler.resources.StatusResource;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.OseProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -45,16 +44,16 @@ public class OseAdminResource {
     public record Blocked(@NotBlank @Pattern(regexp = "\\d{11}") String ruc, LocalDate listedOn) {}
 
     private final PlatformAdmin admin;
-    private final EntityManager em;
+    private final OseProvider oseProvider;
     private final PlatformKeys keys;
     private final PlatformCredentials credentials;
     private final java.util.Optional<String> oseRuc;
 
-    public OseAdminResource(PlatformAdmin admin, EntityManager em, PlatformKeys keys, PlatformCredentials credentials,
+    public OseAdminResource(PlatformAdmin admin, OseProvider oseProvider, PlatformKeys keys, PlatformCredentials credentials,
             @org.eclipse.microprofile.config.inject.ConfigProperty(name = "xhandler.ose.ruc") java.util.Optional<String> oseRuc) {
         this.oseRuc = oseRuc;
         this.admin = admin;
-        this.em = em;
+        this.oseProvider = oseProvider;
         this.keys = keys;
         this.credentials = credentials;
     }
@@ -69,12 +68,7 @@ public class OseAdminResource {
         String username = request.username() != null ? request.username() : request.issuerRuc() + "OSE" + id.toString().substring(0, 4).toUpperCase();
         String password = OseClients.newPassword();
         try {
-            em.createNativeQuery("""
-                            INSERT INTO xhandler.ose_client (id, issuer_ruc, username, password_hash, tenant_id, created_by)
-                            VALUES (:id, :ruc, :u, :h, :t, :by)""")
-                    .setParameter("id", id).setParameter("ruc", request.issuerRuc()).setParameter("u", username)
-                    .setParameter("h", OseClients.hash(password)).setParameter("t", request.tenantId()).setParameter("by", who).executeUpdate();
-            em.flush();
+            oseProvider.addClient(id, request.issuerRuc(), username, OseClients.hash(password), request.tenantId(), who);
         } catch (jakarta.persistence.PersistenceException e) {
             String constraint = io.github.projectopenubl.xhandler.utils.Constraints.violated(e).orElse("");
             if (constraint.contains("tenant")) {
@@ -94,19 +88,15 @@ public class OseAdminResource {
     @Transactional
     public List<Map<String, Object>> clients() {
         admin.require();
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, issuer_ruc, username, tenant_id, status, locked_until, last_login_at FROM xhandler.ose_client ORDER BY created_at""")
-                .getResultList();
-        return rows.stream().map(r -> {
+        return oseProvider.getClients().stream().map(r -> {
             Map<String, Object> view = new LinkedHashMap<>();
-            view.put("id", r[0]);
-            view.put("issuer_ruc", r[1]);
-            view.put("username", r[2]);
-            view.put("tenant_id", r[3]);
-            view.put("status", r[4]);
-            view.put("locked_until", r[5] == null ? null : String.valueOf(Times.toInstant(r[5])));
-            view.put("last_login_at", r[6] == null ? null : String.valueOf(Times.toInstant(r[6])));
+            view.put("id", r.id());
+            view.put("issuer_ruc", r.issuerRuc());
+            view.put("username", r.username());
+            view.put("tenant_id", r.tenantId());
+            view.put("status", r.status());
+            view.put("locked_until", r.lockedUntil() == null ? null : String.valueOf(r.lockedUntil()));
+            view.put("last_login_at", r.lastLoginAt() == null ? null : String.valueOf(r.lastLoginAt()));
             return view;
         }).toList();
     }
@@ -118,14 +108,9 @@ public class OseAdminResource {
         String who = admin.require();
         String password = "reset-password".equals(action) ? OseClients.newPassword() : null;
         int changed = switch (action) {
-            case "suspend" -> em.createNativeQuery("UPDATE xhandler.ose_client SET status = 'suspended' WHERE id = :id").setParameter("id", id)
-                    .executeUpdate();
-            case "activate" -> em.createNativeQuery(
-                            "UPDATE xhandler.ose_client SET status = 'active', failed_attempts = 0, locked_until = NULL WHERE id = :id")
-                    .setParameter("id", id).executeUpdate();
-            default -> em.createNativeQuery(
-                            "UPDATE xhandler.ose_client SET password_hash = :h, failed_attempts = 0, locked_until = NULL WHERE id = :id")
-                    .setParameter("h", OseClients.hash(password)).setParameter("id", id).executeUpdate();
+            case "suspend" -> oseProvider.suspendClient(id);
+            case "activate" -> oseProvider.activateClient(id);
+            default -> oseProvider.resetClientPassword(id, OseClients.hash(password));
         };
         if (changed == 0) {
             throw ApiException.notFound();
@@ -151,12 +136,9 @@ public class OseAdminResource {
             // An empty list refuses every issuer: only on purpose
             throw ApiException.invalid("invalid_request", "Envíe la lista de contribuyentes asociados (o confirme vaciarla).", null);
         }
-        em.createNativeQuery("DELETE FROM xhandler.ose_association").executeUpdate();
+        oseProvider.deleteAssociations();
         for (Association a : entries) {
-            em.createNativeQuery("""
-                            INSERT INTO xhandler.ose_association (ruc, starts_on, ends_on) VALUES (:r, :s, :e)
-                            ON CONFLICT (ruc) DO UPDATE SET starts_on = excluded.starts_on, ends_on = excluded.ends_on, imported_at = now()""")
-                    .setParameter("r", a.ruc()).setParameter("s", a.startsOn()).setParameter("e", a.endsOn()).executeUpdate();
+            oseProvider.addAssociation(a.ruc(), a.startsOn(), a.endsOn());
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s imported the OSE association list (%d issuers)", who, entries.size());
         return Map.of("imported", entries.size());
@@ -171,11 +153,9 @@ public class OseAdminResource {
         if (entries == null || !list.matches("[a-z0-9_-]{2,40}")) {
             throw ApiException.invalid("invalid_request", "Envíe la lista y un nombre de lista válido.", null);
         }
-        em.createNativeQuery("DELETE FROM xhandler.blocked_issuer WHERE list = :l").setParameter("l", list).executeUpdate();
+        oseProvider.deleteBlockedList(list);
         for (Blocked b : entries) {
-            em.createNativeQuery("""
-                            INSERT INTO xhandler.blocked_issuer (ruc, list, listed_on) VALUES (:r, :l, :d) ON CONFLICT (ruc, list) DO NOTHING""")
-                    .setParameter("r", b.ruc()).setParameter("l", list).setParameter("d", b.listedOn()).executeUpdate();
+            oseProvider.addBlockedIssuer(b.ruc(), list, b.listedOn());
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s imported blocked list %s (%d issuers)", who, list, entries.size());
         return Map.of("list", list, "imported", entries.size());
@@ -245,27 +225,17 @@ public class OseAdminResource {
     @Transactional
     public Map<String, Object> forwarding() {
         admin.require();
-        Object[] r = (Object[]) em.createNativeQuery("""
-                        SELECT count(*) FILTER (WHERE forward_status IN ('pending', 'blocked')),
-                               extract(epoch FROM now() - min(cdr_issued_at) FILTER (WHERE forward_status = 'pending')),
-                               count(*) FILTER (WHERE forward_status = 'rejected'),
-                               count(*) FILTER (WHERE forward_status = 'forwarded' AND forwarded_at > cdr_issued_at + interval '1 hour'),
-                               count(*) FILTER (WHERE forward_status = 'forwarded')
-                        FROM xhandler.ose_submission""").getSingleResult();
-        @SuppressWarnings("unchecked")
-        List<Object[]> rejected = em.createNativeQuery("""
-                        SELECT id, name, last_error, cdr_issued_at FROM xhandler.ose_submission WHERE forward_status = 'rejected'
-                        ORDER BY cdr_issued_at DESC LIMIT 50""").getResultList();
+        OseProvider.ForwardingStats r = oseProvider.getForwardingStats();
+        List<OseProvider.RejectedForward> rejected = oseProvider.getRejectedForwards();
         Map<String, Object> view = new LinkedHashMap<>();
-        view.put("pending", ((Number) r[0]).longValue());
-        view.put("oldest_pending_seconds", r[1] == null ? 0 : ((Number) r[1]).doubleValue());
-        view.put("rejected", ((Number) r[2]).longValue());
-        view.put("blocked", ((Number) em.createNativeQuery("SELECT count(*) FROM xhandler.ose_submission WHERE forward_status = 'blocked'")
-                .getSingleResult()).longValue());
-        view.put("late", ((Number) r[3]).longValue());
-        view.put("forwarded", ((Number) r[4]).longValue());
-        view.put("rejected_items", rejected.stream().map(x -> Map.of("id", x[0], "name", x[1], "error", String.valueOf(x[2]),
-                "cdr_issued_at", String.valueOf(Times.toInstant(x[3])))).toList());
+        view.put("pending", r.pending());
+        view.put("oldest_pending_seconds", r.oldestPendingSeconds());
+        view.put("rejected", r.rejected());
+        view.put("blocked", oseProvider.countBlockedForwards());
+        view.put("late", r.late());
+        view.put("forwarded", r.forwarded());
+        view.put("rejected_items", rejected.stream().map(x -> Map.of("id", x.id(), "name", x.name(), "error", String.valueOf(x.lastError()),
+                "cdr_issued_at", String.valueOf(x.cdrIssuedAt()))).toList());
         return view;
     }
 
@@ -276,19 +246,13 @@ public class OseAdminResource {
     public List<Map<String, Object>> usage(@jakarta.ws.rs.QueryParam("month") String month) {
         admin.require();
         java.time.YearMonth m = month == null ? java.time.YearMonth.now() : java.time.YearMonth.parse(month);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT c.id, c.issuer_ruc, c.username, c.tenant_id, coalesce(sum(u.validations), 0)
-                        FROM xhandler.ose_client c LEFT JOIN xhandler.ose_usage u ON u.ose_client_id = c.id AND u.day BETWEEN :from AND :to
-                        GROUP BY c.id ORDER BY c.issuer_ruc""")
-                .setParameter("from", m.atDay(1)).setParameter("to", m.atEndOfMonth()).getResultList();
-        return rows.stream().map(x -> {
+        return oseProvider.getUsage(m.atDay(1), m.atEndOfMonth()).stream().map(x -> {
             Map<String, Object> view = new LinkedHashMap<>();
-            view.put("ose_client_id", x[0]);
-            view.put("issuer_ruc", x[1]);
-            view.put("username", x[2]);
-            view.put("tenant_id", x[3]);
-            view.put("validations", ((Number) x[4]).longValue());
+            view.put("ose_client_id", x.clientId());
+            view.put("issuer_ruc", x.issuerRuc());
+            view.put("username", x.username());
+            view.put("tenant_id", x.tenantId());
+            view.put("validations", x.validations());
             return view;
         }).toList();
     }
@@ -299,9 +263,7 @@ public class OseAdminResource {
     @Transactional
     public Map<String, Object> reforward(@PathParam("id") UUID id) {
         String who = admin.require();
-        int changed = em.createNativeQuery("""
-                        UPDATE xhandler.ose_submission SET forward_status = 'pending', next_attempt_at = now()
-                        WHERE id = :id AND result = 'cdr' AND forward_status = 'rejected'""").setParameter("id", id).executeUpdate();
+        int changed = oseProvider.markReforward(id);
         if (changed == 0) {
             throw ApiException.notFound();
         }

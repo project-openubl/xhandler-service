@@ -1,7 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
-import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -13,7 +12,7 @@ import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.PseProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -50,17 +49,17 @@ public class PseResource {
     public record AuthorizationView(UUID id, LocalDate authorizedAt, boolean evidence, String registeredBy, Instant approvedAt, Instant revokedAt) {}
 
     private final TenantAccess access;
-    private final EntityManager em;
+    private final PseProvider pseProvider;
     private final Auditor auditor;
     private final FileStore files;
     private final Notifications notifications;
     private final PlatformKeys platformKeys;
 
-    public PseResource(TenantAccess access, EntityManager em, Auditor auditor, FileStore files, Notifications notifications,
+    public PseResource(TenantAccess access, PseProvider pseProvider, Auditor auditor, FileStore files, Notifications notifications,
             PlatformKeys platformKeys, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.access = access;
-        this.em = em;
+        this.pseProvider = pseProvider;
         this.auditor = auditor;
         this.files = files;
         this.notifications = notifications;
@@ -73,13 +72,8 @@ public class PseResource {
     public List<AuthorizationView> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
         companyManager.getCompany(companyId);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, authorized_at, evidence_ref IS NOT NULL, registered_by, approved_at, revoked_at FROM xhandler.pse_authorization
-                        WHERE company_id = :c ORDER BY created_at DESC""").setParameter("c", companyId).getResultList();
-        return rows.stream().map(r -> new AuthorizationView((UUID) r[0], toDate(r[1]), (Boolean) r[2], (String) r[3],
-                Times.toInstant(r[4]),
-                Times.toInstant(r[5]))).toList();
+        return pseProvider.getAuthorizations(companyId).stream().map(r -> new AuthorizationView(r.id(), r.authorizedAt(), r.evidence(),
+                r.registeredBy(), r.approvedAt(), r.revokedAt())).toList();
     }
 
     /** Registers the SOL authorization; the evidence (a PDF or image of SOL's confirmation) is kept. */
@@ -97,8 +91,7 @@ public class PseResource {
         if (request.authorizedAt().isAfter(io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima())) {
             throw ApiException.invalid("invalid_request", "La fecha de autorización no puede ser futura.", null);
         }
-        if (!em.createNativeQuery("SELECT 1 FROM xhandler.pse_authorization WHERE company_id = :c AND revoked_at IS NULL")
-                .setParameter("c", companyId).getResultList().isEmpty()) {
+        if (pseProvider.hasActiveAuthorization(companyId)) {
             throw ApiException.conflict("already_authorized", "La empresa ya tiene una autorización vigente.");
         }
         // Evidence of the SOL authorization (a PDF or image), reviewed by a platform admin before it counts
@@ -119,11 +112,7 @@ public class PseResource {
         }
         String evidence = files.put(company.getTenantId(), bytes).key();
         UUID id = Ids.newId();
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.pse_authorization (id, tenant_id, company_id, authorized_at, evidence_ref, registered_by)
-                        VALUES (:id, :t, :c, :at, :e, :by)""")
-                .setParameter("id", id).setParameter("t", tenantId).setParameter("c", companyId).setParameter("at", request.authorizedAt())
-                .setParameter("e", evidence).setParameter("by", scope.actor().auditName()).executeUpdate();
+        pseProvider.addAuthorization(id, tenantId, companyId, request.authorizedAt(), evidence, scope.actor().auditName());
         auditor.record(scope, "pse.authorization_registered", "company", companyId, Map.of("authorized_at", request.authorizedAt().toString()));
         return new AuthorizationView(id, request.authorizedAt(), true, scope.actor().auditName(), null, null);
     }
@@ -139,18 +128,13 @@ public class PseResource {
     public RevokedView revoke(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompanyForUpdate(companyId);
-        long pending = ((Number) em.createNativeQuery("""
-                        SELECT count(*) FROM xhandler.document WHERE company_id = :c AND emission_mode = 'pse'
-                          AND status IN ('pending_send', 'in_progress', 'unknown', 'voiding')""").setParameter("c", companyId).getSingleResult())
-                .longValue();
+        long pending = pseProvider.countPendingPseDocuments(companyId);
         if (pending > 0) {
             // The platform must finish what it signed as PSE before it stops being the company's PSE
             throw ApiException.conflict("pse_documents_pending",
                     "Hay " + pending + " documentos enviados como PSE sin respuesta definitiva. Revoque cuando terminen.");
         }
-        int revoked = em.createNativeQuery("""
-                        UPDATE xhandler.pse_authorization SET revoked_at = now(), revoked_by = :by WHERE company_id = :c AND revoked_at IS NULL""")
-                .setParameter("by", scope.actor().auditName()).setParameter("c", companyId).executeUpdate();
+        int revoked = pseProvider.revokeAuthorizations(companyId, scope.actor().auditName());
         if (revoked == 0) {
             throw ApiException.notFound();
         }
@@ -171,8 +155,7 @@ public class PseResource {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         if ("pse".equals(request.emissionMode())) {
-            if (em.createNativeQuery("SELECT 1 FROM xhandler.pse_authorization WHERE company_id = :c AND revoked_at IS NULL AND approved_at IS NOT NULL")
-                    .setParameter("c", companyId).getResultList().isEmpty()) {
+            if (!pseProvider.hasApprovedAuthorization(companyId)) {
                 throw ApiException.conflict("pse_not_authorized", "La autorización a la plataforma como PSE no está registrada o aún no fue aprobada.");
             }
             if (company.isOseObligated() || "ose".equals(company.getSubmissionRoute())) {
@@ -186,9 +169,5 @@ public class PseResource {
         company.setEmissionMode(request.emissionMode());
         auditor.record(scope, "company.emission_mode_changed", "company", companyId, Map.of("mode", request.emissionMode()));
         return CompanyResource.view(company);
-    }
-
-    static LocalDate toDate(Object value) {
-        return value instanceof LocalDate d ? d : ((java.sql.Date) value).toLocalDate();
     }
 }

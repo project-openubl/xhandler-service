@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.jobs;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import jakarta.transaction.Transactional;
 
 /**
@@ -24,19 +24,15 @@ public class Singletons {
     public static final int BLOCKED_LIST_IMPORT = 6;
     public static final int RETENTION_PURGE = 7;
 
-    private final EntityManager em;
+    private final JobQueueProvider queue;
 
-    public Singletons(EntityManager em) {
-        this.em = em;
+    public Singletons(JobQueueProvider queue) {
+        this.queue = queue;
     }
 
     /** Takes the singleton's lock until the current transaction ends; false if another worker holds it. */
     @Transactional(Transactional.TxType.MANDATORY)
     public boolean tryLock(int key) {
-        Object locked = em.createNativeQuery("SELECT pg_try_advisory_xact_lock(:ns, :key)")
-                .setParameter("ns", NAMESPACE)
-                .setParameter("key", key)
-                .getSingleResult();
-        return Boolean.TRUE.equals(locked);
+        return queue.tryAdvisoryLock(NAMESPACE, key);
     }
 }

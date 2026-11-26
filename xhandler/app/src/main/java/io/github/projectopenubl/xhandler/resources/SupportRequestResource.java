@@ -1,9 +1,9 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.SupportRequestProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.CurrentActor;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -26,11 +26,11 @@ public class SupportRequestResource {
 
     public record SessionRequested(UUID id) {}
 
-    private final EntityManager em;
+    private final SupportRequestProvider supportRequests;
     private final CurrentActor currentActor;
 
-    public SupportRequestResource(EntityManager em, CurrentActor currentActor) {
-        this.em = em;
+    public SupportRequestResource(SupportRequestProvider supportRequests, CurrentActor currentActor) {
+        this.supportRequests = supportRequests;
         this.currentActor = currentActor;
     }
 
@@ -44,14 +44,8 @@ public class SupportRequestResource {
         if (!actor.platformSupport()) {
             throw ApiException.forbidden();
         }
-        Object id = em.createNativeQuery("SELECT xhandler.request_support_session(:tenant, :operator, :reason)")
-                .setParameter("tenant", request.tenantId())
-                .setParameter("operator", actor.subject())
-                .setParameter("reason", request.reason())
-                .getSingleResult();
-        if (id == null) {
-            throw ApiException.notFound();
-        }
-        return Response.status(201).entity(new SessionRequested((UUID) id)).build();
+        UUID id = supportRequests.requestSupportSession(request.tenantId(), actor.subject(), request.reason())
+                .orElseThrow(ApiException::notFound);
+        return Response.status(201).entity(new SessionRequested(id)).build();
     }
 }

@@ -13,8 +13,6 @@ import io.github.projectopenubl.xhandler.utils.Constraints;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.managers.Idempotency;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
@@ -63,15 +61,13 @@ public class MemberResource {
     private final TenantAccess access;
     private final Auditor auditor;
     private final Idempotency idempotency;
-    private final EntityManager em;
 
-    public MemberResource(TenantAccess access, Auditor auditor, Idempotency idempotency, EntityManager em, TenantMemberProvider tenantMemberProvider, TenantProvider tenantProvider) {
+    public MemberResource(TenantAccess access, Auditor auditor, Idempotency idempotency, TenantMemberProvider tenantMemberProvider, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.tenantMemberProvider = tenantMemberProvider;
         this.access = access;
         this.auditor = auditor;
         this.idempotency = idempotency;
-        this.em = em;
     }
 
     @Operation(operationId = "listMembers")

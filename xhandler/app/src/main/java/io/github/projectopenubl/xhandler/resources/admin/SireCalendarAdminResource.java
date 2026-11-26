@@ -2,7 +2,7 @@ package io.github.projectopenubl.xhandler.resources.admin;
 
 import io.github.projectopenubl.xhandler.security.PlatformAdmin;
 
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.SireProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -28,11 +28,11 @@ public class SireCalendarAdminResource {
             @NotNull LocalDate dueDate) {}
 
     private final PlatformAdmin admin;
-    private final EntityManager em;
+    private final SireProvider sireProvider;
 
-    public SireCalendarAdminResource(PlatformAdmin admin, EntityManager em) {
+    public SireCalendarAdminResource(PlatformAdmin admin, SireProvider sireProvider) {
         this.admin = admin;
-        this.em = em;
+        this.sireProvider = sireProvider;
     }
 
     @PUT
@@ -43,10 +43,7 @@ public class SireCalendarAdminResource {
             throw io.github.projectopenubl.xhandler.resources.exceptions.ApiException.invalid("invalid_request", "Envíe al menos una fecha del cronograma.", null);
         }
         for (Entry e : entries) {
-            em.createNativeQuery("""
-                            INSERT INTO xhandler.sire_calendar (period, ruc_last_digit, due_date) VALUES (:p, :d, :due)
-                            ON CONFLICT (period, ruc_last_digit) DO UPDATE SET due_date = excluded.due_date""")
-                    .setParameter("p", e.period()).setParameter("d", (short) e.rucLastDigit()).setParameter("due", e.dueDate()).executeUpdate();
+            sireProvider.putCalendarEntry(e.period(), e.rucLastDigit(), e.dueDate());
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s loaded %d SIRE calendar entries", who, entries.size());
         return Map.of("loaded", entries.size());
@@ -56,12 +53,7 @@ public class SireCalendarAdminResource {
     @Transactional
     public List<Map<String, Object>> list(@QueryParam("period") String period) {
         admin.require();
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT period, ruc_last_digit, due_date FROM xhandler.sire_calendar
-                        WHERE cast(:p AS text) IS NULL OR period = :p ORDER BY period DESC, ruc_last_digit""")
-                .setParameter("p", period).getResultList();
-        return rows.stream().map(r -> Map.<String, Object>of("period", r[0], "ruc_last_digit", ((Number) r[1]).intValue(),
-                "due_date", String.valueOf(r[2]))).toList();
+        return sireProvider.getCalendar(period).stream().map(r -> Map.<String, Object>of("period", r.period(), "ruc_last_digit", r.rucLastDigit(),
+                "due_date", r.dueDate())).toList();
     }
 }

@@ -1,9 +1,8 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.utils.Times;
+import io.github.projectopenubl.xhandler.models.PublicLookupProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.persistence.EntityManager;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -43,20 +42,20 @@ public class PublicLookupResource {
     public record LookupResult(String status) {}
 
 
-    private final EntityManager em;
+    private final PublicLookupProvider lookups;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private final Optional<String> verifyUrl;
     private final Optional<String> secret;
     private final boolean testMode;
     private final int perRucPerHour;
 
-    public PublicLookupResource(EntityManager em,
+    public PublicLookupResource(PublicLookupProvider lookups,
             @ConfigProperty(name = "xhandler.captcha.verify-url") Optional<String> verifyUrl,
             @ConfigProperty(name = "xhandler.captcha.secret") Optional<String> secret,
             @ConfigProperty(name = "xhandler.captcha.test-mode", defaultValue = "false") boolean testMode,
             @ConfigProperty(name = "xhandler.public-lookup.per-ruc-per-hour", defaultValue = "300") int perRucPerHour) {
         this.perRucPerHour = perRucPerHour;
-        this.em = em;
+        this.lookups = lookups;
         this.verifyUrl = verifyUrl;
         this.secret = secret;
         this.testMode = testMode;
@@ -69,18 +68,13 @@ public class PublicLookupResource {
             throw new ApiException(403, "captcha_failed", "Verificación CAPTCHA inválida.");
         }
         return QuarkusTransaction.requiringNew().call(() -> {
-            int hits = ((Number) em.createNativeQuery("""
-                            INSERT INTO xhandler.public_lookup_counter (bucket, key, hits) VALUES (date_trunc('hour', now()), :k, 1)
-                            ON CONFLICT (bucket, key) DO UPDATE SET hits = public_lookup_counter.hits + 1 RETURNING hits""")
-                    .setParameter("k", "ruc:" + request.ruc()).getSingleResult()).intValue();
+            int hits = lookups.countLookup("ruc:" + request.ruc());
             if (hits > perRucPerHour) {
                 throw new ApiException(429, "too_many_requests", "Demasiadas consultas para este RUC. Intente más tarde.");
             }
-            Object status = em.createNativeQuery("SELECT xhandler.public_document_status(:ruc, :tipo, :serie, :numero, :fecha, :total)")
-                    .setParameter("ruc", request.ruc()).setParameter("tipo", request.tipoComprobante()).setParameter("serie", request.serie())
-                    .setParameter("numero", request.numero()).setParameter("fecha", request.fechaEmision()).setParameter("total", request.total())
-                    .getSingleResult();
-            return new LookupResult(status == null ? "no_encontrado" : PublicDocumentResource.publicStatus(status.toString()));
+            String status = lookups.getPublicDocumentStatus(request.ruc(), request.tipoComprobante(), request.serie(), request.numero(),
+                    request.fechaEmision(), request.total());
+            return new LookupResult(status == null ? "no_encontrado" : PublicDocumentResource.publicStatus(status));
         });
     }
 
@@ -107,27 +101,19 @@ public class PublicLookupResource {
             throw new ApiException(403, "captcha_failed", "Verificación CAPTCHA inválida.");
         }
         return QuarkusTransaction.requiringNew().call(() -> {
-            int hits = ((Number) em.createNativeQuery("""
-                            INSERT INTO xhandler.public_lookup_counter (bucket, key, hits) VALUES (date_trunc('hour', now()), :k, 1)
-                            ON CONFLICT (bucket, key) DO UPDATE SET hits = public_lookup_counter.hits + 1 RETURNING hits""")
-                    .setParameter("k", "ose:" + request.ruc()).getSingleResult()).intValue();
+            int hits = lookups.countLookup("ose:" + request.ruc());
             if (hits > perRucPerHour) {
                 throw new ApiException(429, "too_many_requests", "Demasiadas consultas para este RUC. Intente más tarde.");
             }
-            @SuppressWarnings("unchecked")
-            java.util.List<Object[]> rows = em.createNativeQuery("""
-                            SELECT result, cdr_issued_at, received_at FROM xhandler.ose_submission
-                            WHERE issuer_ruc = :r AND tipo = :t AND serie = :s AND numero = :n
-                            ORDER BY (result = 'cdr') DESC, received_at DESC LIMIT 1""")
-                    .setParameter("r", request.ruc()).setParameter("t", request.tipoComprobante()).setParameter("s", request.serie())
-                    .setParameter("n", request.numero()).getResultList();
+            Optional<PublicLookupProvider.OseSubmission> rows =
+                    lookups.getOseSubmission(request.ruc(), request.tipoComprobante(), request.serie(), request.numero());
             if (rows.isEmpty()) {
                 return new OseLookupResult("no_encontrado", null);
             }
-            Object[] r = rows.get(0);
-            boolean cdr = "cdr".equals(r[0]);
+            PublicLookupProvider.OseSubmission r = rows.get();
+            boolean cdr = "cdr".equals(r.result());
             return new OseLookupResult(cdr ? "con_cdr" : "con_inconsistencia",
-                    String.valueOf(Times.toInstant(cdr ? r[1] : r[2])));
+                    String.valueOf(cdr ? r.cdrIssuedAt() : r.receivedAt()));
         });
     }
 

@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
@@ -27,7 +28,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -45,6 +45,8 @@ import java.util.stream.Collectors;
  */
 @ApplicationScoped
 public class UblUploadService {
+
+    private final JobQueueProvider jobQueueProvider;
 
     private final DocumentProvider documentProvider;
 
@@ -66,13 +68,13 @@ public class UblUploadService {
     private final Routes routes;
     private final AccessLinks links;
     private final Auditor auditor;
-    private final EntityManager em;
     private final ObjectMapper json;
     private final io.github.projectopenubl.xhandler.managers.EmitService emit;
 
     public UblUploadService(TenantAccess access, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
-            Numbering numbering, Routes routes, AccessLinks links, Auditor auditor, EntityManager em, ObjectMapper json,
-            io.github.projectopenubl.xhandler.managers.EmitService emit, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+            Numbering numbering, Routes routes, AccessLinks links, Auditor auditor, ObjectMapper json,
+            io.github.projectopenubl.xhandler.managers.EmitService emit, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+        this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
         this.documentEventProvider = documentEventProvider;
@@ -87,7 +89,6 @@ public class UblUploadService {
         this.routes = routes;
         this.links = links;
         this.auditor = auditor;
-        this.em = em;
         this.json = json;
     }
 
@@ -189,7 +190,7 @@ public class UblUploadService {
                     scope.actor().auditName(), correlationId);
             auditor.record(scope, "document.uploaded", "document", doc.getId(), Map.of("serie_numero", doc.serieNumero()));
             String token = links.create(doc);
-            em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
+            jobQueueProvider.notifyReconcile();
             return DocumentView.of(doc, links.url(token), null);
         }));
     }

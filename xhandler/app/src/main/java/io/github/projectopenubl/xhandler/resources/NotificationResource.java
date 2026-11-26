@@ -1,7 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.models.TenantProvider;
-import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
@@ -10,7 +9,7 @@ import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.NotificationProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -41,13 +40,13 @@ public class NotificationResource {
     public record NotificationSettings(@Email String notificationEmail) {}
 
     private final TenantAccess access;
-    private final EntityManager em;
+    private final NotificationProvider notificationProvider;
     private final Auditor auditor;
 
-    public NotificationResource(TenantAccess access, EntityManager em, Auditor auditor, TenantProvider tenantProvider) {
+    public NotificationResource(TenantAccess access, NotificationProvider notificationProvider, Auditor auditor, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.access = access;
-        this.em = em;
+        this.notificationProvider = notificationProvider;
         this.auditor = auditor;
     }
 
@@ -60,12 +59,9 @@ public class NotificationResource {
         access.enter(tenantId, Role.VIEWER);
         int size = Page.limit(limit);
         int from = Page.offset(offset);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT id, kind, title, body, document_id, created_at, read_at FROM xhandler.notification"
-                        + (Boolean.TRUE.equals(unread) ? " WHERE read_at IS NULL" : "") + " ORDER BY created_at DESC LIMIT :l OFFSET :o")
-                .setParameter("l", size).setParameter("o", from).getResultList();
-        return new Page<>(rows.stream().map(r -> new NotificationView((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], (UUID) r[4],
-                Times.toInstant(r[5]), Times.toInstant(r[6]))).toList(), size, from);
+        return new Page<>(notificationProvider.getNotifications(Boolean.TRUE.equals(unread), size, from).stream()
+                .map(r -> new NotificationView(r.id(), r.kind(), r.title(), r.body(), r.documentId(), r.createdAt(), r.readAt())).toList(),
+                size, from);
     }
 
     @APIResponse(responseCode = "204", description = "Notificación marcada como leída.")
@@ -75,9 +71,7 @@ public class NotificationResource {
     @Transactional
     public Response read(@PathParam("tenantId") UUID tenantId, @PathParam("id") UUID id) {
         access.enter(tenantId, Role.VIEWER);
-        int updated = em.createNativeQuery("UPDATE xhandler.notification SET read_at = coalesce(read_at, now()) WHERE id = :id")
-                .setParameter("id", id).executeUpdate();
-        if (updated == 0) {
+        if (!notificationProvider.markNotificationRead(id)) {
             throw ApiException.notFound();
         }
         return Response.noContent().build();
@@ -90,7 +84,7 @@ public class NotificationResource {
     @Transactional
     public Response readAll(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        em.createNativeQuery("UPDATE xhandler.notification SET read_at = now() WHERE read_at IS NULL").executeUpdate();
+        notificationProvider.markAllNotificationsRead();
         return Response.noContent().build();
     }
 
@@ -100,10 +94,7 @@ public class NotificationResource {
     @Transactional
     public List<Preference> preferences(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT kind, email, in_app FROM xhandler.notification_preference ORDER BY kind")
-                .getResultList();
-        return rows.stream().map(r -> new Preference((String) r[0], (Boolean) r[1], (Boolean) r[2])).toList();
+        return notificationProvider.getNotificationPreferences().stream().map(r -> new Preference(r.kind(), r.email(), r.inApp())).toList();
     }
 
     @Operation(operationId = "setNotificationPreferences")
@@ -113,11 +104,7 @@ public class NotificationResource {
     public List<Preference> setPreferences(@PathParam("tenantId") UUID tenantId, List<@Valid Preference> preferences) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         for (Preference p : preferences) {
-            em.createNativeQuery("""
-                            INSERT INTO xhandler.notification_preference (tenant_id, kind, email, in_app) VALUES (:t, :k, :e, :i)
-                            ON CONFLICT (tenant_id, kind) DO UPDATE SET email = excluded.email, in_app = excluded.in_app""")
-                    .setParameter("t", tenantId).setParameter("k", p.kind()).setParameter("e", p.email()).setParameter("i", p.inApp())
-                    .executeUpdate();
+            notificationProvider.setNotificationPreference(tenantId, p.kind(), p.email(), p.inApp());
         }
         auditor.record(scope, "notification.preferences_updated", "tenant", tenantId);
         return preferences(tenantId);

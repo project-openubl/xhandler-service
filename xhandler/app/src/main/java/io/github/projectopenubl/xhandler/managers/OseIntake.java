@@ -14,7 +14,7 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.OseProvider;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -78,7 +78,7 @@ public class OseIntake {
     /** {@code statusCode}: 0 done, 98 in process, 99 with inconsistencies (SUNAT's getStatus codes). */
     public record Status(String statusCode, byte[] content) {}
 
-    private final EntityManager em;
+    private final OseProvider oseProvider;
     private final Engine engine;
     private final PlatformKeys platformKeys;
     private final FileStore files;
@@ -88,10 +88,10 @@ public class OseIntake {
     private final Optional<String> oseRuc;
     private final String environment;
 
-    public OseIntake(EntityManager em, Engine engine, PlatformKeys platformKeys, FileStore files, UsageEvents usage, TenantAccess access,
+    public OseIntake(OseProvider oseProvider, Engine engine, PlatformKeys platformKeys, FileStore files, UsageEvents usage, TenantAccess access,
             MeterRegistry metrics, @ConfigProperty(name = "xhandler.ose.ruc") Optional<String> oseRuc,
             @ConfigProperty(name = "xhandler.ose.environment", defaultValue = "fake") String environment) {
-        this.em = em;
+        this.oseProvider = oseProvider;
         this.engine = engine;
         this.platformKeys = platformKeys;
         this.files = files;
@@ -124,15 +124,11 @@ public class OseIntake {
         }
         QuarkusTransaction.requiringNew().run(() -> {
             LocalDate today = Deadlines.todayInLima();
-            boolean associated = !em.createNativeQuery("""
-                            SELECT 1 FROM xhandler.ose_association WHERE ruc = :r AND starts_on <= :today
-                              AND (ends_on IS NULL OR :today <= (date_trunc('month', ends_on) + interval '1 month' + interval '6 days')::date)""")
-                    .setParameter("r", name.ruc()).setParameter("today", today).getResultList().isEmpty();
+            boolean associated = oseProvider.isAssociated(name.ruc(), today);
             if (!associated) {
                 throw new Fault("0154", "El emisor no ha autorizado a este OSE en SUNAT Operaciones en Línea.");
             }
-            if (!em.createNativeQuery("SELECT 1 FROM xhandler.blocked_issuer WHERE ruc = :r").setParameter("r", name.ruc()).getResultList()
-                    .isEmpty()) {
+            if (oseProvider.isBlocked(name.ruc())) {
                 throw new Fault("2010", "El emisor está impedido de emitir comprobantes electrónicos (listas de SUNAT).");
             }
         });
@@ -216,22 +212,15 @@ public class OseIntake {
         String sha256 = FileStore.sha256(xmlBytes);
         Instant received = Instant.now();
         // A resend of an accepted document: the same bytes get the same CDR; other bytes collide
-        Optional<Object[]> previous = QuarkusTransaction.requiringNew().call(() -> {
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = em.createNativeQuery("""
-                            SELECT sha256, cdr_ref, id FROM xhandler.ose_submission
-                            WHERE issuer_ruc = :r AND tipo = :t AND serie = :s AND numero = :n AND result = 'cdr'""")
-                    .setParameter("r", name.ruc()).setParameter("t", name.tipo()).setParameter("s", name.serie()).setParameter("n", name.numero())
-                    .getResultList();
-            return rows.stream().findFirst();
-        });
+        Optional<OseProvider.AcceptedSubmission> previous = QuarkusTransaction.requiringNew()
+                .call(() -> oseProvider.getAcceptedSubmission(name.ruc(), name.tipo(), name.serie(), name.numero()));
         if (previous.isPresent()) {
-            if (sha256.equals(previous.get()[0])) {
+            if (sha256.equals(previous.get().sha256())) {
                 if (ticket != null) {
                     // The ticket answers for it too
-                    link(ticket, client, (UUID) previous.get()[2]);
+                    link(ticket, client, previous.get().id());
                 }
-                return new Checked(new Cdr(name.full(), new String(files.get((String) previous.get()[1]), StandardCharsets.UTF_8)), null, null);
+                return new Checked(new Cdr(name.full(), new String(files.get(previous.get().cdrRef()), StandardCharsets.UTF_8)), null, null);
             }
             return record(client, channel, name, ticket, received, sha256, null, null, "1033",
                     "El comprobante fue registrado previamente con otros datos.");
@@ -300,9 +289,7 @@ public class OseIntake {
     }
 
     private void link(String ticket, OseClients.Client client, UUID submission) {
-        QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery("""
-                        INSERT INTO xhandler.ose_ticket_item (ticket, ose_client_id, submission_id) VALUES (:t, :c, :s) ON CONFLICT DO NOTHING""")
-                .setParameter("t", ticket).setParameter("c", client.id()).setParameter("s", submission).executeUpdate());
+        QuarkusTransaction.requiringNew().run(() -> oseProvider.linkTicketItem(ticket, client.id(), submission));
     }
 
     private Checked record(OseClients.Client client, String channel, Name name, String ticket, Instant received, String sha256, String[] cdr,
@@ -312,29 +299,14 @@ public class OseIntake {
         try {
             QuarkusTransaction.requiringNew().run(() -> {
                 Instant now = checkedAt != null ? checkedAt : Instant.now();
-                em.createNativeQuery("""
-                                INSERT INTO xhandler.ose_submission (id, ose_client_id, issuer_ruc, tipo, serie, numero, name, channel, ticket,
-                                    received_at, result, response_code, description, sha256, xml_ref, cdr_ref, cdr_issued_at, forward_status,
-                                    next_attempt_at, purge_after)
-                                VALUES (:id, :client, :ruc, :tipo, :serie, :numero, :name, :channel, :ticket, :received, :result, :code, :description,
-                                    :sha, :xml, :cdr, :issued, :forward, :next, :purge)""")
-                        .setParameter("id", id).setParameter("client", client.id()).setParameter("ruc", name.ruc())
-                        .setParameter("tipo", name.tipo()).setParameter("serie", name.serie()).setParameter("numero", name.numero())
-                        .setParameter("name", name.full()).setParameter("channel", channel).setParameter("ticket", ticket)
-                        .setParameter("received", received).setParameter("result", accepted ? "cdr" : "inconsistency").setParameter("code", code)
-                        .setParameter("description", description).setParameter("sha", sha256)
-                        .setParameter("xml", accepted ? cdr[0] : null).setParameter("cdr", accepted ? cdr[1] : null)
-                        .setParameter("issued", accepted ? now : null).setParameter("forward", accepted ? "pending" : null)
-                        .setParameter("next", accepted ? now : null).setParameter("purge", now.plus(RETENTION))
-                        .executeUpdate();
+                oseProvider.addSubmission(new OseProvider.NewSubmission(id, client.id(), name.ruc(), name.tipo(), name.serie(), name.numero(),
+                        name.full(), channel, ticket, received, accepted ? "cdr" : "inconsistency", code, description, sha256,
+                        accepted ? cdr[0] : null, accepted ? cdr[1] : null, accepted ? now : null, accepted ? "pending" : null,
+                        accepted ? now : null, now.plus(RETENTION)));
                 if (ticket != null) {
-                    em.createNativeQuery("INSERT INTO xhandler.ose_ticket_item (ticket, ose_client_id, submission_id) VALUES (:t, :c, :s)")
-                            .setParameter("t", ticket).setParameter("c", client.id()).setParameter("s", id).executeUpdate();
+                    oseProvider.addTicketItem(ticket, client.id(), id);
                 }
-                em.createNativeQuery("""
-                                INSERT INTO xhandler.ose_usage (ose_client_id, day, validations) VALUES (:c, :d, 1)
-                                ON CONFLICT (ose_client_id, day) DO UPDATE SET validations = ose_usage.validations + 1""")
-                        .setParameter("c", client.id()).setParameter("d", Deadlines.todayInLima()).executeUpdate();
+                oseProvider.countValidation(client.id(), Deadlines.todayInLima());
                 if (client.tenantId() != null) {
                     // Its own billing line (RS 242-2018 art. 7.16)
                     access.enterAsPlatform(client.tenantId());
@@ -344,17 +316,13 @@ public class OseIntake {
         } catch (RuntimeException e) {
             if (accepted && io.github.projectopenubl.xhandler.utils.Constraints.violated(e).isPresent()) {
                 // Two sends of one number at once: the first one's CDR stands; the same bytes get it
-                @SuppressWarnings("unchecked")
-                List<Object[]> winner = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery("""
-                                SELECT sha256, cdr_ref, id FROM xhandler.ose_submission
-                                WHERE issuer_ruc = :r AND tipo = :t AND serie = :s AND numero = :n AND result = 'cdr'""")
-                        .setParameter("r", name.ruc()).setParameter("t", name.tipo()).setParameter("s", name.serie())
-                        .setParameter("n", name.numero()).getResultList());
-                if (!winner.isEmpty() && sha256.equals(winner.get(0)[0])) {
+                Optional<OseProvider.AcceptedSubmission> winner = QuarkusTransaction.requiringNew()
+                        .call(() -> oseProvider.getAcceptedSubmission(name.ruc(), name.tipo(), name.serie(), name.numero()));
+                if (winner.isPresent() && sha256.equals(winner.get().sha256())) {
                     if (ticket != null) {
-                        link(ticket, client, (UUID) winner.get(0)[2]);
+                        link(ticket, client, winner.get().id());
                     }
-                    return new Checked(new Cdr(name.full(), new String(files.get((String) winner.get(0)[1]), StandardCharsets.UTF_8)), null, null);
+                    return new Checked(new Cdr(name.full(), new String(files.get(winner.get().cdrRef()), StandardCharsets.UTF_8)), null, null);
                 }
                 throw new Fault("1033", "El comprobante fue registrado previamente con otros datos.");
             }
@@ -366,22 +334,17 @@ public class OseIntake {
 
     /** The answer behind a ticket of this client. */
     public Status getStatus(OseClients.Client client, String ticket) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery("""
-                        SELECT s.name, s.result, s.response_code, s.description, s.cdr_ref
-                        FROM xhandler.ose_ticket_item i JOIN xhandler.ose_submission s ON s.id = i.submission_id
-                        WHERE i.ticket = :t AND i.ose_client_id = :c ORDER BY s.name""").setParameter("t", ticket).setParameter("c", client.id())
-                .getResultList());
+        List<OseProvider.TicketItem> rows = QuarkusTransaction.requiringNew().call(() -> oseProvider.getTicketItems(ticket, client.id()));
         if (rows.isEmpty()) {
             throw new Fault("0127", "El ticket no existe.");
         }
         Map<String, byte[]> content = new LinkedHashMap<>();
         StringBuilder errors = new StringBuilder();
-        for (Object[] r : rows) {
-            if ("cdr".equals(r[1])) {
-                content.put("R-" + r[0] + ".xml", files.get((String) r[4]));
+        for (OseProvider.TicketItem r : rows) {
+            if ("cdr".equals(r.result())) {
+                content.put("R-" + r.name() + ".xml", files.get(r.cdrRef()));
             } else {
-                errors.append(r[0]).append('|').append(r[2]).append('|').append(r[3]).append('\n');
+                errors.append(r.name()).append('|').append(r.responseCode()).append('|').append(r.description()).append('\n');
             }
         }
         if (!errors.isEmpty()) {
@@ -395,12 +358,8 @@ public class OseIntake {
         if (!client.issuerRuc().equals(ruc)) {
             return Optional.empty();
         }
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery("""
-                        SELECT name, cdr_ref FROM xhandler.ose_submission
-                        WHERE issuer_ruc = :r AND tipo = :t AND serie = :s AND numero = :n AND result = 'cdr' AND cdr_ref IS NOT NULL""")
-                .setParameter("r", ruc).setParameter("t", tipo).setParameter("s", serie).setParameter("n", numero).getResultList());
-        return rows.stream().findFirst().map(r -> new Cdr((String) r[0], new String(files.get((String) r[1]), StandardCharsets.UTF_8)));
+        return QuarkusTransaction.requiringNew().call(() -> oseProvider.getSubmissionCdr(ruc, tipo, serie, numero))
+                .map(r -> new Cdr(r.name(), new String(files.get(r.cdrRef()), StandardCharsets.UTF_8)));
     }
 
     static byte[] zip(Map<String, byte[]> entries) {

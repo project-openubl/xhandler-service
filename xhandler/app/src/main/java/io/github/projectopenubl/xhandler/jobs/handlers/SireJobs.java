@@ -8,7 +8,7 @@ import io.github.projectopenubl.xhandler.managers.Notifications;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.SireProvider;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -70,11 +70,11 @@ public final class SireJobs {
     @ApplicationScoped
     public static class Poll implements JobHandler {
         private final SireService sire;
-        private final EntityManager em;
+        private final SireProvider sireProvider;
 
-        public Poll(SireService sire, EntityManager em) {
+        public Poll(SireService sire, SireProvider sireProvider) {
             this.sire = sire;
-            this.em = em;
+            this.sireProvider = sireProvider;
         }
 
         @Override
@@ -85,11 +85,8 @@ public final class SireJobs {
         @Override
         public Map<String, Object> run(JobContext context) {
             record Due(UUID tenant, UUID id) {}
-            List<Due> due = QuarkusTransaction.requiringNew().call(() -> {
-                @SuppressWarnings("unchecked")
-                List<Object[]> rows = em.createNativeQuery("SELECT tenant_id, sire_period_id FROM xhandler.sire_periods_to_poll(50)").getResultList();
-                return rows.stream().map(r -> new Due((UUID) r[0], (UUID) r[1])).toList();
-            });
+            List<Due> due = QuarkusTransaction.requiringNew().call(() -> sireProvider.getPeriodsToPoll().stream()
+                    .map(r -> new Due(r.tenantId(), r.periodId())).toList());
             for (Due d : due) {
                 try {
                     sire.poll(d.tenant(), d.id());
@@ -108,12 +105,12 @@ public final class SireJobs {
      */
     @ApplicationScoped
     public static class Deadlines implements JobHandler {
-        private final EntityManager em;
+        private final SireProvider sireProvider;
         private final TenantAccess access;
         private final Notifications notifications;
 
-        public Deadlines(EntityManager em, TenantAccess access, Notifications notifications) {
-            this.em = em;
+        public Deadlines(SireProvider sireProvider, TenantAccess access, Notifications notifications) {
+            this.sireProvider = sireProvider;
             this.access = access;
             this.notifications = notifications;
         }
@@ -126,22 +123,14 @@ public final class SireJobs {
         @Override
         public Map<String, Object> run(JobContext context) {
             record Due(UUID tenant, UUID company, String ruc, String period, LocalDate dueDate) {}
-            List<Due> due = QuarkusTransaction.requiringNew().call(() -> {
-                @SuppressWarnings("unchecked")
-                List<Object[]> rows = em.createNativeQuery("SELECT tenant_id, company_id, ruc, period, due_date FROM xhandler.sire_deadlines_due(3)")
-                        .getResultList();
-                return rows.stream().map(r -> new Due((UUID) r[0], (UUID) r[1], (String) r[2], (String) r[3],
-                        r[4] instanceof LocalDate d ? d : ((java.sql.Date) r[4]).toLocalDate())).toList();
-            });
+            List<Due> due = QuarkusTransaction.requiringNew().call(() -> sireProvider.getDeadlinesDue().stream()
+                    .map(r -> new Due(r.tenantId(), r.companyId(), r.ruc(), r.period(), r.dueDate())).toList());
             int notified = 0;
             for (Due d : due) {
                 boolean sent = QuarkusTransaction.requiringNew().call(() -> {
                     access.enterAsPlatform(d.tenant());
                     String title = "SIRE: registro de ventas " + d.period() + " de " + d.ruc() + " vence el " + d.dueDate();
-                    int first = em.createNativeQuery("""
-                                    INSERT INTO xhandler.sire_deadline_notice (tenant_id, company_id, period) VALUES (:t, :c, :p)
-                                    ON CONFLICT (company_id, period) DO NOTHING""")
-                            .setParameter("t", d.tenant()).setParameter("c", d.company()).setParameter("p", d.period()).executeUpdate();
+                    int first = sireProvider.addDeadlineNotice(d.tenant(), d.company(), d.period());
                     if (first == 0) {
                         return false;
                     }

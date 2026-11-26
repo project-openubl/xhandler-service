@@ -6,7 +6,7 @@ import io.vertx.core.http.HttpServerRequest;
 import jakarta.enterprise.inject.Instance;
 import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.MembershipProvider;
 import jakarta.transaction.Transactional;
 import java.util.UUID;
 
@@ -20,13 +20,13 @@ import java.util.UUID;
 @ApplicationScoped
 public class TenantAccess {
 
-    private final EntityManager em;
+    private final MembershipProvider membership;
     private final CurrentActor currentActor;
     private final Auditor auditor;
     private final Instance<HttpServerRequest> request;
 
-    public TenantAccess(EntityManager em, CurrentActor currentActor, Auditor auditor, Instance<HttpServerRequest> request) {
-        this.em = em;
+    public TenantAccess(MembershipProvider membership, CurrentActor currentActor, Auditor auditor, Instance<HttpServerRequest> request) {
+        this.membership = membership;
         this.currentActor = currentActor;
         this.auditor = auditor;
         this.request = request;
@@ -63,20 +63,12 @@ public class TenantAccess {
     }
 
     private Role roleOf(UUID tenantId, Actor actor) {
-        Object role = em.createNativeQuery("SELECT xhandler.member_role(:tenant, :kind, :subject)")
-                .setParameter("tenant", tenantId)
-                .setParameter("kind", actor.kind())
-                .setParameter("subject", actor.subject())
-                .getSingleResult();
+        String role = membership.getMemberRole(tenantId, actor.kind(), actor.subject()).orElse(null);
         // Partners manage their tenants (DESIGN.md §1.2): partner admins administer, viewers see.
         // The more privileged of the tenant and partner roles applies.
-        Object partnerRole = em.createNativeQuery("SELECT xhandler.partner_role(:tenant, :kind, :subject)")
-                .setParameter("tenant", tenantId)
-                .setParameter("kind", actor.kind())
-                .setParameter("subject", actor.subject())
-                .getSingleResult();
-        Role tenantRole = role == null ? null : Role.fromDb(role.toString());
-        Role viaPartner = partnerRole == null ? null : Role.fromDb(partnerRole.toString());
+        String partnerRole = membership.getPartnerRole(tenantId, actor.kind(), actor.subject()).orElse(null);
+        Role tenantRole = role == null ? null : Role.fromDb(role);
+        Role viaPartner = partnerRole == null ? null : Role.fromDb(partnerRole);
         if (tenantRole != null || viaPartner != null) {
             if (tenantRole == null) {
                 return viaPartner;
@@ -84,11 +76,7 @@ public class TenantAccess {
             return viaPartner != null && viaPartner.ordinal() < tenantRole.ordinal() ? viaPartner : tenantRole;
         }
         if (actor.platformSupport()) {
-            Object active = em.createNativeQuery("SELECT xhandler.has_support_session(:tenant, :operator)")
-                    .setParameter("tenant", tenantId)
-                    .setParameter("operator", actor.subject())
-                    .getSingleResult();
-            if (Boolean.TRUE.equals(active)) {
+            if (membership.hasSupportSession(tenantId, actor.subject())) {
                 return Role.SUPPORT;
             }
         }
@@ -96,8 +84,6 @@ public class TenantAccess {
     }
 
     public void setTenant(UUID tenantId) {
-        em.createNativeQuery("SELECT set_config('app.tenant_id', :tenant, true)")
-                .setParameter("tenant", tenantId.toString())
-                .getSingleResult();
+        membership.setTenant(tenantId);
     }
 }

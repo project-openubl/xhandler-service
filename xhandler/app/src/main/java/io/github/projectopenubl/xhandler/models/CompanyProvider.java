@@ -46,4 +46,5 @@ public interface CompanyProvider {
 
     /** Failed RUC verifications of a RUC in the last hour, across tenants. */
     int countRecentFailedVerifications(String ruc);
+
 }

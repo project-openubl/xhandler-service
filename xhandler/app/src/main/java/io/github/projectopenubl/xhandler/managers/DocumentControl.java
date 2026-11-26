@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
@@ -12,7 +13,6 @@ import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
@@ -30,6 +30,8 @@ import java.util.UUID;
 @ApplicationScoped
 public class DocumentControl {
 
+    private final JobQueueProvider jobQueueProvider;
+
     private final DocumentProvider documentProvider;
 
     private final DocumentEventProvider documentEventProvider;
@@ -38,17 +40,16 @@ public class DocumentControl {
     static final Set<String> RETRY_FROM = Set.of("pending_send", "in_progress", "unknown", "exception");
 
     private final Auditor auditor;
-    private final EntityManager em;
     private final io.github.projectopenubl.xhandler.jobs.JobStore jobs;
     private final Event<DocumentStatusChanged> statusChanged;
 
-    public DocumentControl(Auditor auditor, EntityManager em, Event<DocumentStatusChanged> statusChanged,
-            io.github.projectopenubl.xhandler.jobs.JobStore jobs, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+    public DocumentControl(Auditor auditor, Event<DocumentStatusChanged> statusChanged,
+            io.github.projectopenubl.xhandler.jobs.JobStore jobs, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+        this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentEventProvider = documentEventProvider;
         this.auditor = auditor;
         this.jobs = jobs;
-        this.em = em;
         this.statusChanged = statusChanged;
     }
 
@@ -167,6 +168,6 @@ public class DocumentControl {
     }
 
     private void notifyReconciler() {
-        em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
+        jobQueueProvider.notifyReconcile();
     }
 }

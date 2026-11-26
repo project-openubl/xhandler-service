@@ -13,7 +13,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.time.Duration;
 import java.time.Instant;
@@ -37,18 +36,16 @@ public class DeadlineAlerts implements JobHandler {
     /** Fired with the tenant open, in the alert's transaction (tenant notifications observe it). */
     public record DocumentAtRisk(DocumentModel document) {}
 
-    private final EntityManager em;
     private final TenantAccess access;
     private final WebhookEvents webhooks;
     private final Event<DocumentAtRisk> atRisk;
     private final MeterRegistry metrics;
     private final Duration horizon;
 
-    public DeadlineAlerts(EntityManager em, TenantAccess access, WebhookEvents webhooks, Event<DocumentAtRisk> atRisk,
+    public DeadlineAlerts(TenantAccess access, WebhookEvents webhooks, Event<DocumentAtRisk> atRisk,
             MeterRegistry metrics, @ConfigProperty(name = "xhandler.documents.deadline-alert", defaultValue = "12h") Duration horizon, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentEventProvider = documentEventProvider;
-        this.em = em;
         this.access = access;
         this.webhooks = webhooks;
         this.atRisk = atRisk;
@@ -65,12 +62,7 @@ public class DeadlineAlerts implements JobHandler {
     public Map<String, Object> run(JobContext context) {
         record AtRisk(UUID tenantId, UUID documentId) {}
         List<AtRisk> documents = QuarkusTransaction.requiringNew().call(() -> {
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = em.createNativeQuery(
-                            "SELECT tenant_id, document_id FROM xhandler.documents_at_risk(make_interval(secs => :secs))")
-                    .setParameter("secs", (double) horizon.toSeconds())
-                    .getResultList();
-            return rows.stream().map(r -> new AtRisk((UUID) r[0], (UUID) r[1])).toList();
+            return documentProvider.getDocumentsAtRisk(horizon).stream().map(r -> new AtRisk(r.tenantId(), r.id())).toList();
         });
         int alerted = 0;
         for (AtRisk risk : documents) {

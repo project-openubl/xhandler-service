@@ -106,6 +106,7 @@ public class JpaCompanyProvider implements CompanyProvider {
         return ((Number) failures).intValue();
     }
 
+
     private static List<CompanyModel> wrap(List<CompanyEntity> entities) {
         return entities.stream().map(e -> (CompanyModel) new CompanyAdapter(e)).toList();
     }

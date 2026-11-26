@@ -19,7 +19,6 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -53,10 +52,9 @@ public class VoidingService {
     private final TenantAccess access;
     private final Summaries summaries;
     private final Auditor auditor;
-    private final EntityManager em;
     private final Event<DocumentStatusChanged> statusChanged;
 
-    public VoidingService(TenantAccess access, Summaries summaries, Auditor auditor, EntityManager em,
+    public VoidingService(TenantAccess access, Summaries summaries, Auditor auditor,
             Event<DocumentStatusChanged> statusChanged, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.documentProvider = documentProvider;
@@ -65,7 +63,6 @@ public class VoidingService {
         this.access = access;
         this.summaries = summaries;
         this.auditor = auditor;
-        this.em = em;
         this.statusChanged = statusChanged;
     }
 
@@ -141,17 +138,8 @@ public class VoidingService {
         voiding.setAffectedDocumentId(original.getId());
         // The conditional status change (§9.3): the original must still be accepted and undelivered
         Instant now = Instant.now();
-        int moved = em.createNativeQuery("""
-                        UPDATE xhandler.document SET status_before_voiding = status, status = 'voiding', voided_by_document_id = :voiding,
-                            void_reason = :motivo, reversal_communicated_at = :reversal, updated_at = now()
-                        WHERE id = :id AND status IN ('accepted', 'accepted_with_observations') AND delivered_at IS NULL
-                          AND voided_by_document_id IS NULL""")
-                .setParameter("voiding", voiding.getId())
-                .setParameter("motivo", motivo)
-                .setParameter("reversal", request.reversalCommunicatedAt() == null ? null
-                        : request.reversalCommunicatedAt().atStartOfDay(Deadlines.LIMA).toInstant())
-                .setParameter("id", original.getId())
-                .executeUpdate();
+        int moved = documentProvider.markVoiding(original.getId(), voiding.getId(), motivo,
+                request.reversalCommunicatedAt() == null ? null : request.reversalCommunicatedAt().atStartOfDay(Deadlines.LIMA).toInstant());
         if (moved != 1) {
             // Rolls back the summary too: its number is not consumed
             throw ApiException.conflict("document_changed", "El documento cambió mientras se procesaba la anulación. Intente nuevamente.");

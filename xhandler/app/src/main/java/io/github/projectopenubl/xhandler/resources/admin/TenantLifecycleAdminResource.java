@@ -6,7 +6,7 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.resources.DataSubjectRequests;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.PrivacyProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.POST;
@@ -25,13 +25,13 @@ import java.util.UUID;
 public class TenantLifecycleAdminResource {
 
     private final PlatformAdmin admin;
-    private final EntityManager em;
+    private final PrivacyProvider privacy;
     private final TenantAccess access;
     private final DataSubjectRequests requests;
 
-    public TenantLifecycleAdminResource(PlatformAdmin admin, EntityManager em, TenantAccess access, DataSubjectRequests requests) {
+    public TenantLifecycleAdminResource(PlatformAdmin admin, PrivacyProvider privacy, TenantAccess access, DataSubjectRequests requests) {
         this.admin = admin;
-        this.em = em;
+        this.privacy = privacy;
         this.access = access;
         this.requests = requests;
     }
@@ -44,7 +44,7 @@ public class TenantLifecycleAdminResource {
         String who = admin.require();
         access.enterAsPlatform(tenantId);
         boolean hold = body != null && Boolean.TRUE.equals(body.get("audit_hold"));
-        update(tenantId, "audit_hold = :v", hold);
+        found(privacy.setAuditHold(tenantId, hold));
         AdminLog.PLATFORM_AUDIT.infof("admin %s set audit_hold=%s on tenant %s", who, hold, tenantId);
         return Map.of("tenant_id", tenantId, "audit_hold", hold);
     }
@@ -56,13 +56,10 @@ public class TenantLifecycleAdminResource {
         String who = admin.require();
         access.enterAsPlatform(tenantId);
         boolean archive = body != null && Boolean.TRUE.equals(body.get("archive_plan"));
-        update(tenantId, "archive_plan = :v", archive);
+        found(privacy.setArchivePlan(tenantId, archive));
         if (!archive) {
             // An exited tenant that drops the archive plan gets its deletion date (the 2-year limit)
-            em.createNativeQuery("""
-                            UPDATE xhandler.tenant SET delete_after = greatest(exit_requested_at + interval '730 days', now() + interval '30 days')
-                            WHERE id = :id AND status = 'exited' AND delete_after IS NULL AND deleted_at IS NULL""")
-                    .setParameter("id", tenantId).executeUpdate();
+            privacy.scheduleExitedTenantDeletion(tenantId);
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s set archive_plan=%s on tenant %s", who, archive, tenantId);
         return Map.of("tenant_id", tenantId, "archive_plan", archive);
@@ -75,9 +72,7 @@ public class TenantLifecycleAdminResource {
     public Map<String, Object> cancelExit(@PathParam("tenantId") UUID tenantId) {
         String who = admin.require();
         access.enterAsPlatform(tenantId);
-        int changed = em.createNativeQuery("""
-                        UPDATE xhandler.tenant SET exit_requested_at = NULL, delete_after = NULL, status = 'active', updated_at = now()
-                        WHERE id = :id AND status = 'exited' AND deleted_at IS NULL""").setParameter("id", tenantId).executeUpdate();
+        int changed = privacy.cancelExit(tenantId);
         if (changed == 0) {
             throw ApiException.notFound();
         }
@@ -93,8 +88,7 @@ public class TenantLifecycleAdminResource {
         String who = admin.require();
         // Platform admins act on any tenant: opened explicitly, after the platform check
         TenantScope scope = access.enterAsPlatform(tenantId);
-        if (em.createNativeQuery("SELECT 1 FROM xhandler.tenant WHERE id = :id AND deleted_at IS NULL").setParameter("id", tenantId)
-                .getResultList().isEmpty()) {
+        if (!privacy.existsTenant(tenantId)) {
             throw ApiException.notFound();
         }
         UUID id = requests.register(scope, request, "platform");
@@ -102,9 +96,8 @@ public class TenantLifecycleAdminResource {
         return Map.of("id", id, "tenant_id", tenantId, "forwarded", true);
     }
 
-    private void update(UUID tenantId, String set, boolean value) {
-        int changed = em.createNativeQuery("UPDATE xhandler.tenant SET " + set + ", updated_at = now() WHERE id = :id AND deleted_at IS NULL")
-                .setParameter("v", value).setParameter("id", tenantId).executeUpdate();
+    /** 404 when the update changed no row (unknown or deleted tenant). */
+    private static void found(int changed) {
         if (changed == 0) {
             throw ApiException.notFound();
         }

@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.PublicLookupProvider;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +37,8 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/lookup/{tipo}/{numero}")
 public class IdentityLookup {
 
+    private final PublicLookupProvider publicLookupProvider;
+
     private final CompanyManager companyManager;
 
     /** A normalized answer. */
@@ -48,18 +51,19 @@ public class IdentityLookup {
     private final ObjectMapper json;
     private final Optional<String> searchpeUrl;
     private final io.github.projectopenubl.xhandler.managers.Auditor auditor;
-    private final jakarta.persistence.EntityManager em;
+    private final io.github.projectopenubl.xhandler.models.CatalogProvider catalogProvider;
     private final int maxPerHour;
 
     static final java.time.Duration CACHE_TTL = java.time.Duration.ofDays(30);
 
     public IdentityLookup(TenantAccess access, CredentialService credentials, CatalogResource catalogs, Egress egress, ObjectMapper json,
             @ConfigProperty(name = "xhandler.lookup.searchpe-url") Optional<String> searchpeUrl,
-            io.github.projectopenubl.xhandler.managers.Auditor auditor, jakarta.persistence.EntityManager em,
-            @ConfigProperty(name = "xhandler.lookup.max-per-tenant-per-hour", defaultValue = "300") int maxPerHour, CompanyManager companyManager) {
+            io.github.projectopenubl.xhandler.managers.Auditor auditor, io.github.projectopenubl.xhandler.models.CatalogProvider catalogProvider,
+            @ConfigProperty(name = "xhandler.lookup.max-per-tenant-per-hour", defaultValue = "300") int maxPerHour, CompanyManager companyManager, PublicLookupProvider publicLookupProvider) {
+        this.publicLookupProvider = publicLookupProvider;
         this.companyManager = companyManager;
         this.auditor = auditor;
-        this.em = em;
+        this.catalogProvider = catalogProvider;
         this.maxPerHour = maxPerHour;
         this.access = access;
         this.credentials = credentials;
@@ -94,10 +98,7 @@ public class IdentityLookup {
             CompanyModel company = companyManager.getCompany(companyId);
             // Personal data: every lookup is audited, and limited per tenant (no free DNI → name oracle)
             auditor.record(scope, "lookup.identity", "company", companyId, Map.of("tipo", tipo, "numero", numero));
-            int hits = ((Number) em.createNativeQuery("""
-                            INSERT INTO xhandler.public_lookup_counter (bucket, key, hits) VALUES (date_trunc('hour', now()), :k, 1)
-                            ON CONFLICT (bucket, key) DO UPDATE SET hits = public_lookup_counter.hits + 1 RETURNING hits""")
-                    .setParameter("k", "lookup:" + tenantId).getSingleResult()).intValue();
+            int hits = publicLookupProvider.countLookup("lookup:" + tenantId);
             if (hits > maxPerHour) {
                 throw new ApiException(429, "too_many_requests", "Demasiadas consultas de RUC/DNI. Intente en una hora.");
             }

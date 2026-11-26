@@ -67,4 +67,45 @@ public interface DocumentProvider {
     int revokeAccessLinks(UUID documentId);
 
     List<DocumentModel> searchDocuments(DocumentSearch search, int offset, int limit);
+
+    /** A row of a cross-tenant SECURITY DEFINER listing: the tenant and the row's id. */
+    record TenantRow(UUID tenantId, UUID id) {}
+
+    /** A company, environment and issue day whose boletas need a resumen diario. */
+    record SummaryGroup(UUID tenantId, UUID companyId, String sunatEnv, LocalDate fecha) {}
+
+
+    /**
+     * Moves an accepted, undelivered, not yet voided document to {@code voiding}; returns how many
+     * rows changed (0 if it changed meanwhile).
+     */
+    int markVoiding(UUID documentId, UUID voidingId, String motivo, java.time.Instant reversalCommunicatedAt);
+
+    /** Records a buyer portal download of the document. */
+    void addPortalDelivery(UUID id, UUID tenantId, UUID documentId);
+
+    /** Records a call to a SUNAT endpoint, for its health. */
+    void addSunatCall(String endpoint, boolean healthy, java.time.Instant startedAt);
+
+    /** Groups of boletas needing a resumen diario, across tenants (SECURITY DEFINER). */
+    List<SummaryGroup> getBoletasNeedingSummary(LocalDate today);
+
+
+    /** Documents whose legal deadline falls within {@code horizon}, across tenants (SECURITY DEFINER). */
+    List<TenantRow> getDocumentsAtRisk(java.time.Duration horizon);
+
+    /** Up to 200 documents without amounts, across tenants (SECURITY DEFINER). */
+    List<TenantRow> getDocumentsWithoutAmounts();
+
+
+
+    /** The storage key of the document's signed XML. */
+    Optional<String> getSignedXmlStorageKey(UUID documentId);
+
+
+    /** Records a document's amounts (and default payment terms of a factura), if not recorded yet. */
+    void setDocumentAmounts(UUID documentId, String amountsJson, String paymentTerms);
+
+    /** Marks a document's amounts as unreadable, if not recorded yet. */
+    void markAmountsUnreadable(UUID documentId);
 }

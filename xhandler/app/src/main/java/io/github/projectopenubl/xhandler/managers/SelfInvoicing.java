@@ -19,7 +19,7 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.BillingProvider;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -60,18 +60,18 @@ public final class SelfInvoicing {
 
         private final Optional<String> secret;
         private final JobStore jobs;
-        private final EntityManager em;
+        private final BillingProvider billingProvider;
         private final ObjectMapper json;
         private final TenantAccess access;
         private final Entitlements entitlements;
 
-        public Webhook(@ConfigProperty(name = "xhandler.lago.webhook-secret") Optional<String> secret, JobStore jobs, EntityManager em,
+        public Webhook(@ConfigProperty(name = "xhandler.lago.webhook-secret") Optional<String> secret, JobStore jobs, BillingProvider billingProvider,
                 ObjectMapper json, TenantAccess access, Entitlements entitlements) {
             this.access = access;
             this.entitlements = entitlements;
             this.secret = secret;
             this.jobs = jobs;
-            this.em = em;
+            this.billingProvider = billingProvider;
             this.json = json;
         }
 
@@ -104,10 +104,7 @@ public final class SelfInvoicing {
             String lagoId = invoice.path("lago_id").asText();
             UUID tenant = tenantId(invoice.path("customer").path("external_id").asText());
             QuarkusTransaction.requiringNew().run(() -> {
-                int inserted = em.createNativeQuery(
-                                "INSERT INTO xhandler.lago_invoice (lago_invoice_id, tenant_id) VALUES (:id, :t) ON CONFLICT DO NOTHING")
-                        .setParameter("id", lagoId).setParameter("t", tenant).executeUpdate();
-                if (inserted == 1) {
+                if (billingProvider.addLagoInvoice(lagoId, tenant)) {
                     jobs.enqueuePlatform(Job.NAME, 4, Map.of("lago_invoice_id", lagoId, "tenant_id", tenant.toString(),
                             "invoice", invoice.toString()), List.of("lago-invoice:" + lagoId));
                 }
@@ -142,16 +139,16 @@ public final class SelfInvoicing {
 
         public static final String NAME = "billing.self-invoice";
 
-        private final EntityManager em;
+        private final BillingProvider billingProvider;
         private final TenantAccess access;
         private final EmitService emit;
         private final Jobs jobs;
         private final ObjectMapper json;
 
-        public Job(EntityManager em, TenantAccess access, EmitService emit, Jobs jobs, ObjectMapper json, TenantProvider tenantProvider, DocumentProvider documentProvider) {
+        public Job(BillingProvider billingProvider, TenantAccess access, EmitService emit, Jobs jobs, ObjectMapper json, TenantProvider tenantProvider, DocumentProvider documentProvider) {
             this.documentProvider = documentProvider;
             this.tenantProvider = tenantProvider;
-            this.em = em;
+            this.billingProvider = billingProvider;
             this.access = access;
             this.emit = emit;
             this.jobs = jobs;
@@ -170,11 +167,7 @@ public final class SelfInvoicing {
             JsonNode invoice = json.readTree(context.args().path("invoice").asText());
             record Issuer(UUID tenant, UUID company) {}
             Issuer issuer = QuarkusTransaction.requiringNew().call(() -> {
-                Map<String, String> settings = new HashMap<>();
-                @SuppressWarnings("unchecked")
-                List<Object[]> rows = em.createNativeQuery("SELECT key, value FROM xhandler.platform_setting WHERE key IN (:a, :b)")
-                        .setParameter("a", ISSUER_TENANT).setParameter("b", ISSUER_COMPANY).getResultList();
-                rows.forEach(r -> settings.put((String) r[0], (String) r[1]));
+                Map<String, String> settings = billingProvider.getPlatformSettings(ISSUER_TENANT, ISSUER_COMPANY);
                 if (!settings.containsKey(ISSUER_TENANT) || !settings.containsKey(ISSUER_COMPANY)) {
                     throw new IllegalStateException("the platform's issuing company is not configured (admin API billing/issuer)");
                 }
@@ -195,9 +188,7 @@ public final class SelfInvoicing {
                 return documentProvider.getDocumentByLabel(issuer.company(), "lago_invoice", lagoId).map(d -> d.getId());
             });
             if (existing.isPresent()) {
-                QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery(
-                                "UPDATE xhandler.lago_invoice SET document_id = :d WHERE lago_invoice_id = :id")
-                        .setParameter("d", existing.get()).setParameter("id", lagoId).executeUpdate());
+                QuarkusTransaction.requiringNew().run(() -> billingProvider.setLagoInvoiceDocument(lagoId, existing.get()));
                 return Map.of("document_id", existing.get().toString(), "already_issued", true);
             }
             Map<String, Object> spec = new HashMap<>();
@@ -251,8 +242,7 @@ public final class SelfInvoicing {
                     context.correlationId());
             UUID documentId = UUID.fromString(emitted.body().path("id").asText());
             QuarkusTransaction.requiringNew().run(() -> {
-                em.createNativeQuery("UPDATE xhandler.lago_invoice SET document_id = :d WHERE lago_invoice_id = :id")
-                        .setParameter("d", documentId).setParameter("id", lagoId).executeUpdate();
+                billingProvider.setLagoInvoiceDocument(lagoId, documentId);
                 if (buyer.email() != null) {
                     TenantScope scope = new TenantScope(issuer.tenant(), Actor.PLATFORM, Role.PLATFORM);
                     access.enterAsPlatform(issuer.tenant());

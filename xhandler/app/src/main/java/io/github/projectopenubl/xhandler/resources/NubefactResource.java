@@ -15,7 +15,7 @@ import io.github.projectopenubl.xhandler.managers.EmitService;
 import io.github.projectopenubl.xhandler.managers.VoidingService;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.AdapterTokenProvider;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -46,17 +46,17 @@ public class NubefactResource {
 
     private final CompanyProvider companyProvider;
 
-    private final EntityManager em;
+    private final AdapterTokenProvider adapterTokens;
     private final TenantAccess access;
     private final EmitService emit;
     private final VoidingService voiding;
     private final ObjectMapper json;
 
-    public NubefactResource(EntityManager em, TenantAccess access, EmitService emit, VoidingService voiding, ObjectMapper json, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+    public NubefactResource(AdapterTokenProvider adapterTokens, TenantAccess access, EmitService emit, VoidingService voiding, ObjectMapper json, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentEventProvider = documentEventProvider;
         this.companyProvider = companyProvider;
-        this.em = em;
+        this.adapterTokens = adapterTokens;
         this.access = access;
         this.emit = emit;
         this.voiding = voiding;
@@ -150,16 +150,14 @@ public class NubefactResource {
         token = token.replace("\"", "");
         String hash = AdapterResource.hash(token);
         return QuarkusTransaction.requiringNew().call(() -> {
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = em.createNativeQuery("SELECT tenant_id, company_id, label, token_id FROM xhandler.adapter_token_company_v2(:h, 'nubefact')")
-                    .setParameter("h", hash).getResultList();
-            if (rows.isEmpty() || !companyId.equals(rows.get(0)[1])) {
+            AdapterTokenProvider.TokenCompany row = adapterTokens.getNubefactTokenCompany(hash).orElse(null);
+            if (row == null || !companyId.equals(row.companyId())) {
                 throw new ApiException(401, "unauthorized", "Token inválido.");
             }
-            UUID tenant = (UUID) rows.get(0)[0];
+            UUID tenant = row.tenantId();
             access.enterAsPlatform(tenant);
             CompanyModel company = companyProvider.getCompany(companyId).orElse(null);
-            return new Client(tenant, companyId, company.getSunatEnv(), (UUID) rows.get(0)[3], (String) rows.get(0)[2]);
+            return new Client(tenant, companyId, company.getSunatEnv(), row.tokenId(), row.label());
         });
     }
 }

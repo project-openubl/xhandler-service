@@ -4,10 +4,10 @@ import io.github.projectopenubl.xhandler.jobs.JobConfig;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.jobs.JobStore;
+import io.github.projectopenubl.xhandler.models.MaintenanceProvider;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Map;
@@ -23,10 +23,10 @@ public final class PlatformJobs {
     @ApplicationScoped
     public static class Partitions implements JobHandler {
 
-        private final EntityManager em;
+        private final MaintenanceProvider maintenance;
 
-        public Partitions(EntityManager em) {
-            this.em = em;
+        public Partitions(MaintenanceProvider maintenance) {
+            this.maintenance = maintenance;
         }
 
         @Override
@@ -37,8 +37,7 @@ public final class PlatformJobs {
         @Override
         public Map<String, Object> run(JobContext context) {
             LocalDate today = LocalDate.now(LIMA);
-            QuarkusTransaction.requiringNew().run(() ->
-                    em.createNativeQuery("SELECT xhandler.ensure_partitions(:day)").setParameter("day", today).getSingleResult());
+            QuarkusTransaction.requiringNew().run(() -> maintenance.ensurePartitions(today));
             return Map.of("day", today.toString());
         }
     }
@@ -71,10 +70,10 @@ public final class PlatformJobs {
     @ApplicationScoped
     public static class IdempotencyPurge implements JobHandler {
 
-        private final EntityManager em;
+        private final MaintenanceProvider maintenance;
 
-        public IdempotencyPurge(EntityManager em) {
-            this.em = em;
+        public IdempotencyPurge(MaintenanceProvider maintenance) {
+            this.maintenance = maintenance;
         }
 
         @Override
@@ -84,11 +83,9 @@ public final class PlatformJobs {
 
         @Override
         public Map<String, Object> run(JobContext context) {
-            int purged = QuarkusTransaction.requiringNew().call(() -> ((Number) em.createNativeQuery(
-                    "SELECT xhandler.purge_idempotency_keys(interval '24 hours')").getSingleResult()).intValue());
+            int purged = QuarkusTransaction.requiringNew().call(maintenance::purgeIdempotencyKeys);
             // Rate-limit buckets older than a day are useless (public lookups, RUC/DNI lookups)
-            int buckets = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery(
-                    "DELETE FROM xhandler.public_lookup_counter WHERE bucket < now() - interval '1 day'").executeUpdate());
+            int buckets = QuarkusTransaction.requiringNew().call(maintenance::deleteOldRateBuckets);
             return Map.of("purged", purged, "rate_buckets", buckets);
         }
     }
