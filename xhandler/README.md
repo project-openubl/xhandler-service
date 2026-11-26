@@ -12,7 +12,7 @@ an OSE. Built with Quarkus on top of
 ## Run it locally
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md): the engine and the SUNAT fake with `cargo run`, then
-`./mvnw -f xhandler quarkus:dev -pl app` from the root. Dev Services start PostgreSQL, Keycloak on
+`(cd xhandler && ../mvnw quarkus:dev)` from the root. Dev Services start PostgreSQL, Keycloak on
 8180 and Mailpit. To call the API directly:
 
 ```bash

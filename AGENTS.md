@@ -35,16 +35,18 @@ hack/       dev and CI tooling only
 
 ```bash
 # xhandler
-./mvnw -f xhandler quarkus:dev -pl app          # :8080; Dev Services: PostgreSQL, Keycloak :8180, Mailpit
-./mvnw -f xhandler verify                       # tests (need Docker or Podman)
-(cd xhandler/engine && cargo run)               # engine on 127.0.0.1:8090
-(cd xhandler/engine && cargo run --bin sunat-fake)   # SUNAT fake on 127.0.0.1:8099
+(cd xhandler && ../mvnw quarkus:dev)                 # :8080; Dev Services: PostgreSQL, Keycloak :8180, Mailpit
+(cd xhandler && ../mvnw verify)                      # tests (need Docker or Podman)
+(cd xhandler/engine && cargo run)                    # engine :8090
+(cd xhandler/engine && cargo run --bin sunat-fake)   # SUNAT fake :8099
 (cd xhandler/engine && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test)
-hack/xhandler-e2e.sh                            # full flow against SUNAT beta
+hack/xhandler-e2e.sh                                 # full flow against SUNAT beta
 
-# searchpe, operator
-./mvnw quarkus:dev -pl searchpe                 # :8081, joins xhandler's Keycloak
-./mvnw verify -pl searchpe
+# searchpe
+(cd searchpe && ../mvnw quarkus:dev)                 # :8081, joins xhandler's Keycloak
+(cd searchpe && ../mvnw verify)                      # tests (need Docker or Podman)
+
+# operator
 (cd operator && make lint verify-generated test bundle bundle-validate)
 
 # ui (build before lint)

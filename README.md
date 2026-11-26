@@ -24,7 +24,7 @@ una vez: `(cd ui && cp .env.example .env && npm ci)`):
 ```bash
 (cd xhandler/engine && cargo run)                   # motor             :8090
 (cd xhandler/engine && cargo run --bin sunat-fake)  # SUNAT simulada    :8099
-(cd xhandler && ../mvnw quarkus:dev -pl app)        # xhandler-service  :8080
+(cd xhandler && ../mvnw quarkus:dev)                # xhandler-service  :8080
 (cd searchpe && ../mvnw quarkus:dev)                # searchpe          :8081
 (cd ui && npm run start:dev)                        # UI                :3000
 ```

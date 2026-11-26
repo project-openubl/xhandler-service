@@ -38,8 +38,8 @@ the SUNAT fake to issue; see [CONTRIBUTING.md](../../CONTRIBUTING.md#start-the-a
 ```bash
 (cd xhandler/engine && cargo run)
 (cd xhandler/engine && cargo run --bin sunat-fake)
-./mvnw -f xhandler quarkus:dev -pl app     # :8080, the enterprise plan by default in dev mode
-./mvnw quarkus:dev -pl searchpe            # :8081, OIDC and authorization on in dev mode
+(cd xhandler && ../mvnw quarkus:dev)      # :8080, the enterprise plan by default in dev mode
+(cd searchpe && ../mvnw quarkus:dev)      # :8081, OIDC and authorization on in dev mode
 ```
 
 Without searchpe, run with `E2E_SEARCHPE=false`: its specs skip and the UI hides its section.

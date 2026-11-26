@@ -4,7 +4,7 @@ Consulta RUC sobre el `padrón reducido` de la SUNAT. Sirve solo su API; la inte
 del repositorio ([ui/](../ui)).
 
 ```bash
-./mvnw quarkus:dev -pl searchpe     # desde la raíz: http://localhost:8081
+(cd searchpe && ../mvnw quarkus:dev)     # desde la raíz: http://localhost:8081
 ```
 
 Dev Services levantan PostgreSQL y comparten el Keycloak de xhandler-service (puerto 8180, con

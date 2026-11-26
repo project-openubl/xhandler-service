@@ -26,7 +26,7 @@ Then from the repository root, one terminal per line:
 ```bash
 (cd xhandler/engine && cargo run)                   # engine            :8090
 (cd xhandler/engine && cargo run --bin sunat-fake)  # SUNAT fake        :8099
-(cd xhandler && ../mvnw quarkus:dev -pl app)        # xhandler-service  :8080
+(cd xhandler && ../mvnw quarkus:dev)                # xhandler-service  :8080
 (cd searchpe && ../mvnw quarkus:dev)                # searchpe          :8081
 (cd ui && npm run start:dev)                        # UI                :3000
 ```
