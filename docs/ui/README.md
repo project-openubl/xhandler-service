@@ -6,11 +6,11 @@
     spec patches
   - [xhandler-api-notes.md](internals/xhandler-api-notes.md),
     [searchpe-api-notes.md](internals/searchpe-api-notes.md): backend behaviour that shaped the code
-- **[adr/](adr/)**: architecture decision records. They describe how the UI is designed and
+- **[adr/](../adr/)**: architecture decision records. They describe how the UI is designed and
   why, without referring to code.
 - [scripts.md](scripts.md): every npm script, grouped by function
 - [tech-stack.md](tech-stack.md): the full dependency / tooling stack
 - [environment-variables.md](environment-variables.md): runtime, build-time and dev/test env vars
 
 Coding conventions (rules) and step-by-step how-tos (skills) live in
-[.rulesync/](../.rulesync/); see the root [AGENTS.md](../../AGENTS.md).
+[ui/.rulesync/](../../ui/.rulesync/); see the root [AGENTS.md](../../AGENTS.md).

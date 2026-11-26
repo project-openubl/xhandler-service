@@ -17,8 +17,8 @@ globs:
 
 Before wiring an endpoint, read its operation in `client/openapi/xhandler.json` (or the
 generated client `@app/client/xhandler`): params, body and declared responses. The service's
-design is xhandler `docs/DESIGN.md` §12; behaviour notes are in
-`docs/internals/xhandler-api-notes.md`.
+design is `docs/DESIGN.md` §12; behaviour notes are in
+`docs/ui/internals/xhandler-api-notes.md`.
 
 ## Shape
 
@@ -28,7 +28,7 @@ design is xhandler `docs/DESIGN.md` §12; behaviour notes are in
   generated types match the wire; don't convert names by hand.
 - Tenant data lives under `/tenants/{tenantId}/…`: the tenant comes from the URL through
   `useSelectedTenantId()` ([queries](queries.md)). A `404` there can mean a foreign tenant: show
-  it as "no existe", never as "forbidden" ([ADR 0002](../../docs/adr/0002-navigation-partner-tenant-company.md)).
+  it as "no existe", never as "forbidden" ([ADR 0002](../../../docs/adr/0002-navigation-partner-tenant-company.md)).
 - Pages answer `{ items, limit, offset }` with no total ([list-reads](list-reads.md)).
 - Only the documented filters exist (`state`, `name` for jobs; `status`, `serie`, … for
   documents); don't filter client-side what the API can't.
@@ -46,7 +46,7 @@ design is xhandler `docs/DESIGN.md` §12; behaviour notes are in
   operations, `409` guard violations, `422` invalid documents (DESIGN.md §12).
 - Creates send an `Idempotency-Key` header (a fresh UUID per user intent, reused on retry of
   the same submission).
-- Jobs are Pulp-like ([ADR 0007](../../docs/adr/0007-job-reporting.md)): terminal states via
+- Jobs are Pulp-like ([ADR 0007](../../../docs/adr/0007-job-reporting.md)): terminal states via
   `isTerminalJobState` (`completed`, `failed`, `canceled`; `canceling` still runs); cancel is
   `POST …/jobs/{id}/cancel`, offered only while `isJobCancelable`. Show a failed job's error as
   returned.
@@ -61,7 +61,7 @@ design is xhandler `docs/DESIGN.md` §12; behaviour notes are in
 ## Public endpoints
 
 - Public pages call only `/api/v1/public/*` and `/api/v1/status`, through
-  `xhandlerPublicClient` (no token) ([ADR 0003](../../docs/adr/0003-public-and-authenticated-routes.md)).
+  `xhandlerPublicClient` (no token) ([ADR 0003](../../../docs/adr/0003-public-and-authenticated-routes.md)).
 - A capability token is a credential: never log it or put it in a toast.
 
 ## Checklist

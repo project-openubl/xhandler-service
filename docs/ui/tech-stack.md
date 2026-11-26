@@ -34,7 +34,7 @@ The main pieces, by area:
 | [Rollup](https://rollupjs.org/)               | Builds for `common` and `server`           |
 | [Express](https://expressjs.com/)             | Production server (static serving + proxy) |
 
-No i18n library: the UI is Spanish only ([ADR 0005](adr/0005-spanish-ui.md)).
+No i18n library: the UI is Spanish only ([ADR 0005](../adr/0005-spanish-ui.md)).
 
 ## Code generation
 

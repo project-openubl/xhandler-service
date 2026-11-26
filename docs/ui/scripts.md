@@ -39,4 +39,4 @@ Run from `ui/`. Workspace scripts run with `-w <workspace>` or `-ws`.
 | `npm run lint:fast`   | oxlint, the fast inner loop; `lint:fast:fix` fixes                     |
 | `npm run format:fast` | oxfmt check; `format:fast:fix` writes (run `format:fix` after it)      |
 | `npm test`            | Vitest Browser Mode (client)                                           |
-| `npm run test:e2e`    | Playwright against a running stack ([e2e/README.md](../e2e/README.md)) |
+| `npm run test:e2e`    | Playwright against a running stack ([e2e/README.md](../../ui/e2e/README.md)) |

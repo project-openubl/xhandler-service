@@ -11,8 +11,8 @@ npm run start:dev   # http://localhost:3000
 ```
 
 - Guía para desarrolladores y agentes: [AGENTS.md](../AGENTS.md)
-- Decisiones de diseño: [docs/adr/](docs/adr/)
-- Variables de entorno: [docs/environment-variables.md](docs/environment-variables.md)
+- Decisiones de diseño: [docs/adr/](../docs/adr/)
+- Variables de entorno: [docs/ui/environment-variables.md](../docs/ui/environment-variables.md)
 - Pruebas end-to-end: [e2e/README.md](e2e/README.md)
 
 ## Imagen

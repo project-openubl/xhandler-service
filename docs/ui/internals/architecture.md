@@ -1,7 +1,7 @@
 # Architecture
 
 A high-level map of how the UI is structured. For the design decisions behind it see
-[docs/adr/](../adr/); for the coding rules see [.rulesync/rules/](../../.rulesync/rules/).
+[docs/adr/](../../adr/); for the coding rules see [.rulesync/rules/](../../../ui/.rulesync/rules/).
 
 ```mermaid
 flowchart LR
@@ -15,7 +15,7 @@ flowchart LR
 ## One shell, two backends
 
 A React single-page app drives two independent REST APIs
-([ADR 0001](../adr/0001-one-shell-two-backends.md)). The browser calls both on its own origin,
+([ADR 0001](../../adr/0001-one-shell-two-backends.md)). The browser calls both on its own origin,
 under one prefix each; the UI server (Express in production, Vite in development) proxies
 `/api/xhandler/*` and `/api/searchpe/*` to the backends' `/api/*` (searchpe's health check to
 `/q/health`). No CORS, and the browser never learns the backend URLs. searchpe is optional:
@@ -35,7 +35,7 @@ concurrent requests) and retry once. A `401` with no stored user is rejected as 
 fails, xhandler sends the user to log in again and searchpe just fails the request (its section
 reads as unavailable when `whoami` keeps answering `401`); nothing signs the user out but the
 user. A third instance, used by public pages, never carries a token
-([ADR 0003](../adr/0003-public-and-authenticated-routes.md)).
+([ADR 0003](../../adr/0003-public-and-authenticated-routes.md)).
 
 Routes under `_authenticated/` start the login in `beforeLoad` (never on a preload) and hold
 the route on a promise that never settles, so nothing renders or loads while the browser leaves
@@ -61,18 +61,18 @@ browser only gets the allowlisted keys of `CLIENT_ENV_KEYS` (`common/src/environ
   `queries/searchpe/`, each with a key factory, `*QueryOptions` factories, hooks and mutations
   that own their invalidation.
 - List state (filters, sort, page) lives in the URL through `usePersistentState`
-  ([ADR 0008](../adr/0008-view-state-persistence.md)).
+  ([ADR 0008](../../adr/0008-view-state-persistence.md)).
 - Zustand holds the little client state that outlives a page (`stores/useLastTenantStore.ts`:
   the sidebar's last tenant).
 
 ## Tenancy
 
 xhandler pages carry the tenant (and company) in the URL
-([ADR 0002](../adr/0002-navigation-partner-tenant-company.md)); `useSelectedTenantId()` is the
+([ADR 0002](../../adr/0002-navigation-partner-tenant-company.md)); `useSelectedTenantId()` is the
 one hook that reads it, and tenant-scoped query hooks inject it.
 
 ## Permissions
 
 `useSearchpePermissions` (from `whoami`) and `useTenantRole` (from the user's tenant
 memberships) gate actions: disabled with a tooltip, never hidden
-([ADR 0004](../adr/0004-identity-and-permissions.md)).
+([ADR 0004](../../adr/0004-identity-and-permissions.md)).

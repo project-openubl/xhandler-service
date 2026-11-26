@@ -5,8 +5,8 @@ track, deliver and report them. It works as the issuer's own software, as a PSE,
 an OSE. Built with Quarkus on top of
 [xhandler-rust](https://github.com/project-openubl/xhandler-rust).
 
-- Design: [docs/DESIGN.md](docs/DESIGN.md)
-- Regulatory research: [docs/research/](docs/research/README.md)
+- Design: [docs/DESIGN.md](../docs/DESIGN.md)
+- Regulatory research: [docs/research/](../docs/research/README.md)
 - Contributor and agent guide: [AGENTS.md](../AGENTS.md)
 
 ## Run it locally

@@ -3,8 +3,8 @@
 Guide for AI coding agents (and humans) in this monorepo: the xhandler services for SUNAT (Peru)
 electronic documents, built, tested and deployed together. This is the only agent guide.
 
-**Behavior is defined in [xhandler/docs/DESIGN.md](xhandler/docs/DESIGN.md)** (UI: the ADRs in
-[ui/docs/adr/](ui/docs/adr/)). Read the relevant section before changing behavior; a behavior
+**Behavior is defined in [docs/DESIGN.md](docs/DESIGN.md)** (UI: the ADRs in
+[docs/adr/](docs/adr/)). Read the relevant section before changing behavior; a behavior
 change updates DESIGN.md or an ADR in the same commit.
 
 ## Layout
@@ -16,10 +16,10 @@ xhandler/   multi-tenant document service
   admin-cli/  xhandler-admin, Picocli client of the admin API
   sdk/        clients generated from the OpenAPI document
   deploy/     Kustomize base: one pod = app + engine
-  docs/       DESIGN.md, research, runbooks, quickstarts
 searchpe/   RUC lookup over SUNAT's padrón reducido (Quarkus)
 ui/         the one UI of both services (React 19, PatternFly 6, pulp-ui-2 blueprint)
 operator/   Kubernetes operator (Go, OLM): XHandler and Searchpe kinds
+docs/       DESIGN.md, adr/ (repo-wide decisions), research, runbooks, quickstarts, ui/
 hack/       local stack (compose.yaml: PostgreSQL, Keycloak :8180, Grafana :3001)
             and ui-e2e-stack.sh (every service, for the UI's Playwright suite)
 scripts/    manifests of the CI minikube e2e
@@ -104,7 +104,7 @@ own origin; searchpe is optional (no `SEARCHPE_API_URL`, no section).
   `npm run format:fix && npm run lint && npm run format` (ESLint, tsc and Prettier are the gate).
 - Text is Spanish (es-PE), hard-coded, no i18n. API errors show "No se pudo …" plus the server's
   `message` and `detail`. Public routes never ask for a login.
-- More: [ui/docs/](ui/docs/README.md) (internals, scripts, tech stack, environment variables).
+- More: [docs/ui/](docs/ui/README.md) (internals, scripts, tech stack, environment variables).
 
 ## CI and releases
 

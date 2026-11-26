@@ -14,7 +14,7 @@ software propio del emisor, PSE u OSE.
 | [ui](./ui) | La interfaz web de ambos servicios (React + PatternFly) |
 | [operator](./operator) | Operador de Kubernetes: tipos `XHandler` y `Searchpe` |
 
-El comportamiento está definido en [DESIGN.md](./xhandler/docs/DESIGN.md).
+El comportamiento está definido en [DESIGN.md](./docs/DESIGN.md).
 
 ## Empezar
 

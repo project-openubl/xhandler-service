@@ -22,7 +22,7 @@ generated folders are gitignored and rebuilt by `npm run generate` (`prepare` ru
 - **xhandler: only `/api/v1/*`.** The SOAP endpoints (`/ose/billService`, …) aren't for the UI.
   The admin API is excluded from the spec by the service itself.
 - **searchpe: no `/admin/*`, `/current-user/*`.** Basic-auth user management
-  ([ADR 0004](../adr/0004-identity-and-permissions.md)).
+  ([ADR 0004](../../adr/0004-identity-and-permissions.md)).
 
 xhandler's spec documents the snake_case names Jackson serializes (SmallRye's
 `property-naming-strategy`), so no property is renamed.

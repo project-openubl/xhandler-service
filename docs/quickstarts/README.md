@@ -8,7 +8,7 @@ en el **ambiente de pruebas** (el simulador de SUNAT): emita sin miedo, nada lle
 - [Webhooks: enterarse de la respuesta de SUNAT](webhooks.md)
 
 Referencia de la API: `/q/swagger-ui` y `/q/openapi` en su instancia. SDKs generados para
-TypeScript y Java: ver [`sdk/`](../../sdk/README.md).
+TypeScript y Java: ver [`sdk/`](../../xhandler/sdk/README.md).
 
 ## Autenticación
 

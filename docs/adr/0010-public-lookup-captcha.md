@@ -10,7 +10,7 @@ status: Accepted
 
 The OSE validity query (`/consulta-validez`, RS 242-2018, [0003](0003-public-and-authenticated-routes.md))
 is open to anyone, so the service asks every query for a CAPTCHA token and checks it with the
-provider (xhandler `docs/DESIGN.md` §12). The service verifies any provider that answers a
+provider (`docs/DESIGN.md` §12). The service verifies any provider that answers a
 `siteverify` call (secret + token, `{"success": true}`): hCaptcha and Cloudflare Turnstile both
 do, and the deployment picks one. Until now the page had a plain text field where the solved
 token had to be pasted, which no visitor can use. In development and in end-to-end tests the

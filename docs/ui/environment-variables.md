@@ -22,7 +22,7 @@ allowlisted in `CLIENT_ENV_KEYS`; anything else stays on the server.
 | `CAPTCHA_SITE_KEY`        | no       | unset                                   | The CAPTCHA provider's public site key for the OSE validity page (`/consulta-validez`); unset shows a plain "Código de verificación" field instead of the widget (development, e2e) |
 | `CAPTCHA_PROVIDER`        | no       | `hcaptcha`                              | `hcaptcha` or `turnstile` (Cloudflare); must match xhandler-service's `xhandler.captcha.verify-url`. An unknown value is treated as no site key                                     |
 
-CAPTCHA ([ADR 0010](adr/0010-public-lookup-captcha.md)): both keys reach the browser (a site
+CAPTCHA ([ADR 0010](../adr/0010-public-lookup-captcha.md)): both keys reach the browser (a site
 key is public). The server's Content-Security-Policy allows the provider's origins (hCaptcha:
 `https://hcaptcha.com https://*.hcaptcha.com`; Turnstile: `https://challenges.cloudflare.com`)
 for scripts, styles, frames and connections only while a site key is set. The secret stays in
@@ -55,4 +55,4 @@ the backends.
 | --------------------- | ------------------------------------------------------------------------ |
 | `CI`                  | Vitest uses Playwright's Chromium instead of the installed Google Chrome |
 | `CHOKIDAR_USEPOLLING` | `1` for `vitest --watch` on machines out of inotify instances            |
-| `E2E_*`               | See [e2e/README.md](../e2e/README.md)                                    |
+| `E2E_*`               | See [e2e/README.md](../../ui/e2e/README.md)                                    |
