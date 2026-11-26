@@ -941,7 +941,7 @@ How it runs (P11):
   - certificate expiry;
   - API latency histograms;
   - HSM latency and errors.
-- **Traces**: OpenTelemetry across Quarkus and the engine.
+- **Traces**: OpenTelemetry across Quarkus and the engine. The app samples every trace and exports OTLP over gRPC (`:4317`) unless the deployment sets the endpoint and protocol (the operator: one OTLP/HTTP endpoint for app and engine); OpenTelemetry metrics and logs stay off, metrics go through Micrometer/Prometheus. These are pinned in `application.properties`, since Quarkus 4 changed the defaults.
 - **Health and status**: `/q/health` (liveness/readiness) for Kubernetes. `/api/v1/status` reports versions (service, engine, xhandler-rust revision), online workers, database, storage and HSM health, queue depth, and SUNAT availability per environment (`sunat`: each SUNAT service's breaker state and pause, §24.2; `available` when every service seen answers; third-party OSE endpoints are left out).
 - **SLOs**: 99.96% availability for OSE intake, and OSE forwarding under 1 hour at the 100th percentile. Dashboards and alerts for both.
 - **Engine performance budget** (per document, typical invoice, one core): build + validate (XSD + rules) + sign-prepare under 5 ms at p99, excluding the HSM signature. It is tracked with `criterion` benchmarks. CI gates on **instruction counts** (`iai-callgrind`), which are stable on shared runners, failing on a regression above 10%. Wall-clock benchmarks run nightly on dedicated hardware.
