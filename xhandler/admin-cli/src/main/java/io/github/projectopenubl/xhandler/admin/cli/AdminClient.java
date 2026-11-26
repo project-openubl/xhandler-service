@@ -1,7 +1,8 @@
 package io.github.projectopenubl.xhandler.admin.cli;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -12,11 +13,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.stream.Collectors;
+import tools.jackson.core.JacksonException;
 
 /** HTTP client of xhandler-service's admin API, authenticated with an OIDC bearer token. */
 public final class AdminClient {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = JsonMapper.builderWithJackson2Defaults().build();
 
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private final URI base;
@@ -45,7 +47,7 @@ public final class AdminClient {
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         JsonNode answer = send(HttpClient.newHttpClient(), request);
-        return answer.path("access_token").asText();
+        return answer.path("access_token").asString();
     }
 
     public JsonNode get(String path) {
@@ -75,11 +77,11 @@ public final class AdminClient {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             JsonNode body = response.body().isBlank() ? JSON.nullNode() : JSON.readTree(response.body());
             if (response.statusCode() >= 400) {
-                String message = body.path("message").asText(response.body());
+                String message = body.path("message").asString(response.body());
                 throw new CliException("HTTP " + response.statusCode() + ": " + message);
             }
             return body;
-        } catch (IOException e) {
+        } catch (JacksonException | IOException e) {
             throw new CliException("request to " + request.uri() + " failed: " + e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -90,7 +92,7 @@ public final class AdminClient {
     private static String write(Object body) {
         try {
             return body == null ? "{}" : JSON.writeValueAsString(body);
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new CliException(e.getMessage());
         }
     }

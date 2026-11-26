@@ -56,7 +56,7 @@ class SummaryAndAlertsTest {
     }
 
     static JobContext context(String name) {
-        return new JobContext(UUID.randomUUID(), null, name, 1, com.fasterxml.jackson.databind.node.NullNode.getInstance(), "test",
+        return new JobContext(UUID.randomUUID(), null, name, 1, tools.jackson.databind.node.NullNode.getInstance(), "test",
                 () -> false);
     }
 

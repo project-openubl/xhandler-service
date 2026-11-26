@@ -18,6 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
+
+import tools.jackson.databind.json.JsonMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -274,7 +276,7 @@ class DraftTest {
                     .setParameter("id", UUID.fromString(expired)).executeUpdate();
         });
         Map<String, Object> result = purge.run(new JobContext(UUID.randomUUID(), null, "drafts.purge", 1,
-                new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode(), null, () -> false));
+                new JsonMapper().createObjectNode(), null, () -> false));
         assertTrue(((Number) result.get("drafts")).intValue() >= 1, result.toString());
         assertEquals(0, count("SELECT count(*) FROM xhandler.document_draft WHERE id = :id", Map.of("id", UUID.fromString(expired))));
         assertEquals(2, count("SELECT count(*) FROM xhandler.document_draft WHERE id IN (:a, :b)",

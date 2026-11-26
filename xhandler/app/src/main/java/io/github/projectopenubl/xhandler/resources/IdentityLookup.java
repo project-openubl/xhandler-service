@@ -4,9 +4,9 @@ import io.github.projectopenubl.xhandler.representations.idm.IdentityRepresentat
 import io.github.projectopenubl.xhandler.representations.idm.EntryRepresentation;
 import io.github.projectopenubl.xhandler.models.PublicLookupProvider;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.managers.CredentialManager;
@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.openapi.annotations.Operation;
+import tools.jackson.core.JacksonException;
 
 /**
  * RUC/DNI lookup behind one interface, {@code lookup(tipo, numero)} (DESIGN.md §17): the platform's
@@ -102,9 +103,9 @@ public class IdentityLookup {
             }
             Optional<EntryRepresentation> cached = catalogs.byKey(companyId, "customer", catalogTipo + ":" + numero);
             if (cached.isPresent() && cached.get().data().has("lookup_at")
-                    && java.time.Instant.parse(cached.get().data().get("lookup_at").asText()).isAfter(java.time.Instant.now().minus(CACHE_TTL))) {
+                    && java.time.Instant.parse(cached.get().data().get("lookup_at").asString()).isAfter(java.time.Instant.now().minus(CACHE_TTL))) {
                 JsonNode d = cached.get().data();
-                return new IdentityRepresentation(tipo, numero, d.path("nombre").asText(), text(d, "direccion"), text(d, "estado"), text(d, "condicion"), true);
+                return new IdentityRepresentation(tipo, numero, d.path("nombre").asString(), text(d, "direccion"), text(d, "estado"), text(d, "condicion"), true);
             }
             Optional<Map<String, String>> own = credentials.read(scope, company, "lookup", "lookup");
             if (own.isPresent()) {
@@ -140,7 +141,7 @@ public class IdentityLookup {
                 throw new ApiException(502, "lookup_failed", "El servicio de consulta respondió con error.");
             }
             answer = json.readTree(response.body());
-        } catch (java.io.IOException e) {
+        } catch (JacksonException | java.io.IOException e) {
             throw new ApiException(502, "lookup_failed", "No se pudo consultar el servicio de RUC/DNI.");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -178,14 +179,14 @@ public class IdentityLookup {
 
     private static String first(JsonNode node, String... names) {
         for (String name : names) {
-            if (node.hasNonNull(name) && !node.get(name).asText().isBlank()) {
-                return node.get(name).asText();
+            if (node.hasNonNull(name) && !node.get(name).asString().isBlank()) {
+                return node.get(name).asString();
             }
         }
         return null;
     }
 
     private static String text(JsonNode node, String name) {
-        return node.hasNonNull(name) ? node.get(name).asText() : null;
+        return node.hasNonNull(name) ? node.get(name).asString() : null;
     }
 }

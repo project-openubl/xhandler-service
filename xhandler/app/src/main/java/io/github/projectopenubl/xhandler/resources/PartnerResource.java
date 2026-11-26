@@ -32,6 +32,7 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
+import tools.jackson.core.JacksonException;
 
 /**
  * The partner API (DESIGN.md §1.2, §14): software vendors who resell the service create and manage
@@ -49,10 +50,10 @@ public class PartnerResource {
 
     private final CurrentActor currentActor;
     private final PartnerProvider partners;
-    private final com.fasterxml.jackson.databind.ObjectMapper json;
+    private final tools.jackson.databind.ObjectMapper json;
     private final FileStore files;
 
-    public PartnerResource(CurrentActor currentActor, PartnerProvider partners, com.fasterxml.jackson.databind.ObjectMapper json, FileStore files) {
+    public PartnerResource(CurrentActor currentActor, PartnerProvider partners, tools.jackson.databind.ObjectMapper json, FileStore files) {
         this.currentActor = currentActor;
         this.partners = partners;
         this.json = json;
@@ -120,7 +121,7 @@ public class PartnerResource {
         String brandingJson;
         try {
             brandingJson = json.writeValueAsString(branding);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
         partners.setPartnerBranding(partnerId, brandingJson);
@@ -160,7 +161,7 @@ public class PartnerResource {
         BrandingRepresentation branding;
         try {
             branding = row.brandingJson() == null ? new BrandingRepresentation(null, null, null) : json.readValue(row.brandingJson(), BrandingRepresentation.class);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (JacksonException e) {
             // Branding written before the record's shape: shown empty rather than failing
             branding = new BrandingRepresentation(null, null, null);
         }

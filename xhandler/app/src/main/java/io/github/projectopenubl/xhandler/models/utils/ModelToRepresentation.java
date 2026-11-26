@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.models.utils;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.models.DocumentDraftModel;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
@@ -130,6 +130,6 @@ public class ModelToRepresentation {
 
     private static String text(JsonNode node, String field) {
         JsonNode value = node.path(field);
-        return value.isValueNode() && !value.isNull() ? value.asText() : null;
+        return value.isValueNode() && !value.isNull() ? value.asString() : null;
     }
 }

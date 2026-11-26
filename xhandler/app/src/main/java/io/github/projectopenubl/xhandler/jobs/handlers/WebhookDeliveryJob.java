@@ -6,7 +6,7 @@ import io.github.projectopenubl.xhandler.clients.Egress;
 import io.github.projectopenubl.xhandler.models.WebhookDeliveryModel;
 import io.github.projectopenubl.xhandler.models.WebhookSubscriptionModel;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.keys.SecretBox;

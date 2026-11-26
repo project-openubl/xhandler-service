@@ -123,7 +123,7 @@ public class OseAdminResource {
     @PUT
     @Path("/association")
     @Transactional
-    public Map<String, Object> association(@Valid List<@Valid AssociationRepresentation> entries,
+    public Map<String, Object> association(List<@Valid AssociationRepresentation> entries,
             @jakarta.ws.rs.QueryParam("confirm_empty") boolean confirmEmpty) {
         String who = admin.require();
         if (entries == null || entries.isEmpty() && !confirmEmpty) {
@@ -142,7 +142,7 @@ public class OseAdminResource {
     @PUT
     @Path("/blocked/{list}")
     @Transactional
-    public Map<String, Object> blocked(@PathParam("list") String list, @Valid List<@Valid BlockedRepresentation> entries) {
+    public Map<String, Object> blocked(@PathParam("list") String list, List<@Valid BlockedRepresentation> entries) {
         String who = admin.require();
         if (entries == null || !list.matches("[a-z0-9_-]{2,40}")) {
             throw ApiException.invalid("invalid_request", "Envíe la lista y un nombre de lista válido.", null);

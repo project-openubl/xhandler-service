@@ -1,9 +1,9 @@
 package io.github.projectopenubl.xhandler.utils;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -33,7 +33,7 @@ public final class NubefactAdapter {
     private NubefactAdapter() {}
 
     public static String tipo(JsonNode request) {
-        String tipo = TIPOS.get(request.path("tipo_de_comprobante").asText());
+        String tipo = TIPOS.get(request.path("tipo_de_comprobante").asString());
         if (tipo == null) {
             throw invalid("tipo_de_comprobante debe ser 1, 2, 3 o 4.");
         }
@@ -43,7 +43,7 @@ public final class NubefactAdapter {
     public static Converted convert(JsonNode r) {
         String tipo = tipo(r);
         unsupported(r);
-        String serie = r.path("serie").asText();
+        String serie = r.path("serie").asString();
         long numero = r.path("numero").asLong(0);
         ObjectNode spec = JSON.objectNode();
         String kind = switch (tipo) {
@@ -55,62 +55,62 @@ public final class NubefactAdapter {
             spec.put("tipo_comprobante", tipo);
         }
         if (r.hasNonNull("fecha_de_emision")) {
-            spec.put("fecha_emision", LocalDate.parse(r.get("fecha_de_emision").asText(), DMY).toString());
+            spec.put("fecha_emision", LocalDate.parse(r.get("fecha_de_emision").asString(), DMY).toString());
         }
-        if (r.hasNonNull("fecha_de_vencimiento") && !r.get("fecha_de_vencimiento").asText().isBlank()) {
-            spec.put("fecha_vencimiento", LocalDate.parse(r.get("fecha_de_vencimiento").asText(), DMY).toString());
+        if (r.hasNonNull("fecha_de_vencimiento") && !r.get("fecha_de_vencimiento").asString().isBlank()) {
+            spec.put("fecha_vencimiento", LocalDate.parse(r.get("fecha_de_vencimiento").asString(), DMY).toString());
         }
-        String moneda = MONEDAS.get(r.path("moneda").asText("1"));
+        String moneda = MONEDAS.get(r.path("moneda").asString("1"));
         if (moneda == null) {
             throw invalid("moneda debe ser 1 (PEN), 2 (USD), 3 (EUR) o 4 (GBP).");
         }
         spec.put("moneda", moneda);
-        if (r.hasNonNull("tipo_de_cambio") && !r.get("tipo_de_cambio").asText().isBlank()) {
-            spec.put("tipo_cambio", new BigDecimal(r.get("tipo_de_cambio").asText()));
+        if (r.hasNonNull("tipo_de_cambio") && !r.get("tipo_de_cambio").asString().isBlank()) {
+            spec.put("tipo_cambio", new BigDecimal(r.get("tipo_de_cambio").asString()));
         }
         ObjectNode cliente = spec.putObject("cliente");
-        cliente.put("tipo_documento_identidad", r.path("cliente_tipo_de_documento").asText("-"));
-        cliente.put("numero_documento_identidad", r.path("cliente_numero_de_documento").asText("-"));
-        cliente.put("nombre", r.path("cliente_denominacion").asText("Clientes varios"));
-        if (r.hasNonNull("cliente_direccion") && !r.get("cliente_direccion").asText().isBlank()) {
-            cliente.putObject("direccion").put("direccion", r.get("cliente_direccion").asText());
+        cliente.put("tipo_documento_identidad", r.path("cliente_tipo_de_documento").asString("-"));
+        cliente.put("numero_documento_identidad", r.path("cliente_numero_de_documento").asString("-"));
+        cliente.put("nombre", r.path("cliente_denominacion").asString("Clientes varios"));
+        if (r.hasNonNull("cliente_direccion") && !r.get("cliente_direccion").asString().isBlank()) {
+            cliente.putObject("direccion").put("direccion", r.get("cliente_direccion").asString());
         }
-        if (r.hasNonNull("cliente_email") && !r.get("cliente_email").asText().isBlank()) {
-            cliente.putObject("contacto").put("email", r.get("cliente_email").asText());
+        if (r.hasNonNull("cliente_email") && !r.get("cliente_email").asString().isBlank()) {
+            cliente.putObject("contacto").put("email", r.get("cliente_email").asString());
         }
-        if (r.hasNonNull("observaciones") && !r.get("observaciones").asText().isBlank()) {
-            spec.put("observaciones", r.get("observaciones").asText());
+        if (r.hasNonNull("observaciones") && !r.get("observaciones").asString().isBlank()) {
+            spec.put("observaciones", r.get("observaciones").asString());
         }
         if (!"Invoice".equals(kind)) {
-            String afectadoTipo = TIPOS.get(r.path("documento_que_se_modifica_tipo").asText());
+            String afectadoTipo = TIPOS.get(r.path("documento_que_se_modifica_tipo").asString());
             if (afectadoTipo == null) {
                 throw invalid("documento_que_se_modifica_tipo debe ser 1 o 2.");
             }
             spec.put("comprobante_afectado_tipo", afectadoTipo);
             spec.put("comprobante_afectado_serie_numero",
-                    r.path("documento_que_se_modifica_serie").asText() + "-" + r.path("documento_que_se_modifica_numero").asText());
-            String motivo = "07".equals(tipo) ? r.path("tipo_de_nota_de_credito").asText() : r.path("tipo_de_nota_de_debito").asText();
+                    r.path("documento_que_se_modifica_serie").asString() + "-" + r.path("documento_que_se_modifica_numero").asString());
+            String motivo = "07".equals(tipo) ? r.path("tipo_de_nota_de_credito").asString() : r.path("tipo_de_nota_de_debito").asString();
             int code = Integer.parseInt(motivo.isBlank() ? "1" : motivo);
             if ("08".equals(tipo) && (code < 1 || code > 3) || "07".equals(tipo) && (code < 1 || code > 13)) {
                 // Debit notes for exports or IVAP (Nubefact 4, 5) are not supported by the document builder
                 throw invalid("Tipo de nota no soportado: " + motivo + ".");
             }
             spec.put("tipo_nota", String.format("%02d", code));
-            spec.put("descripcion_sustento", r.path("observaciones").asText("Nota " + tipo));
+            spec.put("descripcion_sustento", r.path("observaciones").asString("Nota " + tipo));
         }
         ArrayNode detalles = spec.putArray("detalles");
         for (JsonNode item : r.path("items")) {
             ObjectNode detalle = detalles.addObject();
-            detalle.put("unidad_medida", item.path("unidad_de_medida").asText("NIU"));
-            if (item.hasNonNull("codigo") && !item.get("codigo").asText().isBlank()) {
-                detalle.put("codigo", item.get("codigo").asText());
+            detalle.put("unidad_medida", item.path("unidad_de_medida").asString("NIU"));
+            if (item.hasNonNull("codigo") && !item.get("codigo").asString().isBlank()) {
+                detalle.put("codigo", item.get("codigo").asString());
             }
-            detalle.put("descripcion", item.path("descripcion").asText());
-            detalle.put("cantidad", new BigDecimal(item.path("cantidad").asText("1")));
-            detalle.put("precio", new BigDecimal(item.path("valor_unitario").asText("0")));
-            String igv = IGV.get(item.path("tipo_de_igv").asText("1"));
+            detalle.put("descripcion", item.path("descripcion").asString());
+            detalle.put("cantidad", new BigDecimal(item.path("cantidad").asString("1")));
+            detalle.put("precio", new BigDecimal(item.path("valor_unitario").asString("0")));
+            String igv = IGV.get(item.path("tipo_de_igv").asString("1"));
             if (igv == null) {
-                throw invalid("tipo_de_igv inválido: " + item.path("tipo_de_igv").asText());
+                throw invalid("tipo_de_igv inválido: " + item.path("tipo_de_igv").asString());
             }
             detalle.put("igv_tipo", igv);
         }
@@ -126,23 +126,23 @@ public final class NubefactAdapter {
     /** Nubefact's answer shape from one of our documents. */
     public static ObjectNode answer(JsonNode view, String pdfUrl, String xmlUrl, String cdrUrl) {
         ObjectNode a = JSON.objectNode();
-        String tipo = view.path("tipo_comprobante").asText();
+        String tipo = view.path("tipo_comprobante").asString();
         a.put("tipo_de_comprobante", TIPOS.entrySet().stream().filter(e -> e.getValue().equals(tipo)).map(Map.Entry::getKey)
                 .findFirst().orElse(tipo));
-        a.put("serie", view.path("serie").asText());
+        a.put("serie", view.path("serie").asString());
         a.put("numero", view.path("numero").asLong());
-        a.put("enlace", view.path("access_url").asText(null));
-        String status = view.path("status").asText();
+        a.put("enlace", view.path("access_url").asString(null));
+        String status = view.path("status").asString();
         a.put("aceptada_por_sunat", status.startsWith("accepted"));
-        a.put("sunat_description", view.path("sunat_description").asText(null));
+        a.put("sunat_description", view.path("sunat_description").asString(null));
         a.put("sunat_note", view.path("sunat_notes").isArray() && !view.path("sunat_notes").isEmpty()
-                ? view.path("sunat_notes").get(0).asText() : null);
+                ? view.path("sunat_notes").get(0).asString() : null);
         a.put("sunat_responsecode", view.path("sunat_code").isNull() || view.path("sunat_code").isMissingNode() ? null
-                : view.path("sunat_code").asText());
+                : view.path("sunat_code").asString());
         a.put("sunat_soap_error", "");
         a.put("anulado", "voided".equals(status));
-        a.put("cadena_para_codigo_qr", view.path("qr").asText(null));
-        a.put("codigo_hash", view.path("digest_value").asText(null));
+        a.put("cadena_para_codigo_qr", view.path("qr").asString(null));
+        a.put("codigo_hash", view.path("digest_value").asString(null));
         a.put("enlace_del_pdf", pdfUrl);
         a.put("enlace_del_xml", xmlUrl);
         a.put("enlace_del_cdr", cdrUrl);
@@ -152,11 +152,11 @@ public final class NubefactAdapter {
 
     /** Fields whose amounts the conversion can't carry: refused rather than silently dropped. */
     static void unsupported(JsonNode r) {
-        String transaction = r.path("sunat_transaction").asText("1");
+        String transaction = r.path("sunat_transaction").asString("1");
         if (!"1".equals(transaction)) {
             throw invalid("sunat_transaction " + transaction + " no está soportado: solo venta interna (1).");
         }
-        String igv = r.path("porcentaje_de_igv").asText("18");
+        String igv = r.path("porcentaje_de_igv").asString("18");
         if (!igv.isBlank() && new BigDecimal(igv).compareTo(new BigDecimal("18")) != 0) {
             throw invalid("porcentaje_de_igv " + igv + " no está soportado: solo 18.");
         }
@@ -182,7 +182,7 @@ public final class NubefactAdapter {
         if (value.isBoolean()) {
             return value.asBoolean();
         }
-        String text = value.asText().strip();
+        String text = value.asString().strip();
         if (text.isEmpty() || "false".equalsIgnoreCase(text)) {
             return false;
         }

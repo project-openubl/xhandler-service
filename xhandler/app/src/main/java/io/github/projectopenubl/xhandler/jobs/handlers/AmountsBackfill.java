@@ -9,6 +9,8 @@ import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
+
+import tools.jackson.databind.json.JsonMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
@@ -17,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.jboss.logging.Logger;
+import tools.jackson.core.JacksonException;
 
 /**
  * Completes the amounts by tax of documents and receptions stored before they were recorded
@@ -30,7 +33,7 @@ public class AmountsBackfill implements JobHandler {
     private final ReceptionProvider receptionProvider;
 
     private static final Logger LOG = Logger.getLogger(AmountsBackfill.class);
-    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+    private static final tools.jackson.databind.ObjectMapper JSON = JsonMapper.builderWithJackson2Defaults().build();
 
     private final DocumentProvider documentProvider;
     private final TenantAccess access;
@@ -98,7 +101,7 @@ public class AmountsBackfill implements JobHandler {
         String json;
         try {
             json = JSON.writeValueAsString(amounts == null ? Map.of() : amounts);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
         QuarkusTransaction.requiringNew().run(() -> {

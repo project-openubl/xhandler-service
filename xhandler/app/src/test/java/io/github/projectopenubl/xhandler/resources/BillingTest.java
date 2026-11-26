@@ -54,7 +54,7 @@ class BillingTest {
     }
 
     static JobContext context(String name) {
-        return new JobContext(UUID.randomUUID(), null, name, 1, com.fasterxml.jackson.databind.node.NullNode.getInstance(), null, () -> false);
+        return new JobContext(UUID.randomUUID(), null, name, 1, tools.jackson.databind.node.NullNode.getInstance(), null, () -> false);
     }
 
     static String subject(String user) {

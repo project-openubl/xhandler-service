@@ -1,7 +1,9 @@
 package io.github.projectopenubl.xhandler.managers;
 
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
@@ -43,7 +45,7 @@ public class SireManager {
 
     static final int MAX_ATTEMPTS = 20;
     private static final String CLAIM = "claim:";
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = JsonMapper.builderWithJackson2Defaults().build();
     private static final Logger LOG = Logger.getLogger(SireManager.class);
 
     private final SireProvider sireProvider;

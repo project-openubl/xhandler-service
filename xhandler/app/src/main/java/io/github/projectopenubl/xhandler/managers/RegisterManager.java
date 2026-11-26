@@ -1,7 +1,8 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import io.github.projectopenubl.xhandler.models.ReportProvider;
 import jakarta.transaction.Transactional;
@@ -13,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import tools.jackson.core.JacksonException;
 
 /**
  * The one row generator behind CSV, Excel, SIRE and legacy PLE (DESIGN.md §11.9): the sales
@@ -58,7 +60,7 @@ public class RegisterManager {
         }
     }
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = JsonMapper.builderWithJackson2Defaults().build();
     private static final TypeReference<Map<String, String>> MAP = new TypeReference<>() {};
 
     private final ReportProvider reportProvider;
@@ -121,7 +123,7 @@ public class RegisterManager {
                         amounts.put(e.getKey(), new BigDecimal(e.getValue()).multiply(sign));
                     }
                 }
-            } catch (com.fasterxml.jackson.core.JsonProcessingException | NumberFormatException e) {
+            } catch (JacksonException | NumberFormatException e) {
                 throw new IllegalStateException("unreadable amounts", e);
             }
         }

@@ -4,8 +4,8 @@ import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.utils.Qr;
@@ -14,7 +14,6 @@ import io.github.projectopenubl.xhandler.models.TenantModel;
 import jakarta.enterprise.context.ApplicationScoped;
 import io.github.projectopenubl.xhandler.models.DocumentPdfProvider;
 import jakarta.transaction.Transactional;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -23,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import tools.jackson.core.JacksonException;
 
 /**
  * The PDF of a document (DESIGN.md §11.6): rendered from its enriched JSON (totals and legends come
@@ -75,20 +75,20 @@ public class DocumentPdf {
         d.put("tipoNombre", TIPOS.getOrDefault(doc.getTipoComprobante(), "COMPROBANTE ELECTRÓNICO"));
         d.put("serieNumero", doc.serieNumero());
         d.put("fechaEmision", doc.getFechaEmision().toString());
-        d.put("moneda", doc.getMoneda() == null ? spec.path("moneda").asText("PEN") : doc.getMoneda());
+        d.put("moneda", doc.getMoneda() == null ? spec.path("moneda").asString("PEN") : doc.getMoneda());
         JsonNode cliente = spec.has("cliente") ? spec.path("cliente") : spec.path("destinatario");
         d.put("clienteNombre", text(cliente.path("nombre")));
         d.put("clienteNumero", text(cliente.path("numero_documento_identidad")));
-        d.put("clienteTipoNombre", DOC_IDENTIDAD.getOrDefault(cliente.path("tipo_documento_identidad").asText("-"), "Documento"));
+        d.put("clienteTipoNombre", DOC_IDENTIDAD.getOrDefault(cliente.path("tipo_documento_identidad").asString("-"), "Documento"));
         d.put("afectado", text(spec.path("comprobante_afectado_serie_numero")));
         d.put("motivo", text(spec.path("descripcion_sustento")));
         List<Map<String, Object>> items = new ArrayList<>();
         for (JsonNode detalle : spec.path("detalles")) {
             Map<String, Object> item = new HashMap<>();
-            item.put("descripcion", detalle.path("descripcion").asText(""));
+            item.put("descripcion", detalle.path("descripcion").asString(""));
             item.put("cantidad", plain(detalle.path("cantidad")));
             // The engine's per-line price with every tax (IGV, ISC, ICBPER); free lines are worth 0
-            boolean gratuito = detalle.path("igv_tipo").asText("").matches("1[1-7]|21|3[1-7]");
+            boolean gratuito = detalle.path("igv_tipo").asString("").matches("1[1-7]|21|3[1-7]");
             BigDecimal unit = gratuito ? BigDecimal.ZERO
                     : decimal(detalle.has("precio_con_impuestos") ? detalle.path("precio_con_impuestos") : detalle.path("precio"));
             item.put("precio", money(unit));
@@ -150,13 +150,13 @@ public class DocumentPdf {
             if (raw != null) {
                 try {
                     JsonNode node = json.readTree(raw);
-                    if (node.hasNonNull("color") && node.get("color").asText().matches("#[0-9a-fA-F]{6}")) {
-                        brand.put("color", node.get("color").asText());
+                    if (node.hasNonNull("color") && node.get("color").asString().matches("#[0-9a-fA-F]{6}")) {
+                        brand.put("color", node.get("color").asString());
                     }
                     if (node.hasNonNull("footer")) {
-                        brand.put("footer", node.get("footer").asText());
+                        brand.put("footer", node.get("footer").asString());
                     }
-                } catch (IOException e) {
+                } catch (JacksonException e) {
                     // Bad branding never blocks a PDF
                 }
             }
@@ -185,21 +185,17 @@ public class DocumentPdf {
     }
 
     private JsonNode enriched(DocumentModel doc) {
-        return documentFileProvider.getDocumentFile(doc.getId(), "enriched").map(f -> {
-            try {
-                return json.readTree(files.get(f.getStorageKey()));
-            } catch (IOException e) {
-                throw new java.io.UncheckedIOException(e);
-            }
-        }).orElse(json.createObjectNode());
+        return documentFileProvider.getDocumentFile(doc.getId(), "enriched")
+                .map(f -> json.readTree(files.get(f.getStorageKey())))
+                .orElse(json.createObjectNode());
     }
 
     private static String text(JsonNode node) {
-        return node == null || node.isMissingNode() || node.isNull() || node.asText().isBlank() ? null : node.asText();
+        return node == null || node.isMissingNode() || node.isNull() || node.asString().isBlank() ? null : node.asString();
     }
 
     private static BigDecimal decimal(JsonNode node) {
-        return node == null || node.isMissingNode() || node.isNull() || node.asText().isBlank() ? BigDecimal.ZERO : new BigDecimal(node.asText());
+        return node == null || node.isMissingNode() || node.isNull() || node.asString().isBlank() ? BigDecimal.ZERO : new BigDecimal(node.asString());
     }
 
     private static String plain(JsonNode node) {

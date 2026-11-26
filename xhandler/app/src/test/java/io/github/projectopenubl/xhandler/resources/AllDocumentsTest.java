@@ -303,7 +303,7 @@ class AllDocumentsTest {
         java.time.LocalDate day = java.time.LocalDate.now(java.time.ZoneId.of("America/Lima")).minusDays(1);
         EngineStub.FX_LINE.set(day.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) + "|3.700|3.750|");
         rates.run(new JobContext(UUID.randomUUID(), null, "platform.exchange-rates", 1,
-                com.fasterxml.jackson.databind.node.NullNode.getInstance(), null, () -> false));
+                tools.jackson.databind.node.NullNode.getInstance(), null, () -> false));
         as("alice").get("/api/v1/exchange-rates?date=" + day).then().statusCode(200).body("venta", equalTo(3.75f));
         // 1180 USD ≈ S/ 4,425: the buyer must be identified
         Map<String, Object> anonymous = document("Invoice", Map.of("tipo_comprobante", "03", "moneda", "USD",
@@ -327,7 +327,7 @@ class AllDocumentsTest {
         String boleta = emit(document("Invoice", Map.of("tipo_comprobante", "03", "fecha_emision", fecha)));
         await().atMost(WAIT).until(() -> "route_change".equals(get(boleta).get("code_class")));
         fallback.run(new JobContext(UUID.randomUUID(), null, "documents.boleta-summary-fallback", 1,
-                com.fasterxml.jackson.databind.node.NullNode.getInstance(), null, () -> false));
+                tools.jackson.databind.node.NullNode.getInstance(), null, () -> false));
         String rc = (String) get(boleta).get("summary_document_id");
         // The lost ticket makes the RC ambiguous; skip the 2-minute wait before resolving
         await().atMost(WAIT).until(() -> "unknown".equals(get(rc).get("status")));

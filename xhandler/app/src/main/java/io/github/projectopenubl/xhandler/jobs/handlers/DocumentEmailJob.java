@@ -8,7 +8,9 @@ import io.github.projectopenubl.xhandler.mail.EmailSender;
 import io.github.projectopenubl.xhandler.mail.HtmlSanitizer;
 import io.github.projectopenubl.xhandler.models.EmailProvider;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.managers.AccessLinkManager;
@@ -27,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import tools.jackson.core.JacksonException;
 
 /**
  * Emails a document to its buyer (DESIGN.md §11.6): PDF, XML and optionally the CDR, with the
@@ -216,10 +219,10 @@ public class DocumentEmailJob implements JobHandler {
     private java.util.Optional<String> customerEmail(DocumentModel doc) {
         return documentFileProvider.getDocumentFile(doc.getId(), "input").map(f -> {
             try {
-                JsonNode email = new com.fasterxml.jackson.databind.ObjectMapper().readTree(files.get(f.getStorageKey()))
+                JsonNode email = JsonMapper.builderWithJackson2Defaults().build().readTree(files.get(f.getStorageKey()))
                         .path("spec").path("cliente").path("contacto").path("email");
-                return email.isMissingNode() || email.isNull() ? null : email.asText();
-            } catch (java.io.IOException e) {
+                return email.isMissingNode() || email.isNull() ? null : email.asString();
+            } catch (JacksonException e) {
                 return null;
             }
         }).filter(a -> a.matches("[^@\\s<>\"]+@[^@\\s<>\"]+\\.[A-Za-z]{2,}"));
@@ -248,7 +251,7 @@ public class DocumentEmailJob implements JobHandler {
 
     static List<String> strings(JsonNode node) {
         List<String> values = new ArrayList<>();
-        node.forEach(n -> values.add(n.asText()));
+        node.forEach(n -> values.add(n.asString()));
         return values;
     }
 }

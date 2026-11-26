@@ -10,8 +10,9 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -68,13 +69,13 @@ class CertificateTest {
         as("alice").body(INVOICE).post("/api/v1/tenants/" + tenant + "/companies/" + company + "/documents")
                 .then().statusCode(201).body("digest_value", equalTo("digest-123"));
 
-        JsonNode finalize = new ObjectMapper().readTree(EngineStub.lastBody("/v1/sign/finalize"));
+        JsonNode finalize = new JsonMapper().readTree(EngineStub.lastBody("/v1/sign/finalize"));
         X509Certificate certificate = (X509Certificate) CertificateFactory.getInstance("X.509")
-                .generateCertificate(new ByteArrayInputStream(Base64.getDecoder().decode(finalize.get("certificate").asText())));
+                .generateCertificate(new ByteArrayInputStream(Base64.getDecoder().decode(finalize.get("certificate").asString())));
         Signature verifier = Signature.getInstance("SHA256withRSA");
         verifier.initVerify(certificate.getPublicKey());
         verifier.update("data-to-sign".getBytes(StandardCharsets.UTF_8));
-        assertTrue(verifier.verify(Base64.getDecoder().decode(finalize.get("signature_value").asText())));
+        assertTrue(verifier.verify(Base64.getDecoder().decode(finalize.get("signature_value").asString())));
         assertTrue(certificate.getSubjectX500Principal().getName().contains("RUC " + ruc));
         assertTrue(EngineStub.requests().stream().noneMatch(r -> r.body().contains("PRIVATE")));
 

@@ -31,7 +31,7 @@ public class SireCalendarAdminResource {
 
     @PUT
     @Transactional
-    public Map<String, Object> load(@Valid List<@Valid SireCalendarEntryRepresentation> entries) {
+    public Map<String, Object> load(List<@Valid SireCalendarEntryRepresentation> entries) {
         String who = admin.require();
         if (entries == null || entries.isEmpty()) {
             throw io.github.projectopenubl.xhandler.resources.exceptions.ApiException.invalid("invalid_request", "Envíe al menos una fecha del cronograma.", null);

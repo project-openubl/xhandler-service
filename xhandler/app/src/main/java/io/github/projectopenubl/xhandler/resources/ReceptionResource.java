@@ -16,6 +16,8 @@ import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
+
+import tools.jackson.databind.json.JsonMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.github.projectopenubl.xhandler.models.ReceptionProvider;
 import jakarta.persistence.PersistenceException;
@@ -40,6 +42,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
+import tools.jackson.core.JacksonException;
 
 /**
  * Supplier invoices received by a company (DESIGN.md §11.5): XML plus optional PDF and CDR, all
@@ -188,12 +191,12 @@ public class ReceptionResource {
         try {
             var amounts = DocumentModel.amountsOf(identity.amounts());
             return amounts == null ? null : JSON.writeValueAsString(amounts);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }
 
-    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+    private static final tools.jackson.databind.ObjectMapper JSON = JsonMapper.builderWithJackson2Defaults().build();
 
     private ReceptionRepresentation find(UUID id) {
         ReceptionProvider.ReceptionRow r = receptionProvider.getReception(id).orElseThrow(ApiException::notFound);

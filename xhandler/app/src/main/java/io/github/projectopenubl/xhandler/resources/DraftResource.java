@@ -13,11 +13,10 @@ import io.github.projectopenubl.xhandler.models.DocumentDraftModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentRepresentation;
 import io.github.projectopenubl.xhandler.utils.DocumentTypes;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
@@ -48,6 +47,7 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
+import tools.jackson.core.JacksonException;
 
 /**
  * Manual issuing (DESIGN.md §9.1, §11.10): drafts are xbuilder documents without a number, edited
@@ -334,13 +334,13 @@ public class DraftResource {
 
     private static String text(JsonNode node, String field) {
         JsonNode value = node.path(field);
-        return value.isValueNode() && !value.isNull() ? value.asText() : null;
+        return value.isValueNode() && !value.isNull() ? value.asString() : null;
     }
 
     private byte[] bytes(JsonNode node) {
         try {
             return json.writeValueAsBytes(node);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }
@@ -349,7 +349,7 @@ public class DraftResource {
         try {
             JsonNode canonical = EmitManager.canonical(json.valueToTree(input));
             return FileStore.sha256(("draft:" + companyId + ":" + json.writeValueAsString(canonical)).getBytes(StandardCharsets.UTF_8));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }

@@ -7,8 +7,10 @@ import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.SireProvider;
 import io.github.projectopenubl.xhandler.jobs.handlers.SireJobs;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
@@ -36,6 +38,7 @@ import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
+import tools.jackson.core.JacksonException;
 
 /**
  * SIRE per company, register ({@code rvie} sales, {@code rce} purchases) and period (DESIGN.md
@@ -55,7 +58,7 @@ public class SireResource {
      */
 
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = JsonMapper.builderWithJackson2Defaults().build();
 
     private final TenantAccess access;
     private final Jobs jobs;
@@ -149,7 +152,7 @@ public class SireResource {
         boolean matches;
         try {
             matches = JSON.readTree(row.reconciliation()).path("matches").asBoolean(false);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
         if (!matches && !acknowledge) {
@@ -242,7 +245,7 @@ public class SireResource {
         JsonNode reconciliation;
         try {
             reconciliation = r.reconciliation() == null ? null : JSON.readTree(r.reconciliation());
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
         return new SirePeriodRepresentation(r.id(), r.book(), r.period(), r.sunatEnv(), r.status(), r.detail(), reconciliation,
