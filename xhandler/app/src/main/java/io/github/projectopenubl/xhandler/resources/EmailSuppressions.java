@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.utils.Times;
+import io.github.projectopenubl.xhandler.models.EmailProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -31,12 +31,12 @@ public class EmailSuppressions {
     public record Suppression(String address, String reason, Instant createdAt) {}
 
     private final TenantAccess access;
-    private final EntityManager em;
+    private final EmailProvider emailProvider;
     private final Auditor auditor;
 
-    public EmailSuppressions(TenantAccess access, EntityManager em, Auditor auditor) {
+    public EmailSuppressions(TenantAccess access, EmailProvider emailProvider, Auditor auditor) {
         this.access = access;
-        this.em = em;
+        this.emailProvider = emailProvider;
         this.auditor = auditor;
     }
 
@@ -45,11 +45,7 @@ public class EmailSuppressions {
     @Transactional
     public List<Suppression> list(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT address, reason, created_at FROM xhandler.email_suppression ORDER BY created_at DESC")
-                .getResultList();
-        return rows.stream().map(r -> new Suppression((String) r[0], (String) r[1],
-                Times.toInstant(r[2]))).toList();
+        return emailProvider.getEmailSuppressions().stream().map(r -> new Suppression(r.address(), r.reason(), r.createdAt())).toList();
     }
 
     @APIResponse(responseCode = "204", description = "Dirección quitada de la lista de supresión.")
@@ -59,19 +55,11 @@ public class EmailSuppressions {
     @Transactional
     public Response remove(@PathParam("tenantId") UUID tenantId, @PathParam("address") String address) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        int removed = em.createNativeQuery("DELETE FROM xhandler.email_suppression WHERE address = :a")
-                .setParameter("a", normalize(address)).executeUpdate();
-        if (removed == 0) {
+        if (!emailProvider.deleteEmailSuppression(address)) {
             throw ApiException.notFound();
         }
         auditor.record(scope, "email.suppression_removed", "email", null, Map.of("address", normalize(address)));
         return Response.noContent().build();
-    }
-
-    /** With the tenant open. */
-    public static boolean suppressed(EntityManager em, String address) {
-        return !em.createNativeQuery("SELECT 1 FROM xhandler.email_suppression WHERE address = :a")
-                .setParameter("a", normalize(address)).getResultList().isEmpty();
     }
 
     /** With the tenant open (platform bounce processing). */

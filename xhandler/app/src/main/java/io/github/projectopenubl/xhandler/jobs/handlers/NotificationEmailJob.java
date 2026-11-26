@@ -15,13 +15,13 @@ public class NotificationEmailJob implements JobHandler {
 
     private final EmailSender sender;
     private final io.github.projectopenubl.xhandler.security.TenantAccess access;
-    private final jakarta.persistence.EntityManager em;
+    private final io.github.projectopenubl.xhandler.models.EmailProvider emailProvider;
 
     public NotificationEmailJob(EmailSender sender, io.github.projectopenubl.xhandler.security.TenantAccess access,
-            jakarta.persistence.EntityManager em) {
+            io.github.projectopenubl.xhandler.models.EmailProvider emailProvider) {
         this.sender = sender;
         this.access = access;
-        this.em = em;
+        this.emailProvider = emailProvider;
     }
 
     @Override
@@ -34,8 +34,7 @@ public class NotificationEmailJob implements JobHandler {
         String to = context.args().path("to").asText();
         boolean suppressed = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(context.tenantId());
-            return !em.createNativeQuery("SELECT 1 FROM xhandler.email_suppression WHERE address = :a")
-                    .setParameter("a", to.strip().toLowerCase(java.util.Locale.ROOT)).getResultList().isEmpty();
+            return emailProvider.isEmailSuppressed(to);
         });
         if (suppressed) {
             return Map.of("skipped", to);

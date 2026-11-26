@@ -4,7 +4,7 @@ import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.SignatureLogProvider;
 import java.util.UUID;
 
 /**
@@ -15,11 +15,11 @@ import java.util.UUID;
 @ApplicationScoped
 public class SignatureLog {
 
-    private final EntityManager em;
+    private final SignatureLogProvider signatureLogProvider;
     private final TenantAccess access;
 
-    public SignatureLog(EntityManager em, TenantAccess access) {
-        this.em = em;
+    public SignatureLog(SignatureLogProvider signatureLogProvider, TenantAccess access) {
+        this.signatureLogProvider = signatureLogProvider;
         this.access = access;
     }
 
@@ -31,19 +31,7 @@ public class SignatureLog {
             String actor) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            em.createNativeQuery("""
-                            INSERT INTO xhandler.signature_log (id, tenant_id, document_id, serie_numero, signing_key_id, platform_key_id,
-                                digest_value, actor)
-                            VALUES (:id, :tenant, :document, :serie, :key, :platformKey, :digest, :actor)""")
-                    .setParameter("platformKey", platformKeyId)
-                    .setParameter("id", Ids.newId())
-                    .setParameter("tenant", tenantId)
-                    .setParameter("document", documentId)
-                    .setParameter("serie", serieNumero)
-                    .setParameter("key", signingKeyId)
-                    .setParameter("digest", digestValue)
-                    .setParameter("actor", actor)
-                    .executeUpdate();
+            signatureLogProvider.addSignature(Ids.newId(), tenantId, documentId, serieNumero, signingKeyId, platformKeyId, digestValue, actor);
         });
     }
 }

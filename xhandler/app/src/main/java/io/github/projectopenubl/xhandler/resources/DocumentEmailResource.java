@@ -16,7 +16,7 @@ import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.event.Observes;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.EmailProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
@@ -50,10 +50,10 @@ public class DocumentEmailResource {
     private final TenantAccess access;
     private final Jobs jobs;
     private final Auditor auditor;
-    private final EntityManager em;
+    private final EmailProvider emailProvider;
     private final long maxPerDay;
 
-    public DocumentEmailResource(TenantAccess access, Jobs jobs, Auditor auditor, EntityManager em,
+    public DocumentEmailResource(TenantAccess access, Jobs jobs, Auditor auditor, EmailProvider emailProvider,
             @org.eclipse.microprofile.config.inject.ConfigProperty(name = "xhandler.mail.max-per-tenant-per-day", defaultValue = "2000")
                     long maxPerDay, CompanyProvider companyProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
@@ -62,7 +62,7 @@ public class DocumentEmailResource {
         this.access = access;
         this.jobs = jobs;
         this.auditor = auditor;
-        this.em = em;
+        this.emailProvider = emailProvider;
     }
 
     @APIResponse(responseCode = "202", description = "Correo encolado: lo envía un trabajo.",
@@ -81,8 +81,7 @@ public class DocumentEmailResource {
             // Test documents from an unverified company (any RUC) must not reach third parties
             throw ApiException.conflict("ruc_not_verified", "Verifique el RUC de la empresa para enviar documentos de prueba por correo.");
         }
-        long sentToday = ((Number) em.createNativeQuery(
-                        "SELECT count(*) FROM xhandler.delivery WHERE channel = 'email' AND at > now() - interval '1 day'").getSingleResult()).longValue();
+        long sentToday = emailProvider.countEmailsSentLastDay();
         if (sentToday >= maxPerDay) {
             throw new ApiException(429, "email_quota", "Alcanzó el máximo de correos del día.");
         }
@@ -92,8 +91,8 @@ public class DocumentEmailResource {
                 throw ApiException.invalid("invalid_request", "Correo inválido: " + address, null);
             }
         }
-        List<String> suppressed = request.to().stream().filter(a -> EmailSuppressions.suppressed(em, a)).toList();
-        cc = cc.stream().filter(a -> !EmailSuppressions.suppressed(em, a)).toList();
+        List<String> suppressed = request.to().stream().filter(a -> emailProvider.isEmailSuppressed(a)).toList();
+        cc = cc.stream().filter(a -> !emailProvider.isEmailSuppressed(a)).toList();
         if (suppressed.size() == request.to().size()) {
             throw ApiException.invalid("email_suppressed", "Los destinatarios rebotaron antes y no se les envía correo.", String.join(", ", suppressed));
         }

@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.PlatformSecretProvider;
 import jakarta.transaction.Transactional;
 import java.io.IOException;
 import java.util.List;
@@ -30,12 +30,12 @@ public class PlatformCredentials {
 
     static final Logger AUDIT = Logger.getLogger("xhandler.audit.platform");
 
-    private final EntityManager em;
+    private final PlatformSecretProvider platformSecretProvider;
     private final SecretBox box;
     private final ObjectMapper json;
 
-    public PlatformCredentials(EntityManager em, SecretBox box, ObjectMapper json) {
-        this.em = em;
+    public PlatformCredentials(PlatformSecretProvider platformSecretProvider, SecretBox box, ObjectMapper json) {
+        this.platformSecretProvider = platformSecretProvider;
         this.box = box;
         this.json = json;
     }
@@ -49,34 +49,25 @@ public class PlatformCredentials {
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.platform_credential (id, purpose, label, ciphertext, wrapped_data_key, master_key_id)
-                        VALUES (:id, :p, :l, :c, :w, :m)""")
-                .setParameter("id", id).setParameter("p", purpose).setParameter("l", label).setParameter("c", sealed.ciphertext())
-                .setParameter("w", sealed.wrappedDataKey()).setParameter("m", sealed.masterKeyId()).executeUpdate();
+        platformSecretProvider.addPlatformCredential(id, purpose, label, sealed.ciphertext(), sealed.wrappedDataKey(), sealed.masterKeyId());
         return new Entry(id, purpose, label, true);
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
     public List<Entry> list(String purpose) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT id, purpose, label, active FROM xhandler.platform_credential WHERE purpose = :p ORDER BY label")
-                .setParameter("p", purpose).getResultList();
-        return rows.stream().map(r -> new Entry((UUID) r[0], (String) r[1], (String) r[2], (Boolean) r[3])).toList();
+        return platformSecretProvider.getPlatformCredentials(purpose).stream().map(r -> new Entry(r.id(), r.purpose(), r.label(), r.active()))
+                .toList();
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
     public boolean setActive(UUID id, boolean active) {
-        return em.createNativeQuery("UPDATE xhandler.platform_credential SET active = :a, updated_at = now() WHERE id = :id")
-                .setParameter("a", active).setParameter("id", id).executeUpdate() == 1;
+        return platformSecretProvider.setPlatformCredentialActive(id, active);
     }
 
     /** An active pool member, chosen at random so documents spread over the pool. */
     @Transactional(Transactional.TxType.MANDATORY)
     public Optional<UUID> pick(String purpose) {
-        @SuppressWarnings("unchecked")
-        List<UUID> ids = em.createNativeQuery("SELECT id FROM xhandler.platform_credential WHERE purpose = :p AND active")
-                .setParameter("p", purpose).getResultList();
+        List<UUID> ids = platformSecretProvider.getActivePlatformCredentialIds(purpose);
         return ids.isEmpty() ? Optional.empty() : Optional.of(ids.get(ThreadLocalRandom.current().nextInt(ids.size())));
     }
 
@@ -84,23 +75,15 @@ public class PlatformCredentials {
     @Transactional(Transactional.TxType.MANDATORY)
     public Map<String, String> read(UUID id, String purpose, String why) {
         // The id must exist for this purpose; only an inactive (retired) member is replaced
-        boolean exists = !em.createNativeQuery("SELECT 1 FROM xhandler.platform_credential WHERE id = :id AND purpose = :p")
-                .setParameter("id", id).setParameter("p", purpose).getResultList().isEmpty();
+        boolean exists = platformSecretProvider.existsPlatformCredential(id, purpose);
         if (!exists) {
             throw new IllegalStateException("platform credential " + id + " is not a " + purpose + " credential");
         }
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, ciphertext, wrapped_data_key, master_key_id, active FROM xhandler.platform_credential
-                        WHERE purpose = :p AND (id = :id OR active) ORDER BY (id = :id AND active) DESC, random() LIMIT 1""")
-                .setParameter("p", purpose).setParameter("id", id).getResultList();
-        if (rows.isEmpty() || !Boolean.TRUE.equals(rows.get(0)[4])) {
-            throw ApiException.invalid("no_credentials", "La plataforma no tiene credenciales activas para " + purpose + ".", null);
-        }
-        Object[] r = rows.get(0);
-        AUDIT.infof("platform credential %s (%s) read for %s", r[0], purpose, why);
+        PlatformSecretProvider.SealedPlatformCredential r = platformSecretProvider.getActivePlatformCredential(id, purpose)
+                .orElseThrow(() -> ApiException.invalid("no_credentials", "La plataforma no tiene credenciales activas para " + purpose + ".", null));
+        AUDIT.infof("platform credential %s (%s) read for %s", r.id(), purpose, why);
         try {
-            return json.readValue(box.open(new SecretBox.Sealed((byte[]) r[1], (byte[]) r[2], (String) r[3]), context((UUID) r[0], purpose)),
+            return json.readValue(box.open(new SecretBox.Sealed(r.ciphertext(), r.wrappedDataKey(), r.masterKeyId()), context(r.id(), purpose)),
                     new TypeReference<>() {});
         } catch (IOException e) {
             throw new IllegalStateException(e);

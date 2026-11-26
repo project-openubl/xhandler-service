@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.utils.Times;
+import io.github.projectopenubl.xhandler.models.EmailProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
@@ -9,7 +9,6 @@ import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -49,12 +48,12 @@ public class SenderDomainResource {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final TenantAccess access;
-    private final EntityManager em;
+    private final EmailProvider emailProvider;
     private final Auditor auditor;
 
-    public SenderDomainResource(TenantAccess access, EntityManager em, Auditor auditor) {
+    public SenderDomainResource(TenantAccess access, EmailProvider emailProvider, Auditor auditor) {
         this.access = access;
-        this.em = em;
+        this.emailProvider = emailProvider;
         this.auditor = auditor;
     }
 
@@ -69,11 +68,7 @@ public class SenderDomainResource {
         RANDOM.nextBytes(raw);
         String domain = request.domain().toLowerCase(java.util.Locale.ROOT);
         UUID id = Ids.newId();
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.sender_domain (id, tenant_id, domain, verification_token) VALUES (:id, :t, :d, :token)
-                        ON CONFLICT (tenant_id, domain) DO NOTHING""")
-                .setParameter("id", id).setParameter("t", tenantId).setParameter("d", domain)
-                .setParameter("token", HexFormat.of().formatHex(raw)).executeUpdate();
+        emailProvider.addSenderDomain(id, tenantId, domain, HexFormat.of().formatHex(raw));
         auditor.record(scope, "sender_domain.added", "sender_domain", domain);
         return Response.status(201).entity(find(domain)).build();
     }
@@ -83,10 +78,7 @@ public class SenderDomainResource {
     @Transactional
     public List<DomainView> list(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT id, domain, verification_token, verified_at FROM xhandler.sender_domain ORDER BY domain")
-                .getResultList();
-        return rows.stream().map(SenderDomainResource::view).toList();
+        return emailProvider.getSenderDomains().stream().map(SenderDomainResource::view).toList();
     }
 
     @Operation(operationId = "verifySenderDomain")
@@ -102,8 +94,7 @@ public class SenderDomainResource {
         }
         return QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
-            em.createNativeQuery("UPDATE xhandler.sender_domain SET verified_at = coalesce(verified_at, now()) WHERE domain = :d")
-                    .setParameter("d", pending.domain()).executeUpdate();
+            emailProvider.markSenderDomainVerified(pending.domain());
             auditor.record(scope, "sender_domain.verified", "sender_domain", pending.domain());
             return find(pending.domain());
         });
@@ -128,14 +119,11 @@ public class SenderDomainResource {
     }
 
     private DomainView find(String domain) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT id, domain, verification_token, verified_at FROM xhandler.sender_domain WHERE domain = :d")
-                .setParameter("d", domain).getResultList();
-        return rows.stream().findFirst().map(SenderDomainResource::view).orElseThrow(ApiException::notFound);
+        return emailProvider.getSenderDomain(domain).map(SenderDomainResource::view).orElseThrow(ApiException::notFound);
     }
 
-    static DomainView view(Object[] r) {
-        String domain = (String) r[1];
-        return new DomainView((UUID) r[0], domain, "_xhandler." + domain, "xhandler-verification=" + r[2], Times.toInstant(r[3]));
+    static DomainView view(EmailProvider.SenderDomain r) {
+        String domain = r.domain();
+        return new DomainView(r.id(), domain, "_xhandler." + domain, "xhandler-verification=" + r.verificationToken(), r.verifiedAt());
     }
 }

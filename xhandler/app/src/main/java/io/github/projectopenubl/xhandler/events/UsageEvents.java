@@ -5,7 +5,7 @@ import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.BillingProvider;
 import jakarta.transaction.Transactional;
 import java.util.Map;
 import java.util.UUID;
@@ -17,11 +17,11 @@ import java.util.UUID;
 @ApplicationScoped
 public class UsageEvents {
 
-    private final EntityManager em;
+    private final BillingProvider billingProvider;
     private final com.fasterxml.jackson.databind.ObjectMapper json;
 
-    public UsageEvents(EntityManager em, com.fasterxml.jackson.databind.ObjectMapper json) {
-        this.em = em;
+    public UsageEvents(BillingProvider billingProvider, com.fasterxml.jackson.databind.ObjectMapper json) {
+        this.billingProvider = billingProvider;
         this.json = json;
     }
 
@@ -36,14 +36,7 @@ public class UsageEvents {
     @Transactional(Transactional.TxType.MANDATORY)
     public void record(UUID tenantId, String type, Map<String, Object> properties) {
         try {
-            em.createNativeQuery("""
-                            INSERT INTO xhandler.usage_event_outbox (id, tenant_id, event_type, properties)
-                            VALUES (:id, :tenant, :type, CAST(:properties AS jsonb))""")
-                    .setParameter("id", Ids.newId())
-                    .setParameter("tenant", tenantId)
-                    .setParameter("type", type)
-                    .setParameter("properties", json.writeValueAsString(properties))
-                    .executeUpdate();
+            billingProvider.addUsageEvent(Ids.newId(), tenantId, type, json.writeValueAsString(properties));
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException(e);
         }

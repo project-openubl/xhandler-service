@@ -9,7 +9,7 @@ import io.github.projectopenubl.xhandler.keys.KeyVault;
 import io.github.projectopenubl.xhandler.models.SigningKeyModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.PlatformSecretProvider;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import java.util.List;
 import java.util.UUID;
@@ -31,15 +31,15 @@ public class KeyRotation {
 
     public record Result(int tenants, int credentials, int signingKeys) {}
 
-    private final EntityManager em;
+    private final PlatformSecretProvider platformSecretProvider;
     private final TenantAccess access;
     private final SecretBox box;
     private final KeyVault vault;
 
-    public KeyRotation(EntityManager em, TenantAccess access, SecretBox box, KeyVault vault, CredentialProvider credentialProvider, SigningKeyProvider signingKeyProvider) {
+    public KeyRotation(PlatformSecretProvider platformSecretProvider, TenantAccess access, SecretBox box, KeyVault vault, CredentialProvider credentialProvider, SigningKeyProvider signingKeyProvider) {
         this.signingKeyProvider = signingKeyProvider;
         this.credentialProvider = credentialProvider;
-        this.em = em;
+        this.platformSecretProvider = platformSecretProvider;
         this.access = access;
         this.box = box;
         this.vault = vault;
@@ -66,25 +66,17 @@ public class KeyRotation {
 
     private int[] rewrapPlatform() {
         String current = vault.currentMasterKeyId();
-        @SuppressWarnings("unchecked")
-        List<Object[]> secrets = em.createNativeQuery("""
-                        SELECT id, ciphertext, wrapped_data_key, master_key_id FROM xhandler.platform_credential
-                        WHERE master_key_id <> :m FOR UPDATE""").setParameter("m", current).getResultList();
-        for (Object[] r : secrets) {
-            SecretBox.Sealed rewrapped = box.rewrap(new SecretBox.Sealed((byte[]) r[1], (byte[]) r[2], (String) r[3]));
-            em.createNativeQuery("UPDATE xhandler.platform_credential SET wrapped_data_key = :w, master_key_id = :m, updated_at = now() WHERE id = :id")
-                    .setParameter("w", rewrapped.wrappedDataKey()).setParameter("m", rewrapped.masterKeyId()).setParameter("id", r[0])
-                    .executeUpdate();
+        List<PlatformSecretProvider.SealedPlatformCredential> secrets = platformSecretProvider.getPlatformCredentialsToRewrapForUpdate(current);
+        for (PlatformSecretProvider.SealedPlatformCredential r : secrets) {
+            SecretBox.Sealed rewrapped = box.rewrap(new SecretBox.Sealed(r.ciphertext(), r.wrappedDataKey(), r.masterKeyId()));
+            platformSecretProvider.setPlatformCredentialWrappedKey(r.id(), rewrapped.wrappedDataKey(), rewrapped.masterKeyId());
         }
         int keys = 0;
-        @SuppressWarnings("unchecked")
-        List<Object[]> platformKeys = em.createNativeQuery("SELECT id, key_ref FROM xhandler.platform_key FOR UPDATE").getResultList();
-        for (Object[] r : platformKeys) {
-            String rewrapped = vault.rewrapPrivateKey((String) r[1]);
-            if (!rewrapped.equals(r[1])) {
+        for (PlatformSecretProvider.PlatformKeyRef r : platformSecretProvider.getPlatformKeyRefsForUpdate()) {
+            String rewrapped = vault.rewrapPrivateKey(r.keyRef());
+            if (!rewrapped.equals(r.keyRef())) {
                 // key_ref is not updatable by the app role; the owner-run function does it
-                em.createNativeQuery("SELECT xhandler.rewrap_platform_key(:id, :ref)").setParameter("id", r[0]).setParameter("ref", rewrapped)
-                        .getSingleResult();
+                platformSecretProvider.rewrapPlatformKey(r.id(), rewrapped);
                 keys++;
             }
         }
@@ -92,9 +84,7 @@ public class KeyRotation {
     }
 
     private List<UUID> tenantIds() {
-        @SuppressWarnings("unchecked")
-        List<UUID> ids = em.createNativeQuery("SELECT id FROM xhandler.all_tenant_ids()").getResultList();
-        return ids;
+        return platformSecretProvider.getAllTenantIds();
     }
 
     private int[] rewrapTenant(UUID tenantId) {

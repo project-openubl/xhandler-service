@@ -6,7 +6,7 @@ import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.mail.EmailSender;
 import io.github.projectopenubl.xhandler.mail.HtmlSanitizer;
-import io.github.projectopenubl.xhandler.resources.EmailSuppressions;
+import io.github.projectopenubl.xhandler.models.EmailProvider;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -24,8 +24,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,12 +55,12 @@ public class DocumentEmailJob implements JobHandler {
     private final AccessLinks links;
     private final CredentialService credentials;
     private final EmailSender sender;
-    private final EntityManager em;
+    private final EmailProvider emailProvider;
     private final io.github.projectopenubl.xhandler.clients.Egress egress;
     private final io.github.projectopenubl.xhandler.managers.Entitlements entitlements;
 
     public DocumentEmailJob(TenantAccess access, DocumentPdf pdf, FileStore files, AccessLinks links, CredentialService credentials,
-            EmailSender sender, EntityManager em, io.github.projectopenubl.xhandler.clients.Egress egress,
+            EmailSender sender, EmailProvider emailProvider, io.github.projectopenubl.xhandler.clients.Egress egress,
             io.github.projectopenubl.xhandler.managers.Entitlements entitlements, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
@@ -76,7 +74,7 @@ public class DocumentEmailJob implements JobHandler {
         this.links = links;
         this.credentials = credentials;
         this.sender = sender;
-        this.em = em;
+        this.emailProvider = emailProvider;
     }
 
     @Override
@@ -102,9 +100,9 @@ public class DocumentEmailJob implements JobHandler {
             if (toCustomer) {
                 customerEmail(doc).ifPresent(to::add);
             }
-            List<String> ccKept = cc.stream().filter(a -> !EmailSuppressions.suppressed(em, a)).toList();
+            List<String> ccKept = cc.stream().filter(a -> !emailProvider.isEmailSuppressed(a)).toList();
             for (String address : to) {
-                if (EmailSuppressions.suppressed(em, address)) {
+                if (emailProvider.isEmailSuppressed(address)) {
                     skipped.add(address);
                 } else {
                     recipients.add(address);
@@ -164,16 +162,8 @@ public class DocumentEmailJob implements JobHandler {
             access.enterAsPlatform(context.tenantId());
             DocumentModel doc = documentProvider.getDocumentForUpdate(documentId).orElse(null);
             for (String recipient : prepared.message().to()) {
-                em.createNativeQuery("""
-                                INSERT INTO xhandler.delivery (id, tenant_id, document_id, channel, recipient, result, detail)
-                                VALUES (:id, :tenant, :document, 'email', :recipient, :result, :detail)""")
-                        .setParameter("id", Ids.newId())
-                        .setParameter("tenant", doc.getTenantId())
-                        .setParameter("document", doc.getId())
-                        .setParameter("recipient", recipient)
-                        .setParameter("result", finalResult)
-                        .setParameter("detail", finalDetail == null ? null : finalDetail.substring(0, Math.min(500, finalDetail.length())))
-                        .executeUpdate();
+                emailProvider.addEmailDelivery(Ids.newId(), doc.getTenantId(), doc.getId(), recipient, finalResult,
+                        finalDetail == null ? null : finalDetail.substring(0, Math.min(500, finalDetail.length())));
             }
             if ("sent".equals(finalResult) && doc.getDeliveredAt() == null) {
                 doc.setDeliveredAt(Instant.now());
@@ -243,8 +233,7 @@ public class DocumentEmailJob implements JobHandler {
             return null;
         }
         String domain = company.getEmail().substring(company.getEmail().indexOf('@') + 1).toLowerCase(java.util.Locale.ROOT);
-        boolean verified = !em.createNativeQuery("SELECT 1 FROM xhandler.sender_domain WHERE domain = :d AND verified_at IS NOT NULL")
-                .setParameter("d", domain).getResultList().isEmpty();
+        boolean verified = emailProvider.isSenderDomainVerified(domain);
         return verified ? company.getRazonSocial().replaceAll("[\\r\\n\"<>]", "") + " <" + company.getEmail() + ">" : null;
     }
 

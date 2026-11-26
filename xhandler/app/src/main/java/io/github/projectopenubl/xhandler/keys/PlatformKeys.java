@@ -1,15 +1,13 @@
 package io.github.projectopenubl.xhandler.keys;
 
-import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.PlatformSecretProvider;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,12 +22,12 @@ public class PlatformKeys {
     /** A platform key: a vault reference plus its certificate (DER). */
     public record Key(UUID id, String purpose, String keyRef, byte[] certificate, String subject, String ruc, Instant validUntil) {}
 
-    private final EntityManager em;
+    private final PlatformSecretProvider platformSecretProvider;
     private final KeyVault vault;
     private final HsmExecutor hsm;
 
-    public PlatformKeys(EntityManager em, KeyVault vault, HsmExecutor hsm) {
-        this.em = em;
+    public PlatformKeys(PlatformSecretProvider platformSecretProvider, KeyVault vault, HsmExecutor hsm) {
+        this.platformSecretProvider = platformSecretProvider;
         this.vault = vault;
         this.hsm = hsm;
     }
@@ -46,19 +44,11 @@ public class PlatformKeys {
         String keyRef = hsm.call(() -> vault.storePrivateKey(imported.privateKey(), imported.certificate()));
         try {
             return QuarkusTransaction.requiringNew().call(() -> {
-                em.createNativeQuery("UPDATE xhandler.platform_key SET status = 'replaced' WHERE purpose = :p AND status = 'active'")
-                        .setParameter("p", purpose).executeUpdate();
+                platformSecretProvider.replaceActivePlatformKey(purpose);
                 UUID id = Ids.newId();
-                em.createNativeQuery("""
-                                INSERT INTO xhandler.platform_key (id, purpose, key_ref, certificate, subject, ruc, valid_from, valid_until)
-                                VALUES (:id, :p, :ref, :cert, :subject, :ruc, :from, :until)""")
-                        .setParameter("id", id).setParameter("p", purpose).setParameter("ref", keyRef)
-                        .setParameter("cert", imported.certificate().getEncoded())
-                        .setParameter("subject", imported.certificate().getSubjectX500Principal().getName())
-                        .setParameter("ruc", imported.ruc().orElse(null))
-                        .setParameter("from", imported.certificate().getNotBefore().toInstant())
-                        .setParameter("until", imported.certificate().getNotAfter().toInstant())
-                        .executeUpdate();
+                platformSecretProvider.addPlatformKey(id, purpose, keyRef, imported.certificate().getEncoded(),
+                        imported.certificate().getSubjectX500Principal().getName(), imported.ruc().orElse(null),
+                        imported.certificate().getNotBefore().toInstant(), imported.certificate().getNotAfter().toInstant());
                 return active(purpose).orElseThrow();
             });
         } catch (RuntimeException e) {
@@ -73,12 +63,8 @@ public class PlatformKeys {
 
     @Transactional(Transactional.TxType.SUPPORTS)
     public Optional<Key> active(String purpose) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery(
-                        "SELECT id, purpose, key_ref, certificate, subject, ruc, valid_until FROM xhandler.platform_key WHERE purpose = :p AND status = 'active'")
-                .setParameter("p", purpose).getResultList();
-        return rows.stream().findFirst().map(r -> new Key((UUID) r[0], (String) r[1], (String) r[2], (byte[]) r[3], (String) r[4],
-                (String) r[5], Times.toInstant(r[6])));
+        return platformSecretProvider.getActivePlatformKey(purpose).map(r -> new Key(r.id(), r.purpose(), r.keyRef(), r.certificate(),
+                r.subject(), r.ruc(), r.validUntil()));
     }
 
     /** SHA256withRSA inside the vault, on the HSM executor. */

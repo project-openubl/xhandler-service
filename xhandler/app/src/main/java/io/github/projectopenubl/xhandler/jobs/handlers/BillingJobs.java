@@ -1,6 +1,5 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
-import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.clients.LagoClient;
 import io.github.projectopenubl.xhandler.managers.Entitlements;
 
@@ -9,7 +8,7 @@ import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.BillingProvider;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,12 +30,12 @@ public final class BillingJobs {
 
         static final int BATCH = 100;
 
-        private final EntityManager em;
+        private final BillingProvider billingProvider;
         private final LagoClient lago;
         private final com.fasterxml.jackson.databind.ObjectMapper json;
 
-        public UsageDelivery(EntityManager em, LagoClient lago, com.fasterxml.jackson.databind.ObjectMapper json) {
-            this.em = em;
+        public UsageDelivery(BillingProvider billingProvider, LagoClient lago, com.fasterxml.jackson.databind.ObjectMapper json) {
+            this.billingProvider = billingProvider;
             this.lago = lago;
             this.json = json;
         }
@@ -54,14 +53,8 @@ public final class BillingJobs {
             int sent = 0;
             while (true) {
                 record Event(UUID id, UUID tenant, String type, int quantity, String properties, Instant at) {}
-                List<Event> batch = QuarkusTransaction.requiringNew().call(() -> {
-                    @SuppressWarnings("unchecked")
-                    List<Object[]> rows = em.createNativeQuery("""
-                                    SELECT id, tenant_id, event_type, quantity, CAST(properties AS text), created_at
-                                    FROM xhandler.unsent_usage_events(:n)""").setParameter("n", BATCH).getResultList();
-                    return rows.stream().map(r -> new Event((UUID) r[0], (UUID) r[1], (String) r[2], ((Number) r[3]).intValue(),
-                            (String) r[4], Times.toInstant(r[5]))).toList();
-                });
+                List<Event> batch = QuarkusTransaction.requiringNew().call(() -> billingProvider.getUnsentUsageEvents(BATCH).stream()
+                        .map(r -> new Event(r.id(), r.tenantId(), r.type(), r.quantity(), r.properties(), r.createdAt())).toList());
                 if (batch.isEmpty()) {
                     return Map.of("sent", sent);
                 }
@@ -87,15 +80,13 @@ public final class BillingJobs {
                             ids.add(eventId);
                         } catch (LagoClient.Rejected bad) {
                             LOG.errorf("Lago refused usage event %s: %s", eventId, bad.getMessage());
-                            QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery("SELECT xhandler.mark_usage_failed(:id, :e)")
-                                    .setParameter("id", eventId).setParameter("e", bad.getMessage()).getSingleResult());
+                            QuarkusTransaction.requiringNew().run(() -> billingProvider.markUsageFailed(eventId, bad.getMessage()));
                         }
                     }
                 }
                 List<UUID> sentIds = ids;
                 if (!sentIds.isEmpty()) {
-                    QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery("SELECT xhandler.mark_usage_sent(CAST(:ids AS uuid[]))")
-                            .setParameter("ids", "{" + String.join(",", sentIds.stream().map(UUID::toString).toList()) + "}").getSingleResult());
+                    QuarkusTransaction.requiringNew().run(() -> billingProvider.markUsageSent(sentIds));
                 }
                 sent += batch.size();
                 if (batch.size() < BATCH) {
@@ -109,13 +100,13 @@ public final class BillingJobs {
     @ApplicationScoped
     public static class EntitlementSync implements JobHandler {
 
-        private final EntityManager em;
+        private final BillingProvider billingProvider;
         private final LagoClient lago;
         private final TenantAccess access;
         private final Entitlements entitlements;
 
-        public EntitlementSync(EntityManager em, LagoClient lago, TenantAccess access, Entitlements entitlements) {
-            this.em = em;
+        public EntitlementSync(BillingProvider billingProvider, LagoClient lago, TenantAccess access, Entitlements entitlements) {
+            this.billingProvider = billingProvider;
             this.lago = lago;
             this.access = access;
             this.entitlements = entitlements;
@@ -131,12 +122,7 @@ public final class BillingJobs {
             if (!lago.configured()) {
                 return Map.of("skipped", "lago not configured");
             }
-            List<UUID> tenants = QuarkusTransaction.requiringNew().call(() -> {
-                @SuppressWarnings("unchecked")
-                List<UUID> ids = em.createNativeQuery("SELECT tenant_id FROM xhandler.entitlements_to_sync(interval '15 minutes', 500)")
-                        .getResultList();
-                return ids;
-            });
+            List<UUID> tenants = QuarkusTransaction.requiringNew().call(billingProvider::getEntitlementsToSync);
             int synced = 0;
             for (UUID tenant : tenants) {
                 try {
