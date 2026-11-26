@@ -14,7 +14,6 @@ change updates DESIGN.md or an ADR in the same commit. How to run the stack loca
 xhandler/   multi-tenant document service
   app/        Quarkus (Java 25): everything except the SUNAT documents themselves
   engine/     Rust sidecar on xhandler-rust: build, sign, send; also the SUNAT fake
-  admin-cli/  xhandler-admin, Picocli client of the admin API
   sdk/        clients generated from the OpenAPI document
   deploy/     Kustomize base: one pod = app + engine
 searchpe/   RUC lookup over SUNAT's padrón reducido (Quarkus)

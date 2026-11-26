@@ -12,6 +12,6 @@ DS 016-2024-JUS: the controller notifies the ANPD within 48 hours; we tell tenan
    happened, what data, what we did, and a contact. Give each the facts it needs for its 48-hour
    notice to the ANPD (and the CNSD for security incidents).
 4. **Credentials exposed**: SOL users and API clients must be changed by the tenants in SUNAT;
-   rotate the master key (`xhandler-admin rotate-keys`) if the key-encryption material may be
+   rotate the master key (`api POST /api/admin/v1/keys/rotate`) if the key-encryption material may be
    involved.
 5. **Record** the incident, timeline and decisions (ISO 27001 incident register) and review it.

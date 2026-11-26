@@ -19,7 +19,6 @@
 
     <modules>
         <module>app</module>
-        <module>admin-cli</module>
     </modules>
 
     <properties>

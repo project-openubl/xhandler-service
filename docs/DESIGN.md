@@ -296,7 +296,7 @@ Adapter documents keep the client's own numbering: the series is created if need
   - `finalize` verifies the HSM signature against the certificate (R1), and import checks that the key matches the certificate.
 - **Secrets** (SOL, GRE and SIRE credentials, SMTP passwords, lookup tokens).
   - Each secret is encrypted with its own data key, which is wrapped by a master key. Master keys live in the HSM.
-  - Decryption tries every active master key, and `xhandler-admin rotate-keys` re-wraps data keys without downtime, row-locked against concurrent updates, including deleted tenants and replaced keys.
+  - Decryption tries every active master key, and the admin API's `keys/rotate` re-wraps data keys without downtime, row-locked against concurrent updates, including deleted tenants and replaced keys.
   - The credential's identity (id, tenant, company, kind) is AES-GCM associated data, so a ciphertext only opens in its own row.
 - **Contract.** The tenant contract includes the data processing agreement, the sub-processor list, and the clause authorizing the platform to sign on the tenant's behalf (§3.4).
 
@@ -945,17 +945,15 @@ How it runs (P11):
 - **Health and status**: `/q/health` (liveness/readiness) for Kubernetes. `/api/v1/status` reports versions (service, engine, xhandler-rust revision), online workers, database, storage and HSM health, queue depth, and SUNAT availability per environment (`sunat`: each SUNAT service's breaker state and pause, §24.2; `available` when every service seen answers; third-party OSE endpoints are left out).
 - **SLOs**: 99.96% availability for OSE intake, and OSE forwarding under 1 hour at the 100th percentile. Dashboards and alerts for both.
 - **Engine performance budget** (per document, typical invoice, one core): build + validate (XSD + rules) + sign-prepare under 5 ms at p99, excluding the HSM signature. It is tracked with `criterion` benchmarks. CI gates on **instruction counts** (`iai-callgrind`), which are stable on shared runners, failing on a regression above 10%. Wall-clock benchmarks run nightly on dedicated hardware.
-- **Admin CLI** (`xhandler-admin`, Picocli, module `admin-cli/`): a thin client of the admin API (`/api/admin/v1`, Keycloak realm role `platform-admin`, e.g. the `xhandler-admin` service account), so it needs no database credentials and every action is audited in the tenant's log:
-  - `rotate-keys`;
-  - `requeue-document`;
-  - `cancel-job`;
-  - `purge-jobs`;
-  - `data-repair` (`partitions`: create missing partitions now; `requeue-stuck`: make due any non-definitive document no automatic attempt would pick up);
-  - `migration-status`;
-  - `reset-admin` (a temporary Keycloak password, through Keycloak's admin API);
-  - `hold` / `release` (document, company, tenant, endpoint);
-  - `retry` (one document, or in bulk by filter);
-  - `endpoint-status`.
+- **Admin API** (`/api/admin/v1`, Keycloak realm role `platform-admin`, e.g. the `xhandler-admin` service account): platform operations over HTTP, so operators need no database credentials and every action on tenant data is audited in the tenant's log. There is no dedicated CLI: the runbooks call it with `curl` through a small `api` shell helper (`docs/runbooks/README.md`). Operations:
+  - `POST keys/rotate` (re-wrap every secret and key with the current master key);
+  - `POST documents/{id}/retry`, `POST tenants/{id}/retry` (one document, or in bulk by filter);
+  - `POST …/hold` / `…/release` (document, company, tenant, endpoint);
+  - `GET endpoints`, `PUT endpoints/{id}` (breaker, cap and hold per SUNAT endpoint);
+  - `POST jobs/{id}/cancel`, `POST jobs/purge`;
+  - `POST repair/{task}` (`partitions`: create missing partitions now; `requeue-stuck`: make due any non-definitive document no automatic attempt would pick up);
+  - `GET migrations`.
+  Resetting a Keycloak user's password is done in Keycloak itself (admin console or `kcadm.sh`).
 - **Runbooks**: a stuck queue, SUNAT outage, HSM outage, a certificate expiring, a breach.
 
 ### 15.1 Schema migrations
@@ -1067,7 +1065,6 @@ xhandler-service/
 │   └── src/main/java/…          tenancy, identity, documents, numbering, jobs, sunat,
 │                                ose, reception, delivery, sire, conformity, billing,
 │                                catalogs, reports, webhooks, admin
-├── admin-cli/                   xhandler-admin (Picocli)
 ├── engine/                      Rust sidecar (Cargo; depends on xhandler-rust pinned by rev)
 ├── deploy/                      Kubernetes manifests / Helm chart, Lago, Keycloak realm
 ├── docs/
@@ -1213,7 +1210,7 @@ SUNAT will fail: outages, slowness, timeouts after accepting a document, garbage
    - `POST /documents/{id}/retry` clears the hold and sets `next_attempt_at = now()`.
    - Bulk retry by filter (company, status, date range).
    - Hold or release per document, company, tenant or endpoint.
-   - The same actions exist in `xhandler-admin` (§15).
+   - The same actions exist in the admin API (§15).
 9. **Visibility.**
    - Metrics: backlog size and oldest pending age per endpoint, deadlines at risk, breaker state, drain rate, documents in `needs_attention`.
    - A `document.delayed` webhook and tenant notifications (§26.6).
@@ -1413,6 +1410,6 @@ A daily job imports the SBS/SUNAT exchange rate (purchase and sale) from SUNAT's
 | `EncryptedJSONField` + MultiFernet + `rotate-db-key` | Envelope encryption with several master keys + `rotate-keys` |
 | Content-addressed artifacts (sha256) | Content-addressed files; retention instead of orphan cleanup |
 | 202 + task href, labels, PRN identifiers, generated bindings | §12 |
-| Management commands (data repair, reset admin password) | `xhandler-admin` |
+| Management commands (data repair, reset admin password) | The admin API (§15); passwords in Keycloak |
 
 **Not taken:** the plugin system, access policies stored as data, the Redis worker, the content-serving app, and chunked uploads.

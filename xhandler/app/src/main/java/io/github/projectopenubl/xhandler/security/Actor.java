@@ -6,7 +6,7 @@ package io.github.projectopenubl.xhandler.security;
  */
 public record Actor(String kind, String subject, boolean emailVerified, boolean platformSupport) {
 
-    /** Platform work (workers, schedules, the admin CLI's jobs). */
+    /** Platform work (workers, schedules, the admin API's jobs). */
     public static final Actor PLATFORM = new Actor("platform", "worker", false, false);
 
     public boolean isUser() {

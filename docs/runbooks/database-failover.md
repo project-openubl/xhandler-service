@@ -11,8 +11,8 @@ or sent twice. Check afterwards:
 
 ```bash
 kubectl cnpg status xhandler-db
-xhandler-admin status
-xhandler-admin migration-status
+api GET /api/v1/status
+api GET /api/admin/v1/migrations
 ```
 
 If `DatabaseGaugesMissing` persists, the app can't reach the new primary: check the `-rw`
