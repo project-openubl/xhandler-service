@@ -1,12 +1,12 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.PartnerProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.resources.CompanyEnvironmentResource;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.CurrentActor;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -55,13 +55,13 @@ public class PartnerResource {
             @Schema(description = "Si el socio subió un logo; los PDF de sus cuentas lo usan cuando la empresa no tiene uno.") boolean hasLogo) {}
 
     private final CurrentActor currentActor;
-    private final EntityManager em;
+    private final PartnerProvider partners;
     private final com.fasterxml.jackson.databind.ObjectMapper json;
     private final FileStore files;
 
-    public PartnerResource(CurrentActor currentActor, EntityManager em, com.fasterxml.jackson.databind.ObjectMapper json, FileStore files) {
+    public PartnerResource(CurrentActor currentActor, PartnerProvider partners, com.fasterxml.jackson.databind.ObjectMapper json, FileStore files) {
         this.currentActor = currentActor;
-        this.em = em;
+        this.partners = partners;
         this.json = json;
         this.files = files;
     }
@@ -71,10 +71,8 @@ public class PartnerResource {
     @Transactional
     public List<PartnerView> mine() {
         Actor actor = currentActor.get();
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT id, name, role FROM xhandler.partners_of(:k, :s)")
-                .setParameter("k", actor.kind()).setParameter("s", actor.subject()).getResultList();
-        return rows.stream().map(r -> new PartnerView((UUID) r[0], (String) r[1], (String) r[2])).toList();
+        return partners.getPartnersOf(actor.kind(), actor.subject()).stream()
+                .map(r -> new PartnerView(r.id(), r.name(), r.role())).toList();
     }
 
     @APIResponse(responseCode = "201", description = "Cuenta creada para el socio.",
@@ -86,12 +84,9 @@ public class PartnerResource {
     public Response createTenant(@PathParam("partnerId") UUID partnerId, @Valid CreateTenant request) {
         Actor actor = require(partnerId, "admin");
         UUID id = Ids.newId();
-        em.createNativeQuery("SELECT xhandler.create_partner_tenant(:p, :id, :name, :by, :kind, :subject)")
-                .setParameter("p", partnerId).setParameter("id", id).setParameter("name", request.name().strip())
-                .setParameter("by", actor.auditName())
-                .setParameter("kind", request.ownerSubject() == null ? null : (request.ownerKind() == null ? "user" : request.ownerKind()))
-                .setParameter("subject", request.ownerSubject())
-                .getSingleResult();
+        partners.createPartnerTenant(partnerId, id, request.name().strip(), actor.auditName(),
+                request.ownerSubject() == null ? null : (request.ownerKind() == null ? "user" : request.ownerKind()),
+                request.ownerSubject());
         return Response.status(201).entity(new PartnerTenant(id, request.name().strip(), partnerId)).build();
     }
 
@@ -110,13 +105,8 @@ public class PartnerResource {
         }
         Instant from = period.atDay(1).atStartOfDay(io.github.projectopenubl.xhandler.utils.Deadlines.LIMA).toInstant();
         Instant to = period.plusMonths(1).atDay(1).atStartOfDay(io.github.projectopenubl.xhandler.utils.Deadlines.LIMA).toInstant();
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, name, status, plan_code, production_documents, other_documents
-                        FROM xhandler.partner_tenants(:p, :from, :to)""")
-                .setParameter("p", partnerId).setParameter("from", from).setParameter("to", to).getResultList();
-        return rows.stream().map(r -> new TenantUsage((UUID) r[0], (String) r[1], (String) r[2], (String) r[3],
-                ((Number) r[4]).longValue(), ((Number) r[5]).longValue())).toList();
+        return partners.getPartnerTenants(partnerId, from, to).stream().map(r -> new TenantUsage(r.id(), r.name(), r.status(), r.plan(),
+                r.productionDocuments(), r.otherDocuments())).toList();
     }
 
     @Operation(operationId = "getPartnerBranding")
@@ -134,12 +124,13 @@ public class PartnerResource {
     @Transactional
     public PartnerBrandingView branding(@PathParam("partnerId") UUID partnerId, @Valid Branding branding) {
         require(partnerId, "admin");
+        String brandingJson;
         try {
-            em.createNativeQuery("SELECT xhandler.set_partner_branding(:p, CAST(:b AS jsonb))")
-                    .setParameter("b", json.writeValueAsString(branding)).setParameter("p", partnerId).getSingleResult();
+            brandingJson = json.writeValueAsString(branding);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
+        partners.setPartnerBranding(partnerId, brandingJson);
         return new PartnerBrandingView(partnerId, branding, brandingView(partnerId).hasLogo());
     }
 
@@ -156,8 +147,7 @@ public class PartnerResource {
     public PartnerBrandingView uploadLogo(@PathParam("partnerId") UUID partnerId, byte[] image) {
         require(partnerId, "admin");
         String ref = files.put(partnerId, CompanyEnvironmentResource.logoImage(image)).key();
-        em.createNativeQuery("SELECT xhandler.set_partner_logo(:p, :ref)")
-                .setParameter("p", partnerId).setParameter("ref", ref).getSingleResult();
+        partners.setPartnerLogo(partnerId, ref);
         return brandingView(partnerId);
     }
 
@@ -168,22 +158,20 @@ public class PartnerResource {
     @Transactional
     public Response deleteLogo(@PathParam("partnerId") UUID partnerId) {
         require(partnerId, "admin");
-        em.createNativeQuery("SELECT xhandler.set_partner_logo(:p, CAST(NULL AS text))")
-                .setParameter("p", partnerId).getSingleResult();
+        partners.clearPartnerLogo(partnerId);
         return Response.noContent().build();
     }
 
     private PartnerBrandingView brandingView(UUID partnerId) {
-        Object[] row = (Object[]) em.createNativeQuery("SELECT CAST(branding AS text), logo_ref IS NOT NULL FROM xhandler.partner WHERE id = :p")
-                .setParameter("p", partnerId).getSingleResult();
+        PartnerProvider.PartnerBranding row = partners.getPartnerBranding(partnerId);
         Branding branding;
         try {
-            branding = row[0] == null ? new Branding(null, null, null) : json.readValue((String) row[0], Branding.class);
+            branding = row.brandingJson() == null ? new Branding(null, null, null) : json.readValue(row.brandingJson(), Branding.class);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             // Branding written before the record's shape: shown empty rather than failing
             branding = new Branding(null, null, null);
         }
-        return new PartnerBrandingView(partnerId, branding, (Boolean) row[1]);
+        return new PartnerBrandingView(partnerId, branding, row.hasLogo());
     }
 
     /** The caller must be a member of the partner with at least {@code role} (admin > viewer). Unknown partners are 404. */

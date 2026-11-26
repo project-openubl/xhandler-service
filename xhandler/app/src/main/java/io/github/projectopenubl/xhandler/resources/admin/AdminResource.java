@@ -2,7 +2,7 @@ package io.github.projectopenubl.xhandler.resources.admin;
 
 import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
-import io.github.projectopenubl.xhandler.utils.Times;
+import io.github.projectopenubl.xhandler.models.PlatformProvider;
 import io.github.projectopenubl.xhandler.security.PlatformAdmin;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -17,7 +17,6 @@ import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.GET;
@@ -65,11 +64,11 @@ public class AdminResource {
     private final JobStore jobs;
     private final KeyRotation rotation;
     private final Auditor auditor;
-    private final EntityManager em;
+    private final PlatformProvider platform;
     private final io.github.projectopenubl.xhandler.managers.Entitlements entitlements;
 
     public AdminResource(PlatformAdmin admin, TenantAccess access, DocumentControl control, JobStore jobs, KeyRotation rotation,
-            Auditor auditor, EntityManager em, io.github.projectopenubl.xhandler.managers.Entitlements entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider) {
+            Auditor auditor, PlatformProvider platform, io.github.projectopenubl.xhandler.managers.Entitlements entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.companyProvider = companyProvider;
         this.entitlements = entitlements;
@@ -79,7 +78,7 @@ public class AdminResource {
         this.jobs = jobs;
         this.rotation = rotation;
         this.auditor = auditor;
-        this.em = em;
+        this.platform = platform;
     }
 
     // --- documents (requeue-document, retry, hold, release) ---------------------
@@ -175,7 +174,7 @@ public class AdminResource {
             throw ApiException.invalid("invalid_request", "Indique el correo.", null);
         }
         String reason = body.getOrDefault("reason", "hard_bounce");
-        io.github.projectopenubl.xhandler.resources.EmailSuppressions.suppress(em, tenantId, address, reason);
+        platform.suppressEmail(tenantId, address, reason);
         auditor.record(scope, "email.suppressed", "email", null, Map.of("address", address, "reason", reason));
         return Map.of("address", address, "reason", reason);
     }
@@ -192,8 +191,7 @@ public class AdminResource {
             throw ApiException.invalid("invalid_request", "Indique el nombre del partner.", null);
         }
         UUID id = io.github.projectopenubl.xhandler.utils.Ids.newId();
-        em.createNativeQuery("SELECT xhandler.create_partner(:id, :n)").setParameter("id", id).setParameter("n", name.strip())
-                .getSingleResult();
+        platform.createPartner(id, name.strip());
         AdminLog.PLATFORM_AUDIT.infof("admin %s created partner %s (%s)", admin.require(), id, name.strip());
         return Map.of("id", id, "name", name.strip());
     }
@@ -209,9 +207,7 @@ public class AdminResource {
         if (subject == null || !java.util.Set.of("user", "client").contains(kind) || !java.util.Set.of("admin", "viewer").contains(role)) {
             throw ApiException.invalid("invalid_request", "Indique subject, kind (user|client) y role (admin|viewer).", null);
         }
-        Object set = em.createNativeQuery("SELECT xhandler.set_partner_member(:p, :k, :s, :r)")
-                .setParameter("p", partnerId).setParameter("k", kind).setParameter("s", subject).setParameter("r", role).getSingleResult();
-        if (!Boolean.TRUE.equals(set)) {
+        if (!platform.setPartnerMember(partnerId, kind, subject, role)) {
             throw ApiException.notFound();
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s set %s:%s as %s of partner %s", admin.require(), kind, subject, role, partnerId);
@@ -224,9 +220,7 @@ public class AdminResource {
     public jakarta.ws.rs.core.Response removePartnerMember(@PathParam("partnerId") UUID partnerId, @PathParam("kind") String kind,
             @PathParam("subject") String subject) {
         String who = admin.require();
-        Object removed = em.createNativeQuery("SELECT xhandler.remove_partner_member(:p, :k, :s)")
-                .setParameter("p", partnerId).setParameter("k", kind).setParameter("s", subject).getSingleResult();
-        if (!Boolean.TRUE.equals(removed)) {
+        if (!platform.removePartnerMember(partnerId, kind, subject)) {
             throw ApiException.notFound();
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s removed %s:%s from partner %s", who, kind, subject, partnerId);
@@ -259,9 +253,7 @@ public class AdminResource {
         AdminLog.PLATFORM_AUDIT.infof("admin %s set the billing issuer to company %s of tenant %s", admin.require(), companyId, tenantId);
         for (Map.Entry<String, String> e : Map.of(io.github.projectopenubl.xhandler.managers.SelfInvoicing.ISSUER_TENANT, tenant,
                 io.github.projectopenubl.xhandler.managers.SelfInvoicing.ISSUER_COMPANY, company).entrySet()) {
-            em.createNativeQuery("INSERT INTO xhandler.platform_setting (key, value) VALUES (:k, :v) "
-                            + "ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = now()")
-                    .setParameter("k", e.getKey()).setParameter("v", e.getValue()).executeUpdate();
+            platform.setPlatformSetting(e.getKey(), e.getValue());
         }
         return Map.of("tenant_id", tenant, "company_id", company);
     }
@@ -288,25 +280,23 @@ public class AdminResource {
     @Transactional
     public List<Endpoint> endpoints() {
         admin.require();
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery(
-                        "SELECT id, breaker_state, breaker_until, concurrency_cap, paused FROM xhandler.sunat_endpoint ORDER BY id")
-                .getResultList();
-        return rows.stream().map(AdminResource::endpoint).toList();
+        return platform.getEndpoints().stream().map(AdminResource::endpoint).toList();
     }
 
     @POST
     @Path("/endpoints/{id}/hold")
     @Transactional
     public Endpoint holdEndpoint(@PathParam("id") String id) {
-        return updateEndpoint(id, "paused = true");
+        admin.require();
+        return endpointUpdated(id, platform.setEndpointPaused(id, true));
     }
 
     @POST
     @Path("/endpoints/{id}/release")
     @Transactional
     public Endpoint releaseEndpoint(@PathParam("id") String id) {
-        return updateEndpoint(id, "paused = false");
+        admin.require();
+        return endpointUpdated(id, platform.setEndpointPaused(id, false));
     }
 
     @PUT
@@ -316,7 +306,8 @@ public class AdminResource {
         if (update == null || update.concurrencyCap() == null || update.concurrencyCap() < 1) {
             throw ApiException.invalid("invalid_request", "concurrency_cap debe ser al menos 1.", null);
         }
-        return updateEndpoint(id, "concurrency_cap = " + update.concurrencyCap());
+        admin.require();
+        return endpointUpdated(id, platform.setEndpointConcurrencyCap(id, update.concurrencyCap()));
     }
 
     // --- jobs (cancel-job, purge-jobs) ------------------------------------------------
@@ -326,11 +317,9 @@ public class AdminResource {
     @Transactional
     public JobState cancelJob(@PathParam("id") UUID id) {
         admin.require();
-        Object state = em.createNativeQuery("SELECT xhandler.cancel_job_any(:id)").setParameter("id", id).getSingleResult();
-        if (state == null) {
-            throw ApiException.conflict("job_not_cancelable", "El trabajo no existe o ya terminó.");
-        }
-        return new JobState(id, state.toString());
+        String state = platform.cancelJob(id)
+                .orElseThrow(() -> ApiException.conflict("job_not_cancelable", "El trabajo no existe o ya terminó."));
+        return new JobState(id, state);
     }
 
     @POST
@@ -355,11 +344,8 @@ public class AdminResource {
     @Transactional
     public List<Migration> migrations() {
         admin.require();
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery(
-                        "SELECT version, description, success, installed_on FROM xhandler.migration_history()").getResultList();
-        return rows.stream().map(r -> new Migration((String) r[0], (String) r[1], Boolean.TRUE.equals(r[2]) ? "Success" : "Failed",
-                (java.time.LocalDateTime) r[3])).toList();
+        return platform.getMigrations().stream()
+                .map(m -> new Migration(m.version(), m.description(), m.success() ? "Success" : "Failed", m.installedOn())).toList();
     }
 
     // --- data repair -------------------------------------------------------------------
@@ -371,7 +357,7 @@ public class AdminResource {
     public Map<String, Object> repairPartitions() {
         admin.require();
         LocalDate today = io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima();
-        em.createNativeQuery("SELECT xhandler.ensure_partitions(:day)").setParameter("day", today).getSingleResult();
+        platform.ensurePartitions(today);
         return Map.of("day", today.toString());
     }
 
@@ -381,7 +367,7 @@ public class AdminResource {
     @Transactional
     public Count requeueStuck() {
         admin.require();
-        int n = ((Number) em.createNativeQuery("SELECT xhandler.requeue_stuck_documents()").getSingleResult()).intValue();
+        int n = platform.requeueStuckDocuments();
         notifyReconcile();
         return new Count(n);
     }
@@ -391,19 +377,13 @@ public class AdminResource {
     @Transactional
     public Map<String, Object> job(@PathParam("id") UUID id) {
         admin.require();
-        List<?> rows = em.createNativeQuery("SELECT name, state, worker, CAST(error AS text) FROM xhandler.job_summary(:id)")
-                .setParameter("id", id)
-                .getResultList();
-        if (rows.isEmpty()) {
-            throw ApiException.notFound();
-        }
-        Object[] r = (Object[]) rows.get(0);
+        PlatformProvider.JobSummary r = platform.getJobSummary(id).orElseThrow(ApiException::notFound);
         Map<String, Object> view = new java.util.LinkedHashMap<>();
         view.put("id", id);
-        view.put("name", r[0]);
-        view.put("state", r[1]);
-        view.put("worker", r[2]);
-        view.put("error", r[3]);
+        view.put("name", r.name());
+        view.put("state", r.state());
+        view.put("worker", r.worker());
+        view.put("error", r.error());
         return view;
     }
 
@@ -411,11 +391,8 @@ public class AdminResource {
 
     private TenantScope openDocumentTenant(UUID documentId) {
         String name = admin.require();
-        Object tenant = em.createNativeQuery("SELECT xhandler.document_tenant(:id)").setParameter("id", documentId).getSingleResult();
-        if (tenant == null) {
-            throw ApiException.notFound();
-        }
-        return scope((UUID) tenant, name);
+        UUID tenant = platform.getDocumentTenant(documentId).orElseThrow(ApiException::notFound);
+        return scope(tenant, name);
     }
 
     private TenantScope openTenant(UUID tenantId) {
@@ -451,29 +428,21 @@ public class AdminResource {
         return Map.of("company_id", companyId, "sending_paused", paused);
     }
 
-    private Endpoint updateEndpoint(String id, String assignment) {
-        admin.require();
-        int updated = em.createNativeQuery("UPDATE xhandler.sunat_endpoint SET " + assignment + ", updated_at = now() WHERE id = :id")
-                .setParameter("id", id)
-                .executeUpdate();
+    /** After an endpoint update ({@code admin.require()} already called): 404 when unknown, else wakes the reconciler. */
+    private Endpoint endpointUpdated(String id, int updated) {
         if (updated == 0) {
             throw ApiException.notFound();
         }
         notifyReconcile();
-        Object[] row = (Object[]) em.createNativeQuery(
-                        "SELECT id, breaker_state, breaker_until, concurrency_cap, paused FROM xhandler.sunat_endpoint WHERE id = :id")
-                .setParameter("id", id)
-                .getSingleResult();
-        return endpoint(row);
+        return endpoint(platform.getEndpoint(id));
     }
 
     private void notifyReconcile() {
-        em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
+        platform.notifyReconcile();
     }
 
-    private static Endpoint endpoint(Object[] r) {
-        return new Endpoint((String) r[0], (String) r[1], Times.toInstant(r[2]),
-                ((Number) r[3]).intValue(), (Boolean) r[4]);
+    private static Endpoint endpoint(PlatformProvider.EndpointRow r) {
+        return new Endpoint(r.id(), r.breakerState(), r.breakerUntil(), r.concurrencyCap(), r.paused());
     }
 
     private static DocumentState view(DocumentModel d) {
