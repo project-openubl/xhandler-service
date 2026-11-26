@@ -12,7 +12,7 @@ change updates DESIGN.md or an ADR in the same commit. How to run the stack loca
 
 ```
 xhandler/   multi-tenant document service
-  app/        Quarkus (Java 25): everything except the SUNAT documents themselves
+  src/        Quarkus app (Java 25, pom.xml beside it): everything but the SUNAT documents
   engine/     Rust sidecar on xhandler-rust: build, sign, send; also the SUNAT fake
   sdk/        clients generated from the OpenAPI document
   deploy/     Kustomize base: one pod = app + engine
@@ -72,7 +72,7 @@ in dev mode both apps share one Keycloak from Dev Services (CONTRIBUTING.md).
 
 ## xhandler
 
-Code in `xhandler/app` lives under `io.github.projectopenubl.xhandler`, layered as DESIGN.md §4:
+Code in `xhandler/src` lives under `io.github.projectopenubl.xhandler`, layered as DESIGN.md §4:
 `resources/` (JAX-RS) → `managers/` (business logic) → `models/` (`*Model`, `*Provider`) →
 `models/jpa/` (`Jpa*Provider`, entities, repositories). API types are
 `representations/idm/*Representation` records.

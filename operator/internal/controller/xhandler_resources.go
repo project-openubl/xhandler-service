@@ -430,7 +430,7 @@ func engineContainer(cr *xhandlerv1alpha1.XHandler, image string, pullPolicy cor
 }
 
 // appConfig translates the spec of cr into the configuration of the app of a role: environment
-// variables (see xhandler/app/src/main/resources/application.properties) and volumes.
+// variables (see xhandler/src/main/resources/application.properties) and volumes.
 func appConfig(cr *xhandlerv1alpha1.XHandler, component string) (*serverConfig, error) {
 	c := &serverConfig{}
 	c.value("XHANDLER_ROLE", component)

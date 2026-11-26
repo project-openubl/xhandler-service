@@ -7,6 +7,6 @@ push to `main` and keeps them as artifacts; publishing to npm and Maven Central 
 release process.
 
 ```bash
-../mvnw -B -q -pl app package -DskipTests  # writes app/target/openapi/openapi.json
+../mvnw -B -q package -DskipTests  # writes target/openapi/openapi.json
 ./sdk/generate.sh                          # writes sdk/typescript and sdk/java
 ```

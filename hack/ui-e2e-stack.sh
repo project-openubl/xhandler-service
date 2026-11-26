@@ -35,7 +35,7 @@ start() { # name, command...
 }
 
 build() {
-  (cd "$ROOT" && ./mvnw -B -q -f xhandler package -DskipTests -pl app -am)
+  (cd "$ROOT" && ./mvnw -B -q -f xhandler package -DskipTests)
   (cd "$ROOT" && ./mvnw -B -q package -DskipTests -pl searchpe)
   (cd "$ROOT/xhandler/engine" && cargo build --release --bins)
 }
@@ -72,7 +72,7 @@ up() {
     XHANDLER_LIMITS_MAX_UNVERIFIED_COMPANIES=100000 \
     XHANDLER_BILLING_DEFAULT_PLAN=enterprise \
     XHANDLER_EGRESS_REQUIRE_PROXY=false \
-    java -jar "$ROOT/xhandler/app/target/quarkus-app/quarkus-run.jar"
+    java -jar "$ROOT/xhandler/target/quarkus-app/quarkus-run.jar"
 
   # searchpe with OIDC and authorization on (its defaults turn both off) and the advanced search.
   start searchpe env \

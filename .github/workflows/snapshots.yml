@@ -82,8 +82,8 @@ jobs:
           cache: maven
       - name: Build container images
         run: |
-          ./mvnw -B -q -f xhandler package -DskipTests -pl app -am
-          docker build -f xhandler/app/src/main/docker/Dockerfile.jvm -t ghcr.io/project-openubl/xhandler-service/xhandler-service:nightly xhandler/app
+          ./mvnw -B -q -f xhandler package -DskipTests
+          docker build -f xhandler/src/main/docker/Dockerfile.jvm -t ghcr.io/project-openubl/xhandler-service/xhandler-service:nightly xhandler
           docker build -t ghcr.io/project-openubl/xhandler-service/xhandler-engine:nightly xhandler/engine
           docker build -t ghcr.io/project-openubl/xhandler-service/xhandler-ui:nightly ui
       - name: Save container images

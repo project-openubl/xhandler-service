@@ -2,8 +2,8 @@
 # Generates the TypeScript and Java SDKs from the OpenAPI document (DESIGN.md §26.2).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SPEC="${SPEC:-$ROOT/app/target/openapi/openapi.json}"
-[[ -f "$SPEC" ]] || { echo "missing $SPEC: run ./mvnw -f xhandler -pl app package -DskipTests first" >&2; exit 1; }
+SPEC="${SPEC:-$ROOT/target/openapi/openapi.json}"
+[[ -f "$SPEC" ]] || { echo "missing $SPEC: run ./mvnw -f xhandler package -DskipTests first" >&2; exit 1; }
 
 rm -rf "$ROOT/sdk/typescript" "$ROOT/sdk/java"
 npx --yes -p typescript@5.9 -p @hey-api/openapi-ts@0.99.0 openapi-ts -i "$SPEC" -o "$ROOT/sdk/typescript/src" -c @hey-api/client-fetch

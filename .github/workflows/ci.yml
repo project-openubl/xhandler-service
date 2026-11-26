@@ -132,8 +132,8 @@ jobs:
           cache: maven
       - name: Build container images
         run: |
-          ./mvnw -B -q -f xhandler package -DskipTests -pl app -am
-          docker build -f xhandler/app/src/main/docker/Dockerfile.jvm -t localhost:5000/xhandler-service:0.0.0 xhandler/app
+          ./mvnw -B -q -f xhandler package -DskipTests
+          docker build -f xhandler/src/main/docker/Dockerfile.jvm -t localhost:5000/xhandler-service:0.0.0 xhandler
           docker build -t localhost:5000/xhandler-engine:0.0.0 xhandler/engine
           docker build -t localhost:5000/xhandler-ui:0.0.0 ui
       - name: Save container images
