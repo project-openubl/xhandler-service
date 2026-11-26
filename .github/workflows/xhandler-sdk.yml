@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - run: ./mvnw -B -q -pl app package -DskipTests
+      - run: ../mvnw -B -q -pl app package -DskipTests
       - run: ./sdk/generate.sh
       - uses: actions/upload-artifact@v7
         with:

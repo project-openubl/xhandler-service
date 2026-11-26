@@ -43,7 +43,7 @@ QUARKUS_DATASOURCE_USERNAME=xhandler_login QUARKUS_DATASOURCE_PASSWORD=xhandler_
 QUARKUS_FLYWAY_USERNAME=xhandler_owner QUARKUS_FLYWAY_PASSWORD=xhandler_owner \
 QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8180/realms/xhandler \
 XHANDLER_BILLING_DEFAULT_PLAN=enterprise \
-  (cd xhandler && ./mvnw quarkus:dev -pl app)
+  ./mvnw -f xhandler quarkus:dev -pl app
 ```
 
 searchpe on 8081, with OIDC and authorization on (its defaults turn both off):

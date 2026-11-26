@@ -19,7 +19,7 @@ Podman or Docker.
 (cd engine && cargo run)
 
 # 2. App in dev mode (http://localhost:8080; Dev Services start PostgreSQL)
-./mvnw quarkus:dev
+../mvnw quarkus:dev
 
 # 3. The SUNAT fake (every new company starts there) on 127.0.0.1:8099
 (cd engine && cargo run --bin sunat-fake)

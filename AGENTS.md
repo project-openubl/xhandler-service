@@ -28,9 +28,9 @@ hack/       dev and CI tooling: compose.yaml (PostgreSQL, Keycloak :8180, Grafan
 ## Commands
 
 ```bash
-# xhandler (its own Maven wrapper)
-(cd xhandler && ./mvnw quarkus:dev)             # app on :8080, Dev Services start PostgreSQL
-(cd xhandler && ./mvnw verify)                  # tests (need Docker or Podman)
+# xhandler
+./mvnw -f xhandler quarkus:dev                  # app on :8080, Dev Services start PostgreSQL
+./mvnw -f xhandler verify                       # tests (need Docker or Podman)
 (cd xhandler/engine && cargo run)               # engine on 127.0.0.1:8090
 (cd xhandler/engine && cargo run --bin sunat-fake)   # SUNAT fake on 127.0.0.1:8099
 (cd xhandler/engine && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test)

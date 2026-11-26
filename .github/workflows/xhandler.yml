@@ -22,7 +22,7 @@ jobs:
           java-version: "25"
           cache: maven
       # Tests use Dev Services: Testcontainers starts PostgreSQL on the runner's Docker
-      - run: ./mvnw -B verify
+      - run: ../mvnw -B verify
         working-directory: xhandler
 
   engine:
@@ -58,7 +58,7 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
-      - run: ./mvnw -B -q package -DskipTests
+      - run: ../mvnw -B -q package -DskipTests
       - run: docker build -f app/src/main/docker/Dockerfile.jvm -t xhandler-service:ci app
       - run: docker build -t xhandler-engine:ci engine
       # Smoke test: the image must serve and its exec probe must pass

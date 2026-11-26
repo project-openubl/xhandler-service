@@ -16,7 +16,7 @@ Run from `ui/`. Workspace scripts run with `-w <workspace>` or `-ws`.
 `openapi:refresh` needs the backends built first, from the repository root:
 
 ```bash
-(cd xhandler && ./mvnw -q -pl app package -DskipTests)   # xhandler/app/target/openapi/openapi.json
+./mvnw -q -f xhandler -pl app package -DskipTests      # xhandler/app/target/openapi/openapi.json
 ./mvnw -q -pl searchpe package -DskipTests \
   -Dquarkus.smallrye-openapi.store-schema-directory=target/openapi   # searchpe/target/openapi/openapi.json
 ```

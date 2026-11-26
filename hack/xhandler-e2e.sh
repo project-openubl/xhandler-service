@@ -57,7 +57,7 @@ PIDS+=($!)
 wait_for http://localhost:8090/health "engine"
 
 echo "==> app"
-(cd "$X" && ./mvnw -B -q package -DskipTests)
+"$ROOT/mvnw" -B -q -f "$X" package -DskipTests
 QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/xhandler \
 QUARKUS_DATASOURCE_USERNAME=xhandler_login \
 QUARKUS_DATASOURCE_PASSWORD=xhandler_login \
