@@ -2,12 +2,12 @@ package io.github.projectopenubl.xhandler.pdf;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.projectopenubl.xhandler.company.Company;
-import io.github.projectopenubl.xhandler.documents.Document;
-import io.github.projectopenubl.xhandler.documents.DocumentFile;
-import io.github.projectopenubl.xhandler.documents.Qr;
-import io.github.projectopenubl.xhandler.storage.FileStore;
-import io.github.projectopenubl.xhandler.tenancy.Tenant;
+import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFile;
+import io.github.projectopenubl.xhandler.utils.Qr;
+import io.github.projectopenubl.xhandler.files.FileStore;
+import io.github.projectopenubl.xhandler.models.jpa.entities.Tenant;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;

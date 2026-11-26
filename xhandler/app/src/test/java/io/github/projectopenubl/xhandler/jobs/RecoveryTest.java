@@ -1,17 +1,19 @@
 package io.github.projectopenubl.xhandler.jobs;
 
+import io.github.projectopenubl.xhandler.models.jpa.entities.Job;
+
 import static io.github.projectopenubl.xhandler.Api.tenantOf;
-import static io.github.projectopenubl.xhandler.engine.EngineStub.Reply;
-import static io.github.projectopenubl.xhandler.engine.EngineStub.sendAnswer;
+import static io.github.projectopenubl.xhandler.xml.EngineStub.Reply;
+import static io.github.projectopenubl.xhandler.xml.EngineStub.sendAnswer;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.projectopenubl.xhandler.company.TestCompanies;
-import io.github.projectopenubl.xhandler.documents.Document;
-import io.github.projectopenubl.xhandler.documents.TestDocuments;
-import io.github.projectopenubl.xhandler.engine.EngineStub;
+import io.github.projectopenubl.xhandler.resources.TestCompanies;
+import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.resources.TestDocuments;
+import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -240,5 +242,5 @@ class RecoveryTest {
     }
 
     @Inject
-    io.github.projectopenubl.xhandler.tenancy.TenantAccess access;
+    io.github.projectopenubl.xhandler.security.TenantAccess access;
 }

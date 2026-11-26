@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.keys;
 
-import io.github.projectopenubl.xhandler.api.Ids;
-import io.github.projectopenubl.xhandler.tenancy.TenantAccess;
+import io.github.projectopenubl.xhandler.utils.Ids;
+import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
