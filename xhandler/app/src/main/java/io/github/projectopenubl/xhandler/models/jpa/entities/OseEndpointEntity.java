@@ -24,9 +24,6 @@ public class OseEndpointEntity extends PanacheEntityBase {
     private Instant createdAt;
     private Instant updatedAt;
 
-    public static Optional<OseEndpointEntity> of(UUID companyId) {
-        return find("companyId", companyId).firstResultOptional();
-    }
 
     public UUID getId() {
         return id;

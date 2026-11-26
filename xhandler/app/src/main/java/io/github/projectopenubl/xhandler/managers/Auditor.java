@@ -1,6 +1,7 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.AuditLogEntity;
+import io.github.projectopenubl.xhandler.models.AuditLogProvider;
+import io.github.projectopenubl.xhandler.models.AuditLogModel;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -16,10 +17,15 @@ import java.util.Map;
 @ApplicationScoped
 public class Auditor {
 
+    private final AuditLogProvider auditLogProvider;
+
+    public Auditor(AuditLogProvider auditLogProvider) {
+        this.auditLogProvider = auditLogProvider;
+    }
+
     @Transactional(Transactional.TxType.MANDATORY)
     public void record(TenantScope scope, String action, String objectType, Object objectId, Map<String, Object> details) {
-        AuditLogEntity entry = new AuditLogEntity();
-        entry.setId(Ids.newId());
+        AuditLogModel entry = auditLogProvider.newAuditLog(Ids.newId());
         entry.setAt(Instant.now());
         entry.setTenantId(scope.tenantId());
         entry.setActor(scope.actor().auditName() + (scope.role() == io.github.projectopenubl.xhandler.security.Role.SUPPORT ? " (support)" : ""));
@@ -27,7 +33,7 @@ public class Auditor {
         entry.setObjectType(objectType);
         entry.setObjectId(objectId == null ? null : objectId.toString());
         entry.setDetails(details);
-        entry.persist();
+        auditLogProvider.persist(entry);
     }
 
     @Transactional(Transactional.TxType.MANDATORY)

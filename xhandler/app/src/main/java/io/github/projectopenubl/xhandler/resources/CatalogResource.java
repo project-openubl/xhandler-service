@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.utils.Times;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -42,6 +43,8 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/catalogs/{kind}")
 public class CatalogResource {
 
+    private final CompanyManager companyManager;
+
     public record Entry(UUID id, String kind, String key, JsonNode data, Instant createdAt, Instant updatedAt) {}
 
     /** Required fields and the fields that make the key, per kind. */
@@ -64,7 +67,8 @@ public class CatalogResource {
     private final ObjectMapper json;
     private final io.github.projectopenubl.xhandler.managers.Auditor auditor;
 
-    public CatalogResource(TenantAccess access, EntityManager em, ObjectMapper json, io.github.projectopenubl.xhandler.managers.Auditor auditor) {
+    public CatalogResource(TenantAccess access, EntityManager em, ObjectMapper json, io.github.projectopenubl.xhandler.managers.Auditor auditor, CompanyManager companyManager) {
+        this.companyManager = companyManager;
         this.auditor = auditor;
         this.access = access;
         this.em = em;
@@ -78,7 +82,7 @@ public class CatalogResource {
             @QueryParam("q") String q, @QueryParam("limit") Integer limit, @QueryParam("offset") Integer offset) {
         var scope = access.enter(tenantId, Role.VIEWER);
         check(kind);
-        CompanyResource.find(companyId);
+        companyManager.getCompany(companyId);
         auditPersonalData(scope, kind, companyId, "list");
         int size = Page.limit(limit);
         int from = Page.offset(offset);
@@ -118,7 +122,7 @@ public class CatalogResource {
             ObjectNode data) {
         access.enter(tenantId, Role.OPERATOR);
         check(kind);
-        var company = CompanyResource.find(companyId);
+        var company = companyManager.getCompany(companyId);
         return Response.status(201).entity(upsert(company.getTenantId(), companyId, kind, data, null)).build();
     }
 

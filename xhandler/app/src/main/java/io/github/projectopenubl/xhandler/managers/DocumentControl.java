@@ -1,8 +1,10 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -28,6 +30,10 @@ import java.util.UUID;
 @ApplicationScoped
 public class DocumentControl {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
     /** Statuses a manual retry accepts: non-definitive ones, and exception (resend with the same number). */
     static final Set<String> RETRY_FROM = Set.of("pending_send", "in_progress", "unknown", "exception");
 
@@ -37,7 +43,9 @@ public class DocumentControl {
     private final Event<DocumentStatusChanged> statusChanged;
 
     public DocumentControl(Auditor auditor, EntityManager em, Event<DocumentStatusChanged> statusChanged,
-            io.github.projectopenubl.xhandler.jobs.JobStore jobs) {
+            io.github.projectopenubl.xhandler.jobs.JobStore jobs, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentEventProvider = documentEventProvider;
         this.auditor = auditor;
         this.jobs = jobs;
         this.em = em;
@@ -45,8 +53,8 @@ public class DocumentControl {
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
-    public DocumentEntity lock(UUID documentId) {
-        DocumentEntity doc = DocumentEntity.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
+    public DocumentModel lock(UUID documentId) {
+        DocumentModel doc = documentProvider.getDocumentForUpdate(documentId).orElse(null);
         if (doc == null) {
             throw ApiException.notFound();
         }
@@ -55,31 +63,31 @@ public class DocumentControl {
 
     /** Stops automatic attempts until released (hold_reason = operator). */
     @Transactional(Transactional.TxType.MANDATORY)
-    public DocumentEntity hold(TenantScope scope, UUID documentId) {
-        DocumentEntity doc = lock(documentId);
+    public DocumentModel hold(TenantScope scope, UUID documentId) {
+        DocumentModel doc = lock(documentId);
         if (doc.definitive()) {
             throw ApiException.conflict("document_final", "El documento ya tiene una respuesta definitiva.");
         }
         doc.setHoldReason("operator");
         doc.setUpdatedAt(Instant.now());
-        DocumentEventEntity.record(doc, null, "held", scope.actor().auditName(), null);
+        documentEventProvider.addDocumentEvent(doc, null, "held", scope.actor().auditName(), null);
         auditor.record(scope, "document.held", "document", doc.getId());
         return doc;
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
-    public DocumentEntity release(TenantScope scope, UUID documentId) {
-        DocumentEntity doc = lock(documentId);
+    public DocumentModel release(TenantScope scope, UUID documentId) {
+        DocumentModel doc = lock(documentId);
         if (doc.getHoldReason() == null) {
             return doc;
         }
         doc.setHoldReason(null);
-        if (DocumentEntity.RETRYABLE.contains(doc.getStatus())) {
+        if (DocumentModel.RETRYABLE.contains(doc.getStatus())) {
             doc.setNextAttemptAt(Instant.now());
             notifyReconciler();
         }
         doc.setUpdatedAt(Instant.now());
-        DocumentEventEntity.record(doc, null, "released", scope.actor().auditName(), null);
+        documentEventProvider.addDocumentEvent(doc, null, "released", scope.actor().auditName(), null);
         auditor.record(scope, "document.released", "document", doc.getId());
         return doc;
     }
@@ -89,12 +97,12 @@ public class DocumentControl {
      * pending_send} and is resent with the same number and bytes, once the user fixed the cause.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    public DocumentEntity retry(TenantScope scope, UUID documentId) {
-        DocumentEntity doc = lock(documentId);
+    public DocumentModel retry(TenantScope scope, UUID documentId) {
+        DocumentModel doc = lock(documentId);
         if (doc.getSummaryDocumentId() != null) {
             // In a resumen diario: only once that summary failed. It leaves the summary and goes
             // to SUNAT again (past D+5 that means a new resumen diario, §9.2.4)
-            DocumentEntity summary = DocumentEntity.findById(doc.getSummaryDocumentId());
+            DocumentModel summary = documentProvider.getDocument(doc.getSummaryDocumentId()).orElse(null);
             if (summary != null && !"rejected".equals(summary.getStatus()) && !"exception".equals(summary.getStatus())) {
                 throw ApiException.conflict("document_in_summary", "El documento sigue el resultado de su resumen diario.");
             }
@@ -120,25 +128,9 @@ public class DocumentControl {
     /** Bulk retry in the open tenant by filter (§24.1). Returns how many documents were retried. */
     @Transactional(Transactional.TxType.MANDATORY)
     public int retryWhere(TenantScope scope, UUID companyId, String status, LocalDate from, LocalDate to) {
-        StringBuilder query = new StringBuilder("status in :statuses and summaryDocumentId is null");
-        Map<String, Object> params = new java.util.HashMap<>();
-        params.put("statuses", status == null ? RETRY_FROM : Set.of(status));
-        if (companyId != null) {
-            query.append(" and companyId = :company");
-            params.put("company", companyId);
-        }
-        if (from != null) {
-            query.append(" and fechaEmision >= :from");
-            params.put("from", from);
-        }
-        if (to != null) {
-            query.append(" and fechaEmision <= :to");
-            params.put("to", to);
-        }
-        query.append(" order by id");
-        List<DocumentEntity> docs = DocumentEntity.<DocumentEntity>find(query.toString(), params).withLock(LockModeType.PESSIMISTIC_WRITE).list();
+        List<DocumentModel> docs = documentProvider.getDocumentsToRetryForUpdate(status == null ? RETRY_FROM : Set.of(status), companyId, from, to);
         int n = 0;
-        for (DocumentEntity doc : docs) {
+        for (DocumentModel doc : docs) {
             if (RETRY_FROM.contains(doc.getStatus())) {
                 retryLocked(scope, doc);
                 n++;
@@ -152,7 +144,7 @@ public class DocumentControl {
         return n;
     }
 
-    private void retryLocked(TenantScope scope, DocumentEntity doc) {
+    private void retryLocked(TenantScope scope, DocumentModel doc) {
         String previous = doc.getStatus();
         Instant now = Instant.now();
         if ("exception".equals(doc.getStatus())) {
@@ -167,7 +159,7 @@ public class DocumentControl {
         }
         doc.setProgressAt(now);
         doc.setUpdatedAt(now);
-        DocumentEventEntity.record(doc, null, "manual retry", scope.actor().auditName(), null);
+        documentEventProvider.addDocumentEvent(doc, null, "manual retry", scope.actor().auditName(), null);
         auditor.record(scope, "document.retried", "document", doc.getId());
         if (!doc.getStatus().equals(previous)) {
             statusChanged.fire(new DocumentStatusChanged(doc, previous, null));

@@ -1,15 +1,16 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.jobs.handlers.NotificationEmailJob;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.jobs.handlers.DeadlineAlerts;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
+import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -27,6 +28,8 @@ import java.util.UUID;
 @ApplicationScoped
 public class Notifications {
 
+    private final TenantProvider tenantProvider;
+
     public static final String DOCUMENT_EXCEPTION = "document.exception";
     public static final String DOCUMENT_AT_RISK = "document.at_risk";
     public static final String REJECTED_AFTER_DELIVERY = "document.rejected_after_delivery";
@@ -40,7 +43,8 @@ public class Notifications {
     private final EntityManager em;
     private final Jobs jobs;
 
-    public Notifications(EntityManager em, Jobs jobs) {
+    public Notifications(EntityManager em, Jobs jobs, TenantProvider tenantProvider) {
+        this.tenantProvider = tenantProvider;
         this.em = em;
         this.jobs = jobs;
     }
@@ -62,7 +66,7 @@ public class Notifications {
                     .setParameter("title", title).setParameter("body", body).setParameter("document", documentId)
                     .executeUpdate();
         }
-        TenantEntity tenant = TenantEntity.findById(tenantId);
+        TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
         if (email && tenant != null && tenant.getNotificationEmail() != null) {
             jobs.enqueue(new TenantScope(tenantId, Actor.PLATFORM, Role.PLATFORM), NotificationEmailJob.NAME, 3,
                     Map.of("to", tenant.getNotificationEmail(), "title", title, "body", body), List.of(), null);
@@ -70,7 +74,7 @@ public class Notifications {
     }
 
     void onStatusChanged(@Observes DocumentStatusChanged change) {
-        DocumentEntity d = change.document();
+        DocumentModel d = change.document();
         if (d.isSummary()) {
             return;
         }
@@ -86,7 +90,7 @@ public class Notifications {
     }
 
     void onAtRisk(@Observes DeadlineAlerts.DocumentAtRisk risk) {
-        DocumentEntity d = risk.document();
+        DocumentModel d = risk.document();
         publish(d.getTenantId(), DOCUMENT_AT_RISK, "Documento cerca de su plazo: " + d.serieNumero(),
                 "El documento " + d.serieNumero() + " aún no tiene respuesta de SUNAT y su plazo legal vence el " + d.getDeadlineAt()
                         + ". Se sigue reintentando.", d.getId());

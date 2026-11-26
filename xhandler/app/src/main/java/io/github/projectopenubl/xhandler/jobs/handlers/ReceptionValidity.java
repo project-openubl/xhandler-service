@@ -1,6 +1,7 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
@@ -27,6 +28,8 @@ import java.util.UUID;
 @ApplicationScoped
 public class ReceptionValidity implements JobHandler {
 
+    private final CompanyProvider companyProvider;
+
     private final EntityManager em;
     private final TenantAccess access;
     private final Engine engine;
@@ -34,7 +37,8 @@ public class ReceptionValidity implements JobHandler {
     private final PlatformCredentials platformCredentials;
 
     public ReceptionValidity(EntityManager em, TenantAccess access, Engine engine, CredentialService credentials,
-            PlatformCredentials platformCredentials) {
+            PlatformCredentials platformCredentials, CompanyProvider companyProvider) {
+        this.companyProvider = companyProvider;
         this.em = em;
         this.access = access;
         this.engine = engine;
@@ -78,7 +82,7 @@ public class ReceptionValidity implements JobHandler {
             Object[] r = (Object[]) em.createNativeQuery("""
                             SELECT company_id, supplier_ruc, tipo_comprobante, serie, numero, fecha_emision, total FROM xhandler.reception WHERE id = :id""")
                     .setParameter("id", receptionId).getSingleResult();
-            CompanyEntity company = CompanyEntity.findById(r[0]);
+            CompanyModel company = companyProvider.getCompany((UUID) r[0]).orElse(null);
             if (r[5] == null || r[6] == null) {
                 return null;
             }

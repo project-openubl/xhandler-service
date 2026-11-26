@@ -1,7 +1,9 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
+import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -24,24 +26,29 @@ import java.util.function.Consumer;
 @ApplicationScoped
 public class TestDocuments {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentFileProvider documentFileProvider;
+
     private static final AtomicLong NUMERO = new AtomicLong(System.currentTimeMillis() % 1_000_000_000L);
 
     private final TenantAccess access;
     private final FileStore files;
 
-    public TestDocuments(TenantAccess access, FileStore files) {
+    public TestDocuments(TenantAccess access, FileStore files, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentFileProvider = documentFileProvider;
         this.access = access;
         this.files = files;
     }
 
     public record Created(UUID id, String marker) {}
 
-    public Created pending(UUID tenantId, UUID companyId, String endpoint, Consumer<DocumentEntity> customize) {
+    public Created pending(UUID tenantId, UUID companyId, String endpoint, Consumer<DocumentModel> customize) {
         String marker = "doc-" + UUID.randomUUID();
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            DocumentEntity doc = new DocumentEntity();
-            doc.setId(Ids.newId());
+            DocumentModel doc = documentProvider.newDocument(Ids.newId());
             doc.setTenantId(tenantId);
             doc.setCompanyId(companyId);
             doc.setSunatEnv("fake");
@@ -62,27 +69,27 @@ public class TestDocuments {
                 customize.accept(doc);
             }
             doc.setIssueYear((short) doc.getFechaEmision().getYear());
-            doc.persist();
+            documentProvider.persist(doc);
             String xml = "<Invoice><cbc:ID>" + doc.serieNumero() + "</cbc:ID><marker>" + marker + "</marker></Invoice>";
             FileStore.Stored stored = files.put(tenantId, xml.getBytes(StandardCharsets.UTF_8));
-            DocumentFileEntity.record(doc, "xml_signed", stored);
+            documentFileProvider.addDocumentFile(doc, "xml_signed", stored);
             return new Created(doc.getId(), marker);
         });
     }
 
-    public DocumentEntity get(UUID tenantId, UUID documentId) {
+    public DocumentModel get(UUID tenantId, UUID documentId) {
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            DocumentEntity doc = DocumentEntity.findById(documentId);
-            DocumentEntity.getEntityManager().detach(doc);
+            DocumentModel doc = documentProvider.getDocument(documentId).orElse(null);
+            io.quarkus.hibernate.orm.panache.Panache.getEntityManager().detach(io.github.projectopenubl.xhandler.models.jpa.DocumentAdapter.toEntity(doc));
             return doc;
         });
     }
 
-    public void update(UUID tenantId, UUID documentId, Consumer<DocumentEntity> change) {
+    public void update(UUID tenantId, UUID documentId, Consumer<DocumentModel> change) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            change.accept(DocumentEntity.findById(documentId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE));
+            change.accept(documentProvider.getDocumentForUpdate(documentId).orElse(null));
         });
     }
 
@@ -96,7 +103,7 @@ public class TestDocuments {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
             for (UUID id : documentIds.stream().sorted().toList()) {
-                DocumentEntity doc = DocumentEntity.findById(id, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+                DocumentModel doc = documentProvider.getDocumentForUpdate(id).orElse(null);
                 doc.setNextAttemptAt(Instant.now().minus(Duration.ofSeconds(1)));
             }
         });

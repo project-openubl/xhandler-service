@@ -2,7 +2,7 @@ package io.github.projectopenubl.xhandler.managers;
 
 import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.managers.EmitQuota;
 import io.github.projectopenubl.xhandler.managers.Notifications;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -137,7 +137,7 @@ public class Entitlements implements EmitQuota {
 
     /** The plan allows a tenant SMTP server (free tenants send through the platform, §26.8). */
     @Transactional(Transactional.TxType.MANDATORY)
-    public void requireCustomSmtp(CompanyEntity company) {
+    public void requireCustomSmtp(CompanyModel company) {
         if (!usage(company.getTenantId()).plan().customSmtp()) {
             throw new ApiException(402, "plan_required", "Su plan no permite un servidor de correo propio.");
         }

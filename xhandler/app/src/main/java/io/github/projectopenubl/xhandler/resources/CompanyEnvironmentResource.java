@@ -1,8 +1,14 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.CredentialProvider;
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
+import io.github.projectopenubl.xhandler.models.SeriesProvider;
+import io.github.projectopenubl.xhandler.models.SigningKeyProvider;
+import io.github.projectopenubl.xhandler.models.CredentialModel;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.DefaultSeries;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.SeriesEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
+import io.github.projectopenubl.xhandler.models.SeriesModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Constraints;
@@ -11,7 +17,7 @@ import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
-import io.github.projectopenubl.xhandler.models.jpa.entities.SigningKeyEntity;
+import io.github.projectopenubl.xhandler.models.SigningKeyModel;
 import io.github.projectopenubl.xhandler.managers.CredentialService;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -49,6 +55,16 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}")
 public class CompanyEnvironmentResource {
 
+    private final CredentialProvider credentialProvider;
+
+    private final CompanyManager companyManager;
+
+    private final SeriesProvider seriesProvider;
+
+    private final SigningKeyProvider signingKeyProvider;
+
+    private final CompanyProvider companyProvider;
+
     public record Settings(
             @Size(max = 300) String nombreComercial,
             @Email @Size(max = 300) String email,
@@ -75,7 +91,12 @@ public class CompanyEnvironmentResource {
     private final io.github.projectopenubl.xhandler.files.FileStore files;
 
     public CompanyEnvironmentResource(TenantAccess access, Auditor auditor, CredentialService credentials, Engine engine,
-            io.github.projectopenubl.xhandler.files.FileStore files) {
+            io.github.projectopenubl.xhandler.files.FileStore files, CompanyProvider companyProvider, SigningKeyProvider signingKeyProvider, SeriesProvider seriesProvider, CompanyManager companyManager, CredentialProvider credentialProvider) {
+        this.credentialProvider = credentialProvider;
+        this.companyManager = companyManager;
+        this.seriesProvider = seriesProvider;
+        this.signingKeyProvider = signingKeyProvider;
+        this.companyProvider = companyProvider;
         this.files = files;
         this.access = access;
         this.auditor = auditor;
@@ -90,7 +111,7 @@ public class CompanyEnvironmentResource {
     public CompanyResource.CompanyView settings(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @Valid Settings settings) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.findForUpdate(companyId);
+        CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         if (settings.nombreComercial() != null) {
             company.setNombreComercial(settings.nombreComercial().strip());
         }
@@ -135,7 +156,7 @@ public class CompanyEnvironmentResource {
     @Transactional
     public CompanyResource.CompanyView logo(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, byte[] image) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.findForUpdate(companyId);
+        CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         company.setLogoRef(files.put(company.getTenantId(), logoImage(image)).key());
         auditor.record(scope, "company.logo_changed", "company", companyId);
         return CompanyResource.view(company);
@@ -189,7 +210,7 @@ public class CompanyEnvironmentResource {
     public CompanyResource.CompanyView environment(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @Valid EnvironmentChange change) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyEntity.findById(companyId, LockModeType.PESSIMISTIC_WRITE);
+        CompanyModel company = companyProvider.getCompanyForUpdate(companyId).orElse(null);
         if (company == null || company.getDeletedAt() != null) {
             throw ApiException.notFound();
         }
@@ -201,33 +222,31 @@ public class CompanyEnvironmentResource {
             if (company.getRucVerifiedAt() == null) {
                 throw ApiException.conflict("ruc_not_verified", "Verifique el RUC con su usuario SOL antes de pasar a producción.");
             }
-            SigningKeyEntity key = SigningKeyEntity.active(company.getId()).orElseThrow(() ->
+            SigningKeyModel key = signingKeyProvider.getActiveSigningKey(company.getId()).orElseThrow(() ->
                     ApiException.conflict("no_certificate", "La empresa no tiene un certificado digital."));
             if (key.getValidUntil().isBefore(Instant.now())) {
                 throw ApiException.conflict("certificate_expired", "El certificado digital de la empresa venció.");
             }
-            if (io.github.projectopenubl.xhandler.models.jpa.entities.CredentialEntity.count("companyId = ?1 and kind = 'sol'", company.getId()) == 0) {
+            if (credentialProvider.getCredential(company.getId(), "sol").isEmpty()) {
                 throw ApiException.conflict("no_credentials", "Registre el usuario SOL de la empresa antes de pasar a producción.");
             }
         }
         String previous = company.getSunatEnv();
         company.setSunatEnv(target);
         for (DefaultSeries.Entry entry : DefaultSeries.ENTRIES) {
-            if (SeriesEntity.count("companyId = ?1 and sunatEnv = ?2 and tipoComprobante = ?3 and serie = ?4", company.getId(), target,
-                    entry.tipoComprobante(), entry.serie()) == 0) {
-                SeriesEntity series = new SeriesEntity();
-                series.setId(Ids.newId());
+            if (!seriesProvider.seriesExists(company.getId(), target, entry.tipoComprobante(), entry.serie())) {
+                SeriesModel series = seriesProvider.newSeries(Ids.newId());
                 series.setTenantId(company.getTenantId());
                 series.setCompanyId(company.getId());
                 series.setSunatEnv(target);
                 series.setTipoComprobante(entry.tipoComprobante());
                 series.setSerie(entry.serie());
                 series.setDefault(true);
-                series.persist();
+                seriesProvider.persist(series);
             }
         }
         try {
-            CompanyEntity.flush();
+            companyProvider.flush();
         } catch (PersistenceException e) {
             if (Constraints.violated(e).isPresent()) {
                 throw ApiException.conflict("ruc_claimed", "El RUC ya está verificado por otra cuenta en ese ambiente.");
@@ -250,13 +269,9 @@ public class CompanyEnvironmentResource {
         record Check(String ruc, EngineModels.Credentials credentials) {}
         Check check = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
-            CompanyEntity company = CompanyResource.find(companyId);
+            CompanyModel company = companyManager.getCompany(companyId);
             // Not a password-guessing oracle against SUNAT: failures per RUC, across tenants
-            Object failures = io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity.getEntityManager()
-                    .createNativeQuery("SELECT xhandler.recent_failed_verifications(:ruc, interval '1 hour')")
-                    .setParameter("ruc", company.getRuc())
-                    .getSingleResult();
-            if (((Number) failures).intValue() >= MAX_FAILURES_PER_HOUR) {
+            if (companyProvider.countRecentFailedVerifications(company.getRuc()) >= MAX_FAILURES_PER_HOUR) {
                 throw new ApiException(429, "too_many_attempts", "Demasiados intentos fallidos de verificación para este RUC. Intente en una hora.");
             }
             Map<String, String> sol = credentials.read(scope, company, "sol", "ruc-verification").orElseThrow(() ->
@@ -284,11 +299,11 @@ public class CompanyEnvironmentResource {
         }
         return QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
-            CompanyEntity company = CompanyResource.findForUpdate(companyId);
+            CompanyModel company = companyManager.getCompanyForUpdate(companyId);
             if (company.getRucVerifiedAt() == null) {
                 company.setRucVerifiedAt(Instant.now());
                 try {
-                    CompanyEntity.flush();
+                    companyProvider.flush();
                 } catch (PersistenceException e) {
                     if (Constraints.violated(e).isPresent()) {
                         throw ApiException.conflict("ruc_claimed", "El RUC ya está verificado por otra cuenta.");

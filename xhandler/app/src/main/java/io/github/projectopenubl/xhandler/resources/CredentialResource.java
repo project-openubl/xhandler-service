@@ -1,9 +1,11 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.CredentialProvider;
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.managers.CredentialService;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CredentialEntity;
+import io.github.projectopenubl.xhandler.models.CredentialModel;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -26,6 +28,10 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/credentials")
 public class CredentialResource {
 
+    private final CredentialProvider credentialProvider;
+
+    private final CompanyManager companyManager;
+
     public record CredentialView(String kind, String label, Instant updatedAt) {}
 
     /** SUNAT SOL user (a secondary user with the CPE profile). */
@@ -38,7 +44,9 @@ public class CredentialResource {
     private final io.github.projectopenubl.xhandler.managers.SireService sire;
 
     public CredentialResource(TenantAccess access, CredentialService credentials, io.github.projectopenubl.xhandler.clients.Egress egress,
-            io.github.projectopenubl.xhandler.managers.Entitlements entitlements, io.github.projectopenubl.xhandler.managers.SireService sire) {
+            io.github.projectopenubl.xhandler.managers.Entitlements entitlements, io.github.projectopenubl.xhandler.managers.SireService sire, CompanyManager companyManager, CredentialProvider credentialProvider) {
+        this.credentialProvider = credentialProvider;
+        this.companyManager = companyManager;
         this.sire = sire;
         this.entitlements = entitlements;
         this.access = access;
@@ -51,8 +59,8 @@ public class CredentialResource {
     @Transactional
     public List<CredentialView> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
-        CompanyEntity company = CompanyResource.find(companyId);
-        List<CredentialEntity> list = CredentialEntity.list("companyId = ?1 order by kind", company.getId());
+        CompanyModel company = companyManager.getCompany(companyId);
+        List<CredentialModel> list = credentialProvider.getCredentials(company.getId());
         return list.stream().map(c -> new CredentialView(c.getKind(), c.getLabel(), c.getUpdatedAt())).toList();
     }
 
@@ -63,8 +71,8 @@ public class CredentialResource {
     public CredentialView putSol(
             @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SolCredentials request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.find(companyId);
-        CredentialEntity stored = credentials.store(scope, company, "sol",
+        CompanyModel company = companyManager.getCompany(companyId);
+        CredentialModel stored = credentials.store(scope, company, "sol",
                 Map.of("username", request.username(), "password", request.password()), mask(request.username()));
         return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
     }
@@ -80,8 +88,8 @@ public class CredentialResource {
     public CredentialView putGre(
             @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid GreCredentials request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.find(companyId);
-        CredentialEntity stored = credentials.store(scope, company, "gre", Map.of("username", request.username(), "password",
+        CompanyModel company = companyManager.getCompany(companyId);
+        CredentialModel stored = credentials.store(scope, company, "gre", Map.of("username", request.username(), "password",
                 request.password(), "client_id", request.clientId(), "client_secret", request.clientSecret()), mask(request.username()));
         return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
     }
@@ -100,8 +108,8 @@ public class CredentialResource {
     public CredentialView putSire(
             @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SireCredentials request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.find(companyId);
-        CredentialEntity stored = credentials.store(scope, company, "sire", Map.of("username", request.username(), "password",
+        CompanyModel company = companyManager.getCompany(companyId);
+        CredentialModel stored = credentials.store(scope, company, "sire", Map.of("username", request.username(), "password",
                 request.password(), "client_id", request.clientId(), "client_secret", request.clientSecret()), mask(request.username()));
         // SIRE periods waiting for credentials resume where they stopped
         sire.resumeAfterCredentials(company.getId());
@@ -120,11 +128,11 @@ public class CredentialResource {
     public CredentialView putSmtp(
             @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SmtpCredentials request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.find(companyId);
+        CompanyModel company = companyManager.getCompany(companyId);
         // A tenant-supplied host: it must resolve to public addresses (DESIGN.md §16)
         egress.checkHost(request.host());
         entitlements.requireCustomSmtp(company);
-        CredentialEntity stored = credentials.store(scope, company, "smtp", Map.of("host", request.host(), "port", String.valueOf(request.port()),
+        CredentialModel stored = credentials.store(scope, company, "smtp", Map.of("host", request.host(), "port", String.valueOf(request.port()),
                 "username", request.username(), "password", request.password(), "from", request.from(),
                 "start_tls", String.valueOf(!Boolean.FALSE.equals(request.startTls()))), request.from());
         return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
@@ -140,13 +148,13 @@ public class CredentialResource {
     public CredentialView putLookup(
             @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid LookupCredentials request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        CompanyEntity company = CompanyResource.find(companyId);
+        CompanyModel company = companyManager.getCompany(companyId);
         egress.check(request.url().replace("{tipo}", "ruc").replace("{numero}", "20000000001"));
         Map<String, String> fields = new java.util.HashMap<>(Map.of("url", request.url()));
         if (request.token() != null) {
             fields.put("token", request.token());
         }
-        CredentialEntity stored = credentials.store(scope, company, "lookup", fields, java.net.URI.create(request.url().replace("{", "").replace("}", "")).getHost());
+        CredentialModel stored = credentials.store(scope, company, "lookup", fields, java.net.URI.create(request.url().replace("{", "").replace("}", "")).getHost());
         return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
     }
 

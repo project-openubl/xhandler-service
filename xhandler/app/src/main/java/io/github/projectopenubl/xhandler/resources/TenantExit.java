@@ -1,11 +1,12 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.utils.Times;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
+import io.github.projectopenubl.xhandler.models.JobModel;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
@@ -13,7 +14,7 @@ import io.github.projectopenubl.xhandler.pdf.DocumentPdf;
 import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
+import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -58,6 +59,8 @@ import org.jboss.logging.Logger;
 @Path("/api/v1/tenants/{tenantId}")
 public class TenantExit {
 
+    private final TenantProvider tenantProvider;
+
     public record ExitRequest(@NotBlank String confirmName) {}
 
     /** An export: {@code parts} lists the ZIPs to download (the index first), once {@code done}. */
@@ -81,7 +84,8 @@ public class TenantExit {
     private final FileStore files;
     private final Auditor auditor;
 
-    public TenantExit(TenantAccess access, EntityManager em, Jobs jobs, FileStore files, Auditor auditor) {
+    public TenantExit(TenantAccess access, EntityManager em, Jobs jobs, FileStore files, Auditor auditor, TenantProvider tenantProvider) {
+        this.tenantProvider = tenantProvider;
         this.access = access;
         this.em = em;
         this.jobs = jobs;
@@ -104,7 +108,7 @@ public class TenantExit {
         UUID id = Ids.newId();
         em.createNativeQuery("INSERT INTO xhandler.tenant_export (id, tenant_id, requested_by) VALUES (:id, :t, :by)")
                 .setParameter("id", id).setParameter("t", tenantId).setParameter("by", scope.actor().auditName()).executeUpdate();
-        JobEntity job = jobs.enqueue(scope, Export.NAME, 4, Map.of("export_id", id.toString()), List.of("export:" + tenantId), null);
+        JobModel job = jobs.enqueue(scope, Export.NAME, 4, Map.of("export_id", id.toString()), List.of("export:" + tenantId), null);
         em.createNativeQuery("UPDATE xhandler.tenant_export SET job_id = :j WHERE id = :id").setParameter("j", job.getId()).setParameter("id", id)
                 .executeUpdate();
         auditor.record(scope, "tenant.export_requested", "tenant", tenantId, Map.of());
@@ -160,7 +164,7 @@ public class TenantExit {
     @Transactional
     public ExitView exit(@PathParam("tenantId") UUID tenantId, @Valid ExitRequest request) {
         TenantScope scope = access.enter(tenantId, Role.OWNER);
-        TenantEntity tenant = TenantEntity.findById(tenantId);
+        TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
         if (!"active".equals(tenant.getStatus())) {
             throw ApiException.conflict("not_active", "La organización no está activa.");
         }

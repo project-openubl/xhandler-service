@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.jobs.handlers.ReportJob;
 
@@ -7,9 +8,9 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
-import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
+import io.github.projectopenubl.xhandler.models.JobModel;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
 import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.files.FileStore;
@@ -44,6 +45,8 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/reports")
 public class ReportResource {
 
+    private final CompanyManager companyManager;
+
     public record ReportRequest(
             @NotBlank @Pattern(regexp = "sales|purchases") String register,
             @NotBlank @Pattern(regexp = "csv|xlsx|ple|sire") String format,
@@ -59,7 +62,8 @@ public class ReportResource {
     private final FileStore files;
     private final Auditor auditor;
 
-    public ReportResource(TenantAccess access, Jobs jobs, EntityManager em, FileStore files, Auditor auditor) {
+    public ReportResource(TenantAccess access, Jobs jobs, EntityManager em, FileStore files, Auditor auditor, CompanyManager companyManager) {
+        this.companyManager = companyManager;
         this.access = access;
         this.jobs = jobs;
         this.em = em;
@@ -74,7 +78,7 @@ public class ReportResource {
     @Transactional
     public Response create(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid ReportRequest request) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        CompanyEntity company = CompanyResource.find(companyId);
+        CompanyModel company = companyManager.getCompany(companyId);
         UUID id = Ids.newId();
         em.createNativeQuery("""
                         INSERT INTO xhandler.report (id, tenant_id, company_id, sunat_env, register, format, period, requested_by)
@@ -82,7 +86,7 @@ public class ReportResource {
                 .setParameter("id", id).setParameter("t", tenantId).setParameter("c", company.getId()).setParameter("env", company.getSunatEnv())
                 .setParameter("register", request.register()).setParameter("format", request.format()).setParameter("period", request.period())
                 .setParameter("by", scope.actor().auditName()).executeUpdate();
-        JobEntity job = jobs.enqueue(scope, ReportJob.NAME, 4, Map.of("report_id", id.toString()), List.of(), null);
+        JobModel job = jobs.enqueue(scope, ReportJob.NAME, 4, Map.of("report_id", id.toString()), List.of(), null);
         em.createNativeQuery("UPDATE xhandler.report SET job_id = :job WHERE id = :id").setParameter("job", job.getId()).setParameter("id", id)
                 .executeUpdate();
         auditor.record(scope, "report.requested", "company", companyId,
@@ -96,7 +100,7 @@ public class ReportResource {
     public Page<ReportView> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @QueryParam("limit") Integer limit, @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
-        CompanyResource.find(companyId);
+        companyManager.getCompany(companyId);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
         @SuppressWarnings("unchecked")
@@ -113,7 +117,7 @@ public class ReportResource {
     public ReportView get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @PathParam("reportId") UUID reportId) {
         access.enter(tenantId, Role.VIEWER);
-        CompanyResource.find(companyId);
+        companyManager.getCompany(companyId);
         ReportView view = view(reportId);
         if (view == null || !companyId.equals(companyOf(reportId))) {
             throw ApiException.notFound();
@@ -134,7 +138,7 @@ public class ReportResource {
     public Response file(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @PathParam("reportId") UUID reportId) {
         TenantScope scope = access.enter(tenantId, Role.VIEWER);
-        CompanyResource.find(companyId);
+        companyManager.getCompany(companyId);
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery("SELECT file_ref, file_name, format FROM xhandler.report WHERE id = :id AND company_id = :c")
                 .setParameter("id", reportId).setParameter("c", companyId).getResultList();

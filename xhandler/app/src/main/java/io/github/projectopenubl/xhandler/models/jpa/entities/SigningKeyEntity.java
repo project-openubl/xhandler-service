@@ -38,9 +38,6 @@ public class SigningKeyEntity extends PanacheEntityBase {
     @UpdateTimestamp
     private Instant updatedAt;
 
-    public static Optional<SigningKeyEntity> active(UUID companyId) {
-        return find("companyId = ?1 and status = 'active'", companyId).firstResultOptional();
-    }
 
     public UUID getId() {
         return id;

@@ -1,15 +1,19 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.managers.AccessLinks;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
+import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.managers.Numbering;
 import io.github.projectopenubl.xhandler.managers.Routes;
@@ -42,6 +46,14 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class UblUploadService {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentFileProvider documentFileProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
+    private final CompanyProvider companyProvider;
+
     static final int MAX_BYTES = 5 * 1024 * 1024;
     static final Set<String> TIPOS = Set.of("01", "03", "07", "08", "09", "31", "20", "40");
 
@@ -60,7 +72,11 @@ public class UblUploadService {
 
     public UblUploadService(TenantAccess access, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
             Numbering numbering, Routes routes, AccessLinks links, Auditor auditor, EntityManager em, ObjectMapper json,
-            io.github.projectopenubl.xhandler.managers.EmitService emit) {
+            io.github.projectopenubl.xhandler.managers.EmitService emit, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentFileProvider = documentFileProvider;
+        this.documentEventProvider = documentEventProvider;
+        this.companyProvider = companyProvider;
         this.emit = emit;
         this.access = access;
         this.engine = engine;
@@ -98,7 +114,7 @@ public class UblUploadService {
         return emit.admitted(tenantId, companyId, false, true, () -> QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.OPERATOR);
             emit.boundLockWaits();
-            CompanyEntity company = CompanyEntity.findById(companyId, LockModeType.PESSIMISTIC_READ);
+            CompanyModel company = companyProvider.getCompanyForShare(companyId).orElse(null);
             if (company == null || company.getDeletedAt() != null) {
                 throw ApiException.notFound();
             }
@@ -129,8 +145,7 @@ public class UblUploadService {
             FileStore.Stored input = files.put(tenantId, xmlBytes);
             FileStore.Stored stored = files.put(tenantId, signedXml.getBytes(StandardCharsets.UTF_8));
             Instant now = Instant.now();
-            DocumentEntity doc = new DocumentEntity();
-            doc.setId(documentId);
+            DocumentModel doc = documentProvider.newDocument(documentId);
             doc.setTenantId(tenantId);
             doc.setCompanyId(company.getId());
             doc.setSunatEnv(company.getSunatEnv());
@@ -146,7 +161,7 @@ public class UblUploadService {
             doc.setCustomerNumero(identity.customerNumero());
             doc.setMoneda(identity.moneda());
             doc.setTotal(identity.total() == null ? null : new BigDecimal(identity.total()));
-            doc.setAmounts(DocumentEntity.amountsOf(identity.amounts()));
+            doc.setAmounts(DocumentModel.amountsOf(identity.amounts()));
             doc.setPaymentTerms("01".equals(tipo) ? (identity.paymentTerms() == null ? "contado" : identity.paymentTerms()) : null);
             doc.setStatus("pending_send");
             doc.setDigestValue(digest);
@@ -159,7 +174,8 @@ public class UblUploadService {
             doc.setCreatedAt(now);
             doc.setUpdatedAt(now);
             try {
-                doc.persistAndFlush();
+                documentProvider.persist(doc);
+                documentProvider.flush();
             } catch (jakarta.persistence.PersistenceException e) {
                 if (io.github.projectopenubl.xhandler.utils.Constraints.violated(e)
                         .filter(name -> name.startsWith("document_number") || name.contains("tipo_comprobante_serie")).isPresent()) {
@@ -167,9 +183,9 @@ public class UblUploadService {
                 }
                 throw e;
             }
-            DocumentFileEntity.record(doc, "input", input);
-            DocumentFileEntity.record(doc, "xml_signed", stored);
-            DocumentEventEntity.record(doc, null, identity.signed() ? "uploaded (UBL XML, signed by the issuer)" : "uploaded (UBL XML)",
+            documentFileProvider.addDocumentFile(doc, "input", input);
+            documentFileProvider.addDocumentFile(doc, "xml_signed", stored);
+            documentEventProvider.addDocumentEvent(doc, null, identity.signed() ? "uploaded (UBL XML, signed by the issuer)" : "uploaded (UBL XML)",
                     scope.actor().auditName(), correlationId);
             auditor.record(scope, "document.uploaded", "document", doc.getId(), Map.of("serie_numero", doc.serieNumero()));
             String token = links.create(doc);

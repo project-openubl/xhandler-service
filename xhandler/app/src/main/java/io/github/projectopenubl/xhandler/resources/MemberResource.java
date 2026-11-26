@@ -1,7 +1,9 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantMemberEntity;
+import io.github.projectopenubl.xhandler.models.TenantProvider;
+import io.github.projectopenubl.xhandler.models.TenantMemberProvider;
+import io.github.projectopenubl.xhandler.models.TenantModel;
+import io.github.projectopenubl.xhandler.models.TenantMemberModel;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -45,6 +47,10 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}/members")
 public class MemberResource {
 
+    private final TenantProvider tenantProvider;
+
+    private final TenantMemberProvider tenantMemberProvider;
+
     public record MemberView(UUID id, String kind, String subject, String role) {}
 
     public record AddMember(
@@ -59,7 +65,9 @@ public class MemberResource {
     private final Idempotency idempotency;
     private final EntityManager em;
 
-    public MemberResource(TenantAccess access, Auditor auditor, Idempotency idempotency, EntityManager em) {
+    public MemberResource(TenantAccess access, Auditor auditor, Idempotency idempotency, EntityManager em, TenantMemberProvider tenantMemberProvider, TenantProvider tenantProvider) {
+        this.tenantProvider = tenantProvider;
+        this.tenantMemberProvider = tenantMemberProvider;
         this.access = access;
         this.auditor = auditor;
         this.idempotency = idempotency;
@@ -71,7 +79,7 @@ public class MemberResource {
     @Transactional
     public List<MemberView> list(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.ADMIN);
-        List<TenantMemberEntity> members = TenantMemberEntity.list("order by createdAt");
+        List<TenantMemberModel> members = tenantMemberProvider.getTenantMembers();
         return members.stream().map(MemberResource::view).toList();
     }
 
@@ -85,14 +93,14 @@ public class MemberResource {
             @Valid AddMember request) {
         return idempotency.create(tenantId, Role.ADMIN, idempotencyKey, idempotency.hash("member", tenantId, request), () -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
-            TenantMemberEntity member = new TenantMemberEntity();
-            member.setId(Ids.newId());
+            TenantMemberModel member = tenantMemberProvider.newTenantMember(Ids.newId());
             member.setTenantId(tenantId);
             member.setKind(request.kind());
             member.setSubject(request.subject().strip());
             member.setRole(request.role());
             try {
-                member.persistAndFlush();
+                tenantMemberProvider.persist(member);
+                tenantMemberProvider.flush();
             } catch (PersistenceException e) {
                 if (Constraints.violated(e).filter(name -> name.startsWith("tenant_member_") && name.endsWith("_key")).isPresent()) {
                     throw ApiException.conflict("member_exists", "El miembro ya pertenece a la cuenta.");
@@ -115,7 +123,7 @@ public class MemberResource {
     @Transactional
     public MemberView update(@PathParam("tenantId") UUID tenantId, @PathParam("memberId") UUID memberId, @Valid UpdateMember request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        TenantMemberEntity member = lockedMember(scope, memberId);
+        TenantMemberModel member = lockedMember(scope, memberId);
         String previous = member.getRole();
         if (!previous.equals(request.role())) {
             keepAnOwner(member);
@@ -135,9 +143,9 @@ public class MemberResource {
     @Transactional
     public Response remove(@PathParam("tenantId") UUID tenantId, @PathParam("memberId") UUID memberId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        TenantMemberEntity member = lockedMember(scope, memberId);
+        TenantMemberModel member = lockedMember(scope, memberId);
         keepAnOwner(member);
-        member.delete();
+        tenantMemberProvider.delete(member);
         auditor.record(scope, "member.removed", "tenant_member", member.getId(),
                 Map.of("kind", member.getKind(), "subject", member.getSubject(), "role", member.getRole()));
         return Response.noContent().build();
@@ -147,12 +155,12 @@ public class MemberResource {
      * The member, after locking the tenant row: member changes of a tenant run one at a time, so the
      * owner count read next stays true until commit. Owners are changed by owners only.
      */
-    private TenantMemberEntity lockedMember(TenantScope scope, UUID memberId) {
-        TenantEntity tenant = em.find(TenantEntity.class, scope.tenantId(), LockModeType.PESSIMISTIC_WRITE);
+    private TenantMemberModel lockedMember(TenantScope scope, UUID memberId) {
+        TenantModel tenant = tenantProvider.getTenantForUpdate(scope.tenantId()).orElse(null);
         if (tenant == null) {
             throw ApiException.notFound();
         }
-        TenantMemberEntity member = TenantMemberEntity.findById(memberId);
+        TenantMemberModel member = tenantMemberProvider.getTenantMember(memberId).orElse(null);
         if (member == null) {
             throw ApiException.notFound();
         }
@@ -163,13 +171,13 @@ public class MemberResource {
     }
 
     /** A tenant with owners keeps at least one (a partner's tenant may have none to begin with). */
-    private static void keepAnOwner(TenantMemberEntity member) {
-        if (Role.OWNER.json().equals(member.getRole()) && TenantMemberEntity.count("role = ?1", Role.OWNER.json()) <= 1) {
+    private void keepAnOwner(TenantMemberModel member) {
+        if (Role.OWNER.json().equals(member.getRole()) && tenantMemberProvider.countTenantMembers(Role.OWNER.json()) <= 1) {
             throw ApiException.conflict("last_owner", "La cuenta debe conservar al menos un propietario.");
         }
     }
 
-    private static MemberView view(TenantMemberEntity m) {
+    private static MemberView view(TenantMemberModel m) {
         return new MemberView(m.getId(), m.getKind(), m.getSubject(), m.getRole());
     }
 }

@@ -1,14 +1,18 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import io.github.projectopenubl.xhandler.managers.Routes;
 import io.github.projectopenubl.xhandler.models.Outcome;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
+import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.utils.OutcomePolicy;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
@@ -48,6 +52,14 @@ import org.jboss.logging.Logger;
  */
 @ApplicationScoped
 public class AttemptHandler implements JobHandler {
+
+    private final DocumentProvider documentProvider;
+
+    private final DocumentFileProvider documentFileProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
+    private final CompanyProvider companyProvider;
 
     private static final Logger LOG = Logger.getLogger(AttemptHandler.class);
 
@@ -108,7 +120,11 @@ public class AttemptHandler implements JobHandler {
             MeterRegistry metrics,
             // SUNAT read timeout (120 s) + margin; nests inside the app → engine timeout (§10.8)
             @ConfigProperty(name = "xhandler.documents.resolve-safety", defaultValue = "160s") Duration resolveSafety,
-            io.github.projectopenubl.xhandler.jobs.JobConfig jobs) {
+            io.github.projectopenubl.xhandler.jobs.JobConfig jobs, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentFileProvider = documentFileProvider;
+        this.documentEventProvider = documentEventProvider;
+        this.companyProvider = companyProvider;
         this.access = access;
         this.routes = routes;
         this.engine = engine;
@@ -167,8 +183,8 @@ public class AttemptHandler implements JobHandler {
         try {
             QuarkusTransaction.requiringNew().run(() -> {
                 access.enterAsPlatform(plan.tenantId());
-                DocumentEntity doc = DocumentEntity.findById(plan.documentId(), LockModeType.PESSIMISTIC_WRITE);
-                if (doc == null || doc.getAttempts() != plan.attempt() || !DocumentEntity.RETRYABLE.contains(doc.getStatus())) {
+                DocumentModel doc = documentProvider.getDocumentForUpdate(plan.documentId()).orElse(null);
+                if (doc == null || doc.getAttempts() != plan.attempt() || !DocumentModel.RETRYABLE.contains(doc.getStatus())) {
                     return;
                 }
                 String previous = doc.getStatus();
@@ -176,7 +192,7 @@ public class AttemptHandler implements JobHandler {
                 doc.setAttemptJobId(null);
                 doc.setNextAttemptAt(plan.sendStartedAt().plus(resolveSafety));
                 doc.setUpdatedAt(Instant.now());
-                DocumentEventEntity.record(doc, null, "unknown: the outcome could not be recorded", "platform:worker", context.correlationId());
+                documentEventProvider.addDocumentEvent(doc, null, "unknown: the outcome could not be recorded", "platform:worker", context.correlationId());
                 if (!previous.equals(doc.getStatus())) {
                     statusChanged.fire(new DocumentStatusChanged(doc, previous, context.correlationId()));
                 }
@@ -189,11 +205,11 @@ public class AttemptHandler implements JobHandler {
 
     private Object begin(JobContext context, UUID documentId) {
         TenantScope scope = access.enterAsPlatform(context.tenantId());
-        DocumentEntity doc = DocumentEntity.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
+        DocumentModel doc = documentProvider.getDocumentForUpdate(documentId).orElse(null);
         if (doc == null) {
             return "missing";
         }
-        if (!DocumentEntity.RETRYABLE.contains(doc.getStatus())) {
+        if (!DocumentModel.RETRYABLE.contains(doc.getStatus())) {
             return "definitive";
         }
         if (doc.getSummaryDocumentId() != null) {
@@ -219,15 +235,15 @@ public class AttemptHandler implements JobHandler {
         } else {
             action = Action.SEND;
         }
-        DocumentFileEntity xml = DocumentFileEntity.of(doc.getId(), "xml_signed").orElse(null);
+        DocumentFileModel xml = documentFileProvider.getDocumentFile(doc.getId(), "xml_signed").orElse(null);
         if (xml == null) {
             // Can't happen through emit; a person must look instead of re-leasing it forever
             doc.setNextAttemptAt(null);
             doc.setHoldReason("needs_attention");
-            DocumentEventEntity.record(doc, null, "no signed XML stored: needs attention", "platform:worker", context.correlationId());
+            documentEventProvider.addDocumentEvent(doc, null, "no signed XML stored: needs attention", "platform:worker", context.correlationId());
             return "no_signed_xml";
         }
-        CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
+        CompanyModel company = companyProvider.getCompany(doc.getCompanyId()).orElse(null);
         Routes.Target target;
         try {
             target = routes.target(scope, company, doc);
@@ -261,20 +277,20 @@ public class AttemptHandler implements JobHandler {
     }
 
     /** The lines of a summary: documents it adds (RC estado 1) and documents it voids (RA, RR, RC estado 3). */
-    private static List<Line> summaryLines(CompanyEntity company, DocumentEntity summary, Routes.Target target) {
+    private List<Line> summaryLines(CompanyModel company, DocumentModel summary, Routes.Target target) {
         List<Line> lines = new java.util.ArrayList<>();
-        List<DocumentEntity> added = DocumentEntity.list("summaryDocumentId = ?1 order by id", summary.getId());
-        List<DocumentEntity> voided = DocumentEntity.list("voidedByDocumentId = ?1 order by id", summary.getId());
-        for (DocumentEntity d : added) {
+        List<DocumentModel> added = documentProvider.getSummaryLines(summary.getId());
+        List<DocumentModel> voided = documentProvider.getVoidedBy(summary.getId());
+        for (DocumentModel d : added) {
             lines.add(new Line(d.getId(), true, validityCheck(company, d, target)));
         }
-        for (DocumentEntity d : voided) {
+        for (DocumentModel d : voided) {
             lines.add(new Line(d.getId(), false, validityCheck(company, d, target)));
         }
         return lines;
     }
 
-    private static EngineModels.ValidityRequest validityCheck(CompanyEntity company, DocumentEntity d, Routes.Target target) {
+    private static EngineModels.ValidityRequest validityCheck(CompanyModel company, DocumentModel d, Routes.Target target) {
         // Anonymous boletas have no buyer document: SUNAT's convention is type 0 / number "-"
         return new EngineModels.ValidityRequest(target.environment(), target.credentials(),
                 new EngineModels.DocumentKey(company.getRuc(), d.getTipoComprobante(), d.getSerie(), d.getNumero()),
@@ -433,7 +449,7 @@ public class AttemptHandler implements JobHandler {
     private boolean finish(JobContext context, Plan plan, Outcome outcome, FileStore.Stored cdr, Instant callStartedAt,
             Map<UUID, String> lineStates) {
         access.enterAsPlatform(plan.tenantId());
-        DocumentEntity doc = DocumentEntity.findById(plan.documentId(), LockModeType.PESSIMISTIC_WRITE);
+        DocumentModel doc = documentProvider.getDocumentForUpdate(plan.documentId()).orElse(null);
         if (doc == null || doc.getAttempts() != plan.attempt()) {
             LOG.infof("stale attempt %d of document %s: a newer attempt started, nothing written", plan.attempt(), plan.documentId());
             return false;
@@ -446,8 +462,8 @@ public class AttemptHandler implements JobHandler {
                     .executeUpdate();
         }
         Instant now = Instant.now();
-        if (cdr != null && DocumentFileEntity.of(doc.getId(), "cdr_zip").isEmpty()) {
-            DocumentFileEntity.record(doc, "cdr_zip", cdr);
+        if (cdr != null && documentFileProvider.getDocumentFile(doc.getId(), "cdr_zip").isEmpty()) {
+            documentFileProvider.addDocumentFile(doc, "cdr_zip", cdr);
             doc.setCdrReceivedAt(now);
         }
         if (plan.action() != Action.VERIFY_TICKET && doc.getFirstSentAt() == null && outcome.kind() != Outcome.Kind.NOT_DELIVERED
@@ -473,10 +489,10 @@ public class AttemptHandler implements JobHandler {
     }
 
     /** Lost-ticket resolution of a summary's lines (§9.2.2), with the lines locked in id order. */
-    private void applyLines(DocumentEntity summary, Plan plan, Map<UUID, String> states, String correlationId) {
+    private void applyLines(DocumentModel summary, Plan plan, Map<UUID, String> states, String correlationId) {
         Instant now = Instant.now();
         for (Line line : plan.lines().stream().sorted(java.util.Comparator.comparing(Line::documentId)).toList()) {
-            DocumentEntity d = DocumentEntity.findById(line.documentId(), LockModeType.PESSIMISTIC_WRITE);
+            DocumentModel d = documentProvider.getDocumentForUpdate(line.documentId()).orElse(null);
             String state = states.getOrDefault(line.documentId(), "unknown");
             String previous = d.getStatus();
             String note;
@@ -521,14 +537,14 @@ public class AttemptHandler implements JobHandler {
             }
             d.setNextAttemptAt(null);
             d.setUpdatedAt(now);
-            DocumentEventEntity.record(d, null, note, "platform:worker", correlationId);
+            documentEventProvider.addDocumentEvent(d, null, note, "platform:worker", correlationId);
             if (!d.getStatus().equals(previous)) {
                 statusChanged.fire(new DocumentStatusChanged(d, previous, correlationId));
             }
         }
     }
 
-    private void applyAndRecord(DocumentEntity doc, OutcomePolicy.Decision decision, Outcome outcome, String correlationId) {
+    private void applyAndRecord(DocumentModel doc, OutcomePolicy.Decision decision, Outcome outcome, String correlationId) {
         String previous = doc.getStatus();
         Instant now = Instant.now();
         doc.setStatus(decision.status());
@@ -549,7 +565,7 @@ public class AttemptHandler implements JobHandler {
                     : outcome.kind() == Outcome.Kind.SUMMARY_RESOLVED ? "ticket_lost" : outcome.codeClass());
         }
         doc.setUpdatedAt(now);
-        DocumentEventEntity.record(doc, outcome.code(), describe(outcome), "platform:worker", correlationId);
+        documentEventProvider.addDocumentEvent(doc, outcome.code(), describe(outcome), "platform:worker", correlationId);
         if (!doc.getStatus().equals(previous)) {
             statusChanged.fire(new DocumentStatusChanged(doc, previous, correlationId));
         }
@@ -560,7 +576,7 @@ public class AttemptHandler implements JobHandler {
         return outcome.description() == null ? kind : kind + ": " + outcome.description();
     }
 
-    private static OutcomePolicy.State state(DocumentEntity doc) {
+    private static OutcomePolicy.State state(DocumentModel doc) {
         return new OutcomePolicy.State(doc.getStatus(), doc.getLastOutcome(), doc.getSameOutcomeCount(), doc.getProgressAt(), doc.getHoldReason());
     }
 }

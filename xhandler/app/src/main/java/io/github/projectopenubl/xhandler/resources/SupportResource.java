@@ -1,6 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.SupportSessionEntity;
+import io.github.projectopenubl.xhandler.models.SupportSessionProvider;
+import io.github.projectopenubl.xhandler.models.SupportSessionModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.managers.Auditor;
@@ -27,6 +28,8 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/support-sessions")
 public class SupportResource {
 
+    private final SupportSessionProvider supportSessionProvider;
+
     static final Duration SESSION_LENGTH = Duration.ofHours(4);
 
     public record SessionView(UUID id, String operator, String reason, Instant requestedAt, String approvedBy, Instant expiresAt, Instant revokedAt) {}
@@ -34,7 +37,8 @@ public class SupportResource {
     private final TenantAccess access;
     private final Auditor auditor;
 
-    public SupportResource(TenantAccess access, Auditor auditor) {
+    public SupportResource(TenantAccess access, Auditor auditor, SupportSessionProvider supportSessionProvider) {
+        this.supportSessionProvider = supportSessionProvider;
         this.access = access;
         this.auditor = auditor;
     }
@@ -44,7 +48,7 @@ public class SupportResource {
     @Transactional
     public List<SessionView> list(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.ADMIN);
-        List<SupportSessionEntity> sessions = SupportSessionEntity.list("order by requestedAt desc");
+        List<SupportSessionModel> sessions = supportSessionProvider.getSupportSessions();
         return sessions.stream().map(SupportResource::view).toList();
     }
 
@@ -54,7 +58,7 @@ public class SupportResource {
     @Transactional
     public SessionView approve(@PathParam("tenantId") UUID tenantId, @PathParam("sessionId") UUID sessionId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        SupportSessionEntity session = find(sessionId);
+        SupportSessionModel session = find(sessionId);
         if (session.getApprovedAt() != null || session.getRevokedAt() != null) {
             throw ApiException.conflict("session_closed", "La sesión de soporte ya fue aprobada o revocada.");
         }
@@ -71,7 +75,7 @@ public class SupportResource {
     @Transactional
     public SessionView revoke(@PathParam("tenantId") UUID tenantId, @PathParam("sessionId") UUID sessionId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        SupportSessionEntity session = find(sessionId);
+        SupportSessionModel session = find(sessionId);
         if (session.getRevokedAt() == null) {
             session.setRevokedAt(Instant.now());
             auditor.record(scope, "support_session.revoked", "support_session", session.getId());
@@ -79,15 +83,15 @@ public class SupportResource {
         return view(session);
     }
 
-    private static SupportSessionEntity find(UUID id) {
-        SupportSessionEntity session = SupportSessionEntity.findById(id);
+    private SupportSessionModel find(UUID id) {
+        SupportSessionModel session = supportSessionProvider.getSupportSession(id).orElse(null);
         if (session == null) {
             throw ApiException.notFound();
         }
         return session;
     }
 
-    private static SessionView view(SupportSessionEntity s) {
+    private static SessionView view(SupportSessionModel s) {
         return new SessionView(s.getId(), s.getOperator(), s.getReason(), s.getRequestedAt(), s.getApprovedBy(), s.getExpiresAt(), s.getRevokedAt());
     }
 }

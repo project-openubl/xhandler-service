@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
@@ -95,7 +95,7 @@ public class AmountsBackfill implements JobHandler {
             throw new IllegalStateException("no stored XML");
         }
         EngineModels.InspectResponse identity = engine.inspect(new String(files.get(key), StandardCharsets.UTF_8));
-        Map<String, String> amounts = DocumentEntity.amountsOf(identity.amounts());
+        Map<String, String> amounts = DocumentModel.amountsOf(identity.amounts());
         String json;
         try {
             json = JSON.writeValueAsString(amounts == null ? Map.of() : amounts);

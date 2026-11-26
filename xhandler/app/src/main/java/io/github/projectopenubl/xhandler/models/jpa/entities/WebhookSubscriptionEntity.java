@@ -30,29 +30,10 @@ public class WebhookSubscriptionEntity extends PanacheEntityBase {
     private Instant updatedAt;
     private Instant deletedAt;
 
-    public String context() {
-        return "webhook:" + id + ":" + tenantId;
-    }
 
-    public SecretBox.Sealed sealed() {
-        return new SecretBox.Sealed(ciphertext, wrappedDataKey, masterKeyId);
-    }
 
-    public void seal(SecretBox.Sealed sealed) {
-        ciphertext = sealed.ciphertext();
-        wrappedDataKey = sealed.wrappedDataKey();
-        masterKeyId = sealed.masterKeyId();
-    }
 
     /** {@code *} subscribes to everything; {@code document.*} to every document event. */
-    public boolean wants(String type) {
-        for (String pattern : events) {
-            if (pattern.equals("*") || pattern.equals(type) || (pattern.endsWith(".*") && type.startsWith(pattern.substring(0, pattern.length() - 1)))) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     public UUID getId() {
         return id;

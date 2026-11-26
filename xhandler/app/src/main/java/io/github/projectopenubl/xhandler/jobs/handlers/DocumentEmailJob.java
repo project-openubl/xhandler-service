@@ -1,16 +1,20 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.mail.EmailSender;
 import io.github.projectopenubl.xhandler.mail.HtmlSanitizer;
 import io.github.projectopenubl.xhandler.resources.EmailSuppressions;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.managers.AccessLinks;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
+import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.pdf.DocumentPdf;
@@ -37,6 +41,14 @@ import java.util.UUID;
 @ApplicationScoped
 public class DocumentEmailJob implements JobHandler {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentFileProvider documentFileProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
+    private final CompanyProvider companyProvider;
+
     public static final String NAME = "document.email";
 
     private final TenantAccess access;
@@ -51,7 +63,11 @@ public class DocumentEmailJob implements JobHandler {
 
     public DocumentEmailJob(TenantAccess access, DocumentPdf pdf, FileStore files, AccessLinks links, CredentialService credentials,
             EmailSender sender, EntityManager em, io.github.projectopenubl.xhandler.clients.Egress egress,
-            io.github.projectopenubl.xhandler.managers.Entitlements entitlements) {
+            io.github.projectopenubl.xhandler.managers.Entitlements entitlements, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentFileProvider = documentFileProvider;
+        this.documentEventProvider = documentEventProvider;
+        this.companyProvider = companyProvider;
         this.entitlements = entitlements;
         this.egress = egress;
         this.access = access;
@@ -78,8 +94,8 @@ public class DocumentEmailJob implements JobHandler {
         record Prepared(EmailSender.Message message, EmailSender.Smtp smtp, List<String> skipped) {}
         Prepared prepared = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(context.tenantId());
-            DocumentEntity doc = DocumentEntity.findById(documentId);
-            CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
+            DocumentModel doc = documentProvider.getDocument(documentId).orElse(null);
+            CompanyModel company = companyProvider.getCompany(doc.getCompanyId()).orElse(null);
             List<String> skipped = new ArrayList<>();
             List<String> recipients = new ArrayList<>();
             List<String> to = new ArrayList<>(givenTo);
@@ -101,10 +117,10 @@ public class DocumentEmailJob implements JobHandler {
             List<EmailSender.Attachment> attachments = new ArrayList<>();
             String base = doc.getTipoComprobante() + "-" + doc.serieNumero();
             attachments.add(new EmailSender.Attachment(base + ".pdf", "application/pdf", pdf.render(doc.getId(), link)));
-            DocumentFileEntity.of(doc.getId(), "xml_signed").ifPresent(f ->
+            documentFileProvider.getDocumentFile(doc.getId(), "xml_signed").ifPresent(f ->
                     attachments.add(new EmailSender.Attachment(base + ".xml", "application/xml", files.get(f.getStorageKey()))));
             if (includeCdr) {
-                DocumentFileEntity.of(doc.getId(), "cdr_zip").ifPresent(f ->
+                documentFileProvider.getDocumentFile(doc.getId(), "cdr_zip").ifPresent(f ->
                         attachments.add(new EmailSender.Attachment("R-" + base + ".zip", "application/zip", files.get(f.getStorageKey()))));
             }
             String subject = subject(company.getEmailSubject(), doc, company);
@@ -146,7 +162,7 @@ public class DocumentEmailJob implements JobHandler {
         String finalDetail = detail;
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(context.tenantId());
-            DocumentEntity doc = DocumentEntity.findById(documentId, LockModeType.PESSIMISTIC_WRITE);
+            DocumentModel doc = documentProvider.getDocumentForUpdate(documentId).orElse(null);
             for (String recipient : prepared.message().to()) {
                 em.createNativeQuery("""
                                 INSERT INTO xhandler.delivery (id, tenant_id, document_id, channel, recipient, result, detail)
@@ -163,7 +179,7 @@ public class DocumentEmailJob implements JobHandler {
                 doc.setDeliveredAt(Instant.now());
                 doc.setDeliveredSource("service");
                 doc.setUpdatedAt(doc.getDeliveredAt());
-                DocumentEventEntity.record(doc, null, "delivered (email)", "platform:worker", context.correlationId());
+                documentEventProvider.addDocumentEvent(doc, null, "delivered (email)", "platform:worker", context.correlationId());
             }
         });
         if (!"sent".equals(result)) {
@@ -184,7 +200,7 @@ public class DocumentEmailJob implements JobHandler {
             "31", "guía de remisión electrónica", "20", "comprobante de retención", "40", "comprobante de percepción");
 
     /** {placeholders} in the company's template; values are HTML-escaped. */
-    static String render(String template, String fallback, DocumentEntity doc, CompanyEntity company, String link) {
+    static String render(String template, String fallback, DocumentModel doc, CompanyModel company, String link) {
         String text = template == null || template.isBlank() ? fallback : template;
         Map<String, String> values = Map.of(
                 "{tipo}", doc.getTipoComprobante(), "{tipo_nombre}", TIPOS.getOrDefault(doc.getTipoComprobante(), "comprobante electrónico"),
@@ -198,7 +214,7 @@ public class DocumentEmailJob implements JobHandler {
     }
 
     /** The subject: plain text, one line (no header injection). */
-    static String subject(String template, DocumentEntity doc, CompanyEntity company) {
+    static String subject(String template, DocumentModel doc, CompanyModel company) {
         String text = template == null || template.isBlank() ? "{tipo} {serie_numero} - {razon_social}" : template;
         Map<String, String> values = Map.of("{tipo}", TIPOS.getOrDefault(doc.getTipoComprobante(), doc.getTipoComprobante()),
                 "{serie_numero}", doc.serieNumero(), "{razon_social}", company.getRazonSocial(), "{fecha}", doc.getFechaEmision().toString());
@@ -209,8 +225,8 @@ public class DocumentEmailJob implements JobHandler {
     }
 
     /** The buyer's email as the client gave it ({@code cliente.contacto.email} in the input). */
-    private java.util.Optional<String> customerEmail(DocumentEntity doc) {
-        return DocumentFileEntity.of(doc.getId(), "input").map(f -> {
+    private java.util.Optional<String> customerEmail(DocumentModel doc) {
+        return documentFileProvider.getDocumentFile(doc.getId(), "input").map(f -> {
             try {
                 JsonNode email = new com.fasterxml.jackson.databind.ObjectMapper().readTree(files.get(f.getStorageKey()))
                         .path("spec").path("cliente").path("contacto").path("email");
@@ -222,7 +238,7 @@ public class DocumentEmailJob implements JobHandler {
     }
 
     /** As the company's own address when the tenant verified its domain, else the platform's sender. */
-    private String sender(CompanyEntity company) {
+    private String sender(CompanyModel company) {
         if (company.getEmail() == null || !company.getEmail().contains("@")) {
             return null;
         }

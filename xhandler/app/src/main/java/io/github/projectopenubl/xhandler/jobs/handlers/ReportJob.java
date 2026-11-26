@@ -1,9 +1,10 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.managers.RegisterRows;
 import io.github.projectopenubl.xhandler.utils.RegisterFormats;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.files.FileStore;
@@ -22,6 +23,8 @@ import java.util.UUID;
 @ApplicationScoped
 public class ReportJob implements JobHandler {
 
+    private final CompanyProvider companyProvider;
+
     public static final String NAME = "report.generate";
 
     private final TenantAccess access;
@@ -29,7 +32,8 @@ public class ReportJob implements JobHandler {
     private final FileStore files;
     private final EntityManager em;
 
-    public ReportJob(TenantAccess access, RegisterRows registers, FileStore files, EntityManager em) {
+    public ReportJob(TenantAccess access, RegisterRows registers, FileStore files, EntityManager em, CompanyProvider companyProvider) {
+        this.companyProvider = companyProvider;
         this.access = access;
         this.registers = registers;
         this.files = files;
@@ -60,7 +64,7 @@ public class ReportJob implements JobHandler {
             access.enterAsPlatform(context.tenantId());
             Object[] r = (Object[]) em.createNativeQuery("SELECT company_id, sunat_env, register, format, period FROM xhandler.report WHERE id = :id")
                     .setParameter("id", reportId).getSingleResult();
-            CompanyEntity company = CompanyEntity.findById(r[0]);
+            CompanyModel company = companyProvider.getCompany((UUID) r[0]).orElse(null);
             String register = (String) r[2];
             List<RegisterRows.Row> rows = "sales".equals(register)
                     ? registers.sales(company.getId(), (String) r[1], (String) r[4])

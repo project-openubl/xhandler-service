@@ -1,9 +1,13 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
+import io.github.projectopenubl.xhandler.models.WebhookSubscriptionProvider;
+import io.github.projectopenubl.xhandler.models.WebhookDeliveryProvider;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.clients.Egress;
 import io.github.projectopenubl.xhandler.events.WebhookEvents;
-import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookDeliveryEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookSubscriptionEntity;
+import io.github.projectopenubl.xhandler.models.WebhookDeliveryModel;
+import io.github.projectopenubl.xhandler.models.WebhookSubscriptionModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -46,6 +50,12 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}/webhooks")
 public class WebhookResource {
 
+    private final CompanyProvider companyProvider;
+
+    private final WebhookSubscriptionProvider webhookSubscriptionProvider;
+
+    private final WebhookDeliveryProvider webhookDeliveryProvider;
+
     public record CreateWebhook(@NotBlank @Size(max = 2000) String url, @NotEmpty List<@NotBlank String> events) {}
 
     public record WebhookView(UUID id, String url, List<String> events, boolean active, Instant createdAt, String secret) {}
@@ -64,7 +74,10 @@ public class WebhookResource {
     private final Idempotency idempotency;
 
     public WebhookResource(TenantAccess access, SecretBox box, Egress egress, WebhookEvents events, Auditor auditor,
-            io.github.projectopenubl.xhandler.managers.Entitlements entitlements, Idempotency idempotency) {
+            io.github.projectopenubl.xhandler.managers.Entitlements entitlements, Idempotency idempotency, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider, CompanyProvider companyProvider) {
+        this.companyProvider = companyProvider;
+        this.webhookSubscriptionProvider = webhookSubscriptionProvider;
+        this.webhookDeliveryProvider = webhookDeliveryProvider;
         this.entitlements = entitlements;
         this.idempotency = idempotency;
         this.access = access;
@@ -90,22 +103,21 @@ public class WebhookResource {
             }
             // Free tenants without a verified RUC can't point webhooks at arbitrary hosts (§26.8)
             if ("free".equals(entitlements.usage(tenantId).plan().code())
-                    && io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity.count("rucVerifiedAt is not null and deletedAt is null") == 0) {
+                    && companyProvider.countVerifiedCompanies() == 0) {
                 throw ApiException.conflict("ruc_not_verified", "Verifique el RUC de una empresa para usar webhooks.");
             }
             egress.check(request.url());
             byte[] raw = new byte[32];
             RANDOM.nextBytes(raw);
             String secret = "whsec_" + Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
-            WebhookSubscriptionEntity subscription = new WebhookSubscriptionEntity();
-            subscription.setId(Ids.newId());
+            WebhookSubscriptionModel subscription = webhookSubscriptionProvider.newWebhookSubscription(Ids.newId());
             subscription.setTenantId(tenantId);
             subscription.setUrl(request.url());
             subscription.setEvents(request.events().toArray(String[]::new));
             subscription.seal(box.seal(secret.getBytes(StandardCharsets.UTF_8), subscription.context()));
             subscription.setCreatedAt(Instant.now());
             subscription.setUpdatedAt(subscription.getCreatedAt());
-            subscription.persist();
+            webhookSubscriptionProvider.persist(subscription);
             auditor.record(scope, "webhook.created", "webhook", subscription.getId(), Map.of("url", request.url()));
             return view(subscription, secret);
         }, view -> new WebhookView(view.id(), view.url(), view.events(), view.active(), view.createdAt(), null));
@@ -116,7 +128,7 @@ public class WebhookResource {
     @Transactional
     public List<WebhookView> list(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        List<WebhookSubscriptionEntity> subscriptions = WebhookSubscriptionEntity.list("deletedAt is null order by createdAt");
+        List<WebhookSubscriptionModel> subscriptions = webhookSubscriptionProvider.getWebhookSubscriptions();
         return subscriptions.stream().map(s -> view(s, null)).toList();
     }
 
@@ -136,7 +148,7 @@ public class WebhookResource {
     @Transactional
     public Response delete(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        WebhookSubscriptionEntity subscription = find(webhookId);
+        WebhookSubscriptionModel subscription = find(webhookId);
         subscription.setDeletedAt(Instant.now());
         subscription.setActive(false);
         auditor.record(scope, "webhook.deleted", "webhook", webhookId);
@@ -150,13 +162,12 @@ public class WebhookResource {
     @Transactional
     public DeliveryView test(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        WebhookSubscriptionEntity subscription = find(webhookId);
+        WebhookSubscriptionModel subscription = find(webhookId);
         auditor.record(scope, "webhook.test_sent", "webhook", webhookId);
         Map<String, Object> event = Map.of("specversion", "1.0", "id", Ids.newId().toString(), "source", WebhookEvents.SOURCE,
                 "type", "webhook.test", "subject", "xh:webhook:" + webhookId, "time", Instant.now().toString(),
                 "datacontenttype", "application/json", "data", Map.of("message", "Evento de prueba de xhandler"));
-        WebhookDeliveryEntity delivery = new WebhookDeliveryEntity();
-        delivery.setId(Ids.newId());
+        WebhookDeliveryModel delivery = webhookDeliveryProvider.newWebhookDelivery(Ids.newId());
         delivery.setTenantId(tenantId);
         delivery.setSubscriptionId(subscription.getId());
         delivery.setEventId(UUID.fromString((String) event.get("id")));
@@ -165,7 +176,7 @@ public class WebhookResource {
         delivery.setNextAttemptAt(Instant.now());
         delivery.setCreatedAt(delivery.getNextAttemptAt());
         delivery.setUpdatedAt(delivery.getNextAttemptAt());
-        delivery.persist();
+        webhookDeliveryProvider.persist(delivery);
         return view(delivery);
     }
 
@@ -179,11 +190,7 @@ public class WebhookResource {
         find(webhookId);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
-        List<WebhookDeliveryEntity> page = (status == null
-                        ? WebhookDeliveryEntity.<WebhookDeliveryEntity>find("subscriptionId = ?1 order by createdAt desc", webhookId)
-                        : WebhookDeliveryEntity.<WebhookDeliveryEntity>find("subscriptionId = ?1 and status = ?2 order by createdAt desc", webhookId, status))
-                .range(start, start + size - 1)
-                .list();
+        List<WebhookDeliveryModel> page = webhookDeliveryProvider.getWebhookDeliveries(webhookId, status, start, size);
         return new Page<>(page.stream().map(WebhookResource::view).toList(), size, start);
     }
 
@@ -194,7 +201,7 @@ public class WebhookResource {
     public DeliveryView redeliver(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId,
             @PathParam("deliveryId") UUID deliveryId) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        WebhookDeliveryEntity delivery = WebhookDeliveryEntity.findById(deliveryId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        WebhookDeliveryModel delivery = webhookDeliveryProvider.getWebhookDeliveryForUpdate(deliveryId).orElse(null);
         if (delivery == null || !delivery.getSubscriptionId().equals(webhookId)) {
             throw ApiException.notFound();
         }
@@ -206,19 +213,19 @@ public class WebhookResource {
         return view(delivery);
     }
 
-    private static WebhookSubscriptionEntity find(UUID id) {
-        WebhookSubscriptionEntity subscription = WebhookSubscriptionEntity.findById(id);
+    private WebhookSubscriptionModel find(UUID id) {
+        WebhookSubscriptionModel subscription = webhookSubscriptionProvider.getWebhookSubscription(id).orElse(null);
         if (subscription == null || subscription.getDeletedAt() != null) {
             throw ApiException.notFound();
         }
         return subscription;
     }
 
-    private static WebhookView view(WebhookSubscriptionEntity s, String secret) {
+    private static WebhookView view(WebhookSubscriptionModel s, String secret) {
         return new WebhookView(s.getId(), s.getUrl(), List.of(s.getEvents()), s.isActive(), s.getCreatedAt(), secret);
     }
 
-    private static DeliveryView view(WebhookDeliveryEntity d) {
+    private static DeliveryView view(WebhookDeliveryModel d) {
         return new DeliveryView(d.getId(), d.getEventId(), d.getEventType(), d.getStatus(), d.getAttempts(), d.getNextAttemptAt(), d.getLastStatusCode(), d.getLastError(),
                 d.getDeliveredAt(), d.getCreatedAt());
     }

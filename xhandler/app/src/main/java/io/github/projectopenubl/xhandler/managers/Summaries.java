@@ -1,8 +1,11 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
+import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -11,7 +14,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.keys.SignatureLog;
@@ -38,6 +41,12 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class Summaries {
 
+    private final DocumentProvider documentProvider;
+
+    private final DocumentFileProvider documentFileProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
     /** SUNAT accepts at most 500 lines per summary. */
     public static final int MAX_LINES = 500;
 
@@ -53,7 +62,10 @@ public class Summaries {
     private final ObjectMapper json;
 
     public Summaries(Numbering numbering, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
-            Routes routes, EntityManager em, ObjectMapper json) {
+            Routes routes, EntityManager em, ObjectMapper json, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.documentFileProvider = documentFileProvider;
+        this.documentEventProvider = documentEventProvider;
         this.numbering = numbering;
         this.engine = engine;
         this.signing = signing;
@@ -69,8 +81,8 @@ public class Summaries {
      * fallback), 3 voids them (§11.3). The documents must be locked by the caller.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    public DocumentEntity resumenDiario(TenantScope scope, CompanyEntity company, String sunatEnv, LocalDate fechaComprobantes,
-            List<DocumentEntity> lines, String operacion, String correlationId) {
+    public DocumentModel resumenDiario(TenantScope scope, CompanyModel company, String sunatEnv, LocalDate fechaComprobantes,
+            List<DocumentModel> lines, String operacion, String correlationId) {
         LocalDate day = Deadlines.todayInLima();
         int numero = numbering.reserveDaily(company.getTenantId(), company.getId(), sunatEnv, "RC", day);
         return resumenDiario(scope, company, sunatEnv, fechaComprobantes, lines, operacion, correlationId, day, numero);
@@ -78,14 +90,14 @@ public class Summaries {
 
     /** RC number for today, reserved before the caller locks the lines (lock order company → counter → documents). */
     @Transactional(Transactional.TxType.MANDATORY)
-    public int reserveResumenDiario(CompanyEntity company, String sunatEnv) {
+    public int reserveResumenDiario(CompanyModel company, String sunatEnv) {
         return numbering.reserveDaily(company.getTenantId(), company.getId(), sunatEnv, "RC", Deadlines.todayInLima());
     }
 
     /** A resumen diario with a number already reserved for {@code day}. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public DocumentEntity resumenDiario(TenantScope scope, CompanyEntity company, String sunatEnv, LocalDate fechaComprobantes,
-            List<DocumentEntity> lines, String operacion, String correlationId, LocalDate day, int numero) {
+    public DocumentModel resumenDiario(TenantScope scope, CompanyModel company, String sunatEnv, LocalDate fechaComprobantes,
+            List<DocumentModel> lines, String operacion, String correlationId, LocalDate day, int numero) {
         if (lines.isEmpty() || lines.size() > MAX_LINES) {
             throw new IllegalArgumentException("a resumen diario has 1 to " + MAX_LINES + " lines");
         }
@@ -95,10 +107,10 @@ public class Summaries {
         spec.put("fecha_emision_comprobantes", fechaComprobantes.toString());
         proveedor(spec, company);
         ArrayNode comprobantes = spec.putArray("comprobantes");
-        for (DocumentEntity line : lines) {
+        for (DocumentModel line : lines) {
             comprobantes.add(rcLine(line, operacion));
         }
-        DocumentEntity rc = summary(scope, company, sunatEnv, "SummaryDocuments", "RC", day, numero, spec, correlationId,
+        DocumentModel rc = summary(scope, company, sunatEnv, "SummaryDocuments", "RC", day, numero, spec, correlationId,
                 "3".equals(operacion) ? lines.get(0) : null);
         rc.setDeadlineAt(Deadlines.sendDeadline("RC", "RC", fechaComprobantes));
         return rc;
@@ -106,8 +118,8 @@ public class Summaries {
 
     /** A comunicación de baja (RA) voiding the given documents of one issue day (§11.3). */
     @Transactional(Transactional.TxType.MANDATORY)
-    public DocumentEntity comunicacionBaja(TenantScope scope, CompanyEntity company, String sunatEnv, LocalDate fechaComprobantes,
-            List<DocumentEntity> originals, String motivo, String correlationId) {
+    public DocumentModel comunicacionBaja(TenantScope scope, CompanyModel company, String sunatEnv, LocalDate fechaComprobantes,
+            List<DocumentModel> originals, String motivo, String correlationId) {
         LocalDate day = Deadlines.todayInLima();
         int numero = numbering.reserveDaily(company.getTenantId(), company.getId(), sunatEnv, "RA", day);
         ObjectNode spec = json.createObjectNode();
@@ -116,22 +128,22 @@ public class Summaries {
         spec.put("fecha_emision_comprobantes", fechaComprobantes.toString());
         proveedor(spec, company);
         ArrayNode comprobantes = spec.putArray("comprobantes");
-        for (DocumentEntity original : originals) {
+        for (DocumentModel original : originals) {
             ObjectNode item = comprobantes.addObject();
             item.put("tipo_comprobante", original.getTipoComprobante());
             item.put("serie", original.getSerie());
             item.put("numero", original.getNumero());
             item.put("descripcion_sustento", motivo);
         }
-        DocumentEntity ra = summary(scope, company, sunatEnv, "VoidedDocuments", "RA", day, numero, spec, correlationId, originals.get(0));
+        DocumentModel ra = summary(scope, company, sunatEnv, "VoidedDocuments", "RA", day, numero, spec, correlationId, originals.get(0));
         ra.setDeadlineAt(Deadlines.endOfDay(day.plusDays(7)));
         return ra;
     }
 
     /** A resumen de reversiones (RR) for percepciones and retenciones (§3.1). */
     @Transactional(Transactional.TxType.MANDATORY)
-    public DocumentEntity resumenReversiones(TenantScope scope, CompanyEntity company, String sunatEnv, LocalDate fechaComprobantes,
-            List<DocumentEntity> originals, String motivo, String correlationId) {
+    public DocumentModel resumenReversiones(TenantScope scope, CompanyModel company, String sunatEnv, LocalDate fechaComprobantes,
+            List<DocumentModel> originals, String motivo, String correlationId) {
         LocalDate day = Deadlines.todayInLima();
         int numero = numbering.reserveDaily(company.getTenantId(), company.getId(), sunatEnv, "RR", day);
         ObjectNode spec = json.createObjectNode();
@@ -140,25 +152,25 @@ public class Summaries {
         spec.put("fecha_emision_comprobantes", fechaComprobantes.toString());
         proveedor(spec, company);
         ArrayNode comprobantes = spec.putArray("comprobantes");
-        for (DocumentEntity original : originals) {
+        for (DocumentModel original : originals) {
             ObjectNode item = comprobantes.addObject();
             item.put("tipo_comprobante", original.getTipoComprobante());
             item.put("serie", original.getSerie());
             item.put("numero", original.getNumero());
             item.put("descripcion_sustento", motivo);
         }
-        DocumentEntity rr = summary(scope, company, sunatEnv, "Reversion", "RR", day, numero, spec, correlationId, originals.get(0));
+        DocumentModel rr = summary(scope, company, sunatEnv, "Reversion", "RR", day, numero, spec, correlationId, originals.get(0));
         rr.setDeadlineAt(Deadlines.endOfDay(day.plusDays(7)));
         return rr;
     }
 
-    private DocumentEntity summary(TenantScope scope, CompanyEntity company, String sunatEnv, String kind, String tipo, LocalDate day, int numero,
+    private DocumentModel summary(TenantScope scope, CompanyModel company, String sunatEnv, String kind, String tipo, LocalDate day, int numero,
             ObjectNode spec, String correlationId) {
         return summary(scope, company, sunatEnv, kind, tipo, day, numero, spec, correlationId, null);
     }
 
-    private DocumentEntity summary(TenantScope scope, CompanyEntity company, String sunatEnv, String kind, String tipo, LocalDate day, int numero,
-            ObjectNode spec, String correlationId, DocumentEntity followsRouteOf) {
+    private DocumentModel summary(TenantScope scope, CompanyModel company, String sunatEnv, String kind, String tipo, LocalDate day, int numero,
+            ObjectNode spec, String correlationId, DocumentModel followsRouteOf) {
         ObjectNode document = json.createObjectNode();
         document.put("kind", kind);
         document.set("spec", spec);
@@ -169,8 +181,7 @@ public class Summaries {
             throw ApiException.invalid("invalid_document", "El resumen no cumple las validaciones de SUNAT.", detail);
         }
         SigningService.Signed signed = signing.sign(company, sunatEnv, built.xml());
-        DocumentEntity doc = new DocumentEntity();
-        doc.setId(Ids.newId());
+        DocumentModel doc = documentProvider.newDocument(Ids.newId());
         String serie = tipo + "-" + BASIC.format(day);
         signatureLog.record(company.getTenantId(), doc.getId(), serie + "-" + numero, signed.signingKeyId(), signed.platformKeyId(), signed.digestValue(),
                 scope.actor().auditName());
@@ -201,16 +212,16 @@ public class Summaries {
         doc.setProgressAt(now);
         doc.setCreatedAt(now);
         doc.setUpdatedAt(now);
-        doc.persist();
-        DocumentFileEntity.record(doc, "xml_signed", xml);
-        DocumentFileEntity.record(doc, "input", input);
-        DocumentEventEntity.record(doc, null, "emitted", scope.actor().auditName(), correlationId);
+        documentProvider.persist(doc);
+        documentFileProvider.addDocumentFile(doc, "xml_signed", xml);
+        documentFileProvider.addDocumentFile(doc, "input", input);
+        documentEventProvider.addDocumentEvent(doc, null, "emitted", scope.actor().auditName(), correlationId);
         em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
         return doc;
     }
 
     /** One RC line from a boleta's (or B-note's) enriched JSON. */
-    private ObjectNode rcLine(DocumentEntity line, String operacion) {
+    private ObjectNode rcLine(DocumentModel line, String operacion) {
         JsonNode spec = enriched(line).path("spec");
         JsonNode totals = spec.path("total_impuestos");
         ObjectNode item = json.createObjectNode();
@@ -243,8 +254,8 @@ public class Summaries {
         return item;
     }
 
-    private JsonNode enriched(DocumentEntity document) {
-        DocumentFileEntity file = DocumentFileEntity.of(document.getId(), "enriched").orElseThrow(() ->
+    private JsonNode enriched(DocumentModel document) {
+        DocumentFileModel file = documentFileProvider.getDocumentFile(document.getId(), "enriched").orElseThrow(() ->
                 new IllegalStateException("document " + document.getId() + " has no enriched JSON"));
         try {
             return json.readTree(files.get(file.getStorageKey()));
@@ -260,7 +271,7 @@ public class Summaries {
         }
     }
 
-    private static void proveedor(ObjectNode spec, CompanyEntity company) {
+    private static void proveedor(ObjectNode spec, CompanyModel company) {
         ObjectNode proveedor = spec.putObject("proveedor");
         proveedor.put("ruc", company.getRuc());
         proveedor.put("razon_social", company.getRazonSocial());

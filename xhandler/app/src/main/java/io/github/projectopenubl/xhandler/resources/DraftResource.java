@@ -1,9 +1,11 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.DocumentDraftProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.managers.EmitService;
 import io.github.projectopenubl.xhandler.managers.Idempotency;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentDraftEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentDraftModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.utils.DocumentTypes;
 
@@ -16,7 +18,7 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -55,6 +57,10 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}")
 public class DraftResource {
 
+    private final DocumentDraftProvider documentDraftProvider;
+
+    private final CompanyProvider companyProvider;
+
     /** What a draft holds: the xbuilder document (kind and spec, no number), the series and labels. */
     public record DraftInput(
             @NotBlank String kind,
@@ -91,7 +97,9 @@ public class DraftResource {
     private final Auditor auditor;
     private final ObjectMapper json;
 
-    public DraftResource(TenantAccess access, EmitService emit, Idempotency idempotency, Auditor auditor, ObjectMapper json) {
+    public DraftResource(TenantAccess access, EmitService emit, Idempotency idempotency, Auditor auditor, ObjectMapper json, CompanyProvider companyProvider, DocumentDraftProvider documentDraftProvider) {
+        this.documentDraftProvider = documentDraftProvider;
+        this.companyProvider = companyProvider;
         this.access = access;
         this.emit = emit;
         this.idempotency = idempotency;
@@ -125,20 +133,19 @@ public class DraftResource {
         try {
             DraftView view = QuarkusTransaction.requiringNew().call(() -> {
                 TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-                CompanyEntity company = CompanyEntity.findById(companyId);
+                CompanyModel company = companyProvider.getCompany(companyId).orElse(null);
                 if (company == null || company.getDeletedAt() != null) {
                     throw ApiException.notFound();
                 }
                 Instant now = Instant.now();
-                DocumentDraftEntity draft = new DocumentDraftEntity();
-                draft.setId(Ids.newId());
+                DocumentDraftModel draft = documentDraftProvider.newDocumentDraft(Ids.newId());
                 draft.setTenantId(tenantId);
                 draft.setCompanyId(companyId);
                 apply(draft, input);
                 draft.setCreatedBy(scope.actor().auditName());
                 draft.setCreatedAt(now);
                 draft.setUpdatedAt(now);
-                draft.persist();
+                documentDraftProvider.persist(draft);
                 auditor.record(scope, "draft.created", "document_draft", draft.getId());
                 DraftView created = view(draft);
                 if (idempotencyKey != null) {
@@ -166,20 +173,9 @@ public class DraftResource {
             @QueryParam("limit") Integer limit,
             @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
-        StringBuilder query = new StringBuilder("deletedAt is null");
-        Map<String, Object> params = new HashMap<>();
-        if (companyId != null) {
-            query.append(" and companyId = :companyId");
-            params.put("companyId", companyId);
-        }
-        if (status != null) {
-            query.append(" and status = :status");
-            params.put("status", status);
-        }
-        query.append(" order by createdAt desc, id desc");
         int size = Page.limit(limit);
         int start = Page.offset(offset);
-        List<DocumentDraftEntity> page = DocumentDraftEntity.<DocumentDraftEntity>find(query.toString(), params).range(start, start + size - 1).list();
+        List<DocumentDraftModel> page = documentDraftProvider.getDocumentDrafts(companyId, status, start, size);
         return new Page<>(page.stream().map(this::view).toList(), size, start);
     }
 
@@ -206,7 +202,7 @@ public class DraftResource {
         checkInput(input);
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
         // Row lock, then decide (§10.8 rule 2)
-        DocumentDraftEntity draft = find(draftId, true);
+        DocumentDraftModel draft = find(draftId, true);
         checkEditable(draft, input.version());
         apply(draft, input);
         draft.setVersion(draft.getVersion() + 1);
@@ -224,7 +220,7 @@ public class DraftResource {
     @Operation(operationId = "deleteDraft")
     public Response delete(@PathParam("tenantId") UUID tenantId, @PathParam("draftId") UUID draftId) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        DocumentDraftEntity draft = find(draftId, true);
+        DocumentDraftModel draft = find(draftId, true);
         checkEditable(draft, null);
         draft.setDeletedAt(Instant.now());
         draft.setUpdatedAt(draft.getDeletedAt());
@@ -257,7 +253,7 @@ public class DraftResource {
         record Snapshot(UUID companyId, int version, EmitService.EmitRequest request) {}
         Snapshot snapshot = QuarkusTransaction.requiringNew().call(() -> {
             access.enter(tenantId, Role.OPERATOR);
-            DocumentDraftEntity draft = find(draftId, false);
+            DocumentDraftModel draft = find(draftId, false);
             if (idempotencyKey == null || !"issued".equals(draft.getStatus())) {
                 checkEditable(draft, version);
             }
@@ -288,8 +284,8 @@ public class DraftResource {
      * ends, so a concurrent issue, edit or delete waits for it. A draft edited, deleted or issued
      * since it was read stops the emit before it reserves a number or signs.
      */
-    private DocumentDraftEntity lockUnchanged(UUID draftId, int version) {
-        DocumentDraftEntity draft = DocumentDraftEntity.findById(draftId, LockModeType.PESSIMISTIC_WRITE);
+    private DocumentDraftModel lockUnchanged(UUID draftId, int version) {
+        DocumentDraftModel draft = documentDraftProvider.getDocumentDraftForUpdate(draftId).orElse(null);
         if (draft == null || draft.getDeletedAt() != null) {
             throw ApiException.conflict("draft_changed", "El borrador se eliminó mientras se emitía.");
         }
@@ -301,15 +297,15 @@ public class DraftResource {
      * Inside the emit transaction, after the document insert: the draft row is already locked by
      * {@link #lockUnchanged}, and is checked again before it is marked issued.
      */
-    private void markIssued(UUID draftId, int version, DocumentEntity doc) {
-        DocumentDraftEntity draft = lockUnchanged(draftId, version);
+    private void markIssued(UUID draftId, int version, DocumentModel doc) {
+        DocumentDraftModel draft = lockUnchanged(draftId, version);
         draft.setStatus("issued");
         draft.setDocumentId(doc.getId());
         draft.setVersion(draft.getVersion() + 1);
         draft.setUpdatedAt(Instant.now());
     }
 
-    private static void checkEditable(DocumentDraftEntity draft, Integer version) {
+    private static void checkEditable(DocumentDraftModel draft, Integer version) {
         if ("issued".equals(draft.getStatus())) {
             throw ApiException.conflict("draft_issued", "El borrador ya se emitió: los documentos emitidos no se modifican.");
         }
@@ -332,7 +328,7 @@ public class DraftResource {
         }
     }
 
-    private void apply(DocumentDraftEntity draft, DraftInput input) {
+    private void apply(DocumentDraftModel draft, DraftInput input) {
         draft.setKind(input.kind());
         draft.setTipoComprobante(tipoComprobante(input));
         draft.setSerie(input.serie());
@@ -351,15 +347,15 @@ public class DraftResource {
         return DocumentTypes.tipoComprobante(input.kind(), input.spec());
     }
 
-    private static DocumentDraftEntity find(UUID draftId, boolean lock) {
-        DocumentDraftEntity draft = lock ? DocumentDraftEntity.findById(draftId, LockModeType.PESSIMISTIC_WRITE) : DocumentDraftEntity.findById(draftId);
+    private DocumentDraftModel find(UUID draftId, boolean lock) {
+        DocumentDraftModel draft = lock ? documentDraftProvider.getDocumentDraftForUpdate(draftId).orElse(null) : documentDraftProvider.getDocumentDraft(draftId).orElse(null);
         if (draft == null || draft.getDeletedAt() != null) {
             throw ApiException.notFound();
         }
         return draft;
     }
 
-    private DraftView view(DocumentDraftEntity d) {
+    private DraftView view(DocumentDraftModel d) {
         JsonNode spec = json.valueToTree(d.getSpec());
         JsonNode cliente = spec.path("cliente");
         DocumentView.Customer customer = cliente.isObject()

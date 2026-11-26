@@ -1,7 +1,9 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.TenantMemberEntity;
+import io.github.projectopenubl.xhandler.models.TenantMemberProvider;
+import io.github.projectopenubl.xhandler.models.TenantProvider;
+import io.github.projectopenubl.xhandler.models.TenantModel;
+import io.github.projectopenubl.xhandler.models.TenantMemberModel;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.CurrentActor;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -33,6 +35,10 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants")
 public class TenantResource {
 
+    private final TenantMemberProvider tenantMemberProvider;
+
+    private final TenantProvider tenantProvider;
+
     /** Free tenants a person may create (signup abuse control). */
     static final int MAX_FREE_TENANTS_PER_USER = 1;
 
@@ -49,7 +55,9 @@ public class TenantResource {
     private final TenantAccess access;
     private final Auditor auditor;
 
-    public TenantResource(EntityManager em, CurrentActor currentActor, TenantAccess access, Auditor auditor) {
+    public TenantResource(EntityManager em, CurrentActor currentActor, TenantAccess access, Auditor auditor, TenantProvider tenantProvider, TenantMemberProvider tenantMemberProvider) {
+        this.tenantMemberProvider = tenantMemberProvider;
+        this.tenantProvider = tenantProvider;
         this.em = em;
         this.currentActor = currentActor;
         this.access = access;
@@ -95,12 +103,12 @@ public class TenantResource {
         UUID tenantId = Ids.newId();
         access.setTenant(tenantId);
 
-        TenantEntity tenant = new TenantEntity();
-        tenant.setId(tenantId);
+        TenantModel tenant = tenantProvider.newTenant(tenantId);
         tenant.setName(request.name().strip());
         tenant.setCreatedBy(actor.subject());
         try {
-            tenant.persistAndFlush();
+            tenantProvider.persist(tenant);
+            tenantProvider.flush();
         } catch (jakarta.persistence.PersistenceException e) {
             // Two concurrent signups: the database keeps one free tenant per person
             if (io.github.projectopenubl.xhandler.utils.Constraints.violated(e).filter("tenant_one_free_per_person"::equals).isPresent()) {
@@ -109,13 +117,12 @@ public class TenantResource {
             throw e;
         }
 
-        TenantMemberEntity owner = new TenantMemberEntity();
-        owner.setId(Ids.newId());
+        TenantMemberModel owner = tenantMemberProvider.newTenantMember(Ids.newId());
         owner.setTenantId(tenantId);
         owner.setKind(actor.kind());
         owner.setSubject(actor.subject());
         owner.setRole(Role.OWNER.json());
-        owner.persist();
+        tenantMemberProvider.persist(owner);
 
         TenantScope scope = new TenantScope(tenantId, actor, Role.OWNER);
         auditor.record(scope, "tenant.created", "tenant", tenantId);
@@ -128,7 +135,7 @@ public class TenantResource {
     @Transactional
     public TenantView get(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        TenantEntity tenant = TenantEntity.findById(tenantId);
+        TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
         if (tenant == null) {
             throw ApiException.notFound();
         }
@@ -142,7 +149,7 @@ public class TenantResource {
     @Transactional
     public TenantView update(@PathParam("tenantId") UUID tenantId, @Valid UpdateTenant request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        TenantEntity tenant = em.find(TenantEntity.class, tenantId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        TenantModel tenant = tenantProvider.getTenantForUpdate(tenantId).orElse(null);
         if (tenant == null) {
             throw ApiException.notFound();
         }
@@ -155,7 +162,7 @@ public class TenantResource {
         return view(tenant);
     }
 
-    private static TenantView view(TenantEntity tenant) {
+    private static TenantView view(TenantModel tenant) {
         return new TenantView(tenant.getId(), tenant.getName(), tenant.getPlan(), tenant.getStatus(), tenant.getRetentionYears());
     }
 }

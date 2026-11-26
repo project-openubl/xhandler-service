@@ -1,10 +1,10 @@
 package io.github.projectopenubl.xhandler.events;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 
 /**
  * Fired synchronously inside the transaction that changed a document's status, with the tenant
  * open, so observers (voiding, webhooks, usage, notifications) write in the same transaction.
  * Observers receive the managed entity: they must not keep it beyond the call (§10.8).
  */
-public record DocumentStatusChanged(DocumentEntity document, String previousStatus, String correlationId) {}
+public record DocumentStatusChanged(DocumentModel document, String previousStatus, String correlationId) {}

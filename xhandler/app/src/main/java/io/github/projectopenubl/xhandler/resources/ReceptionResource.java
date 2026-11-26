@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.jobs.handlers.ReceptionValidity;
 
@@ -7,7 +9,7 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
@@ -52,6 +54,8 @@ import org.jboss.resteasy.reactive.multipart.FileUpload;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/receptions")
 public class ReceptionResource {
 
+    private final CompanyManager companyManager;
+
     public record ReceptionView(UUID id, String supplierRuc, String tipoComprobante, String serieNumero, LocalDate fechaEmision, String moneda,
             BigDecimal total, String validityState, Instant validityCheckedAt, boolean hasPdf, boolean hasCdr, Instant createdAt) {}
 
@@ -65,7 +69,8 @@ public class ReceptionResource {
     private final Auditor auditor;
     private final ReceptionValidity validity;
 
-    public ReceptionResource(TenantAccess access, Engine engine, FileStore files, EntityManager em, Auditor auditor, ReceptionValidity validity) {
+    public ReceptionResource(TenantAccess access, Engine engine, FileStore files, EntityManager em, Auditor auditor, ReceptionValidity validity, CompanyManager companyManager) {
+        this.companyManager = companyManager;
         this.access = access;
         this.engine = engine;
         this.files = files;
@@ -86,7 +91,7 @@ public class ReceptionResource {
         // Authorize before reading uploads or making the engine parse them
         QuarkusTransaction.requiringNew().run(() -> {
             access.enter(tenantId, Role.OPERATOR);
-            CompanyResource.find(companyId);
+            companyManager.getCompany(companyId);
         });
         byte[] xmlBytes = read(xml, MAX_XML, "El XML");
         byte[] pdfBytes = pdf == null ? null : read(pdf, MAX_ATTACHMENT, "El PDF");
@@ -97,7 +102,7 @@ public class ReceptionResource {
         }
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-            CompanyEntity company = CompanyResource.find(companyId);
+            CompanyModel company = companyManager.getCompany(companyId);
             if (!"6".equals(identity.customerTipo()) || !company.getRuc().equals(identity.customerNumero())) {
                 throw ApiException.invalid("invalid_document", "El comprobante no está emitido a la empresa (RUC del adquirente).", null);
             }
@@ -151,7 +156,7 @@ public class ReceptionResource {
             @QueryParam("from") LocalDate from, @QueryParam("to") LocalDate to, @QueryParam("limit") Integer limit,
             @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
-        CompanyResource.find(companyId);
+        companyManager.getCompany(companyId);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
         @SuppressWarnings("unchecked")
@@ -171,7 +176,7 @@ public class ReceptionResource {
     public ReceptionView get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @PathParam("receptionId") UUID receptionId) {
         access.enter(tenantId, Role.VIEWER);
-        CompanyResource.find(companyId);
+        companyManager.getCompany(companyId);
         if (em.createNativeQuery("SELECT 1 FROM xhandler.reception WHERE id = :id AND company_id = :c")
                 .setParameter("id", receptionId).setParameter("c", companyId).getResultList().isEmpty()) {
             throw ApiException.notFound();
@@ -211,7 +216,7 @@ public class ReceptionResource {
 
     private String amountsJson(EngineModels.InspectResponse identity) {
         try {
-            var amounts = io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity.amountsOf(identity.amounts());
+            var amounts = DocumentModel.amountsOf(identity.amounts());
             return amounts == null ? null : JSON.writeValueAsString(amounts);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException(e);

@@ -26,20 +26,6 @@ public class DocumentEventEntity extends PanacheEntityBase {
     private String actor;
     private String correlationId;
 
-    public static DocumentEventEntity record(DocumentEntity document, Integer code, String message, String actor, String correlationId) {
-        DocumentEventEntity event = new DocumentEventEntity();
-        event.id = Ids.newId();
-        event.at = Instant.now();
-        event.tenantId = document.getTenantId();
-        event.documentId = document.getId();
-        event.status = document.getStatus();
-        event.code = code;
-        event.message = message;
-        event.actor = actor;
-        event.correlationId = correlationId;
-        event.persist();
-        return event;
-    }
 
     public UUID getId() {
         return id;

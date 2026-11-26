@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.files.FileStore;
@@ -44,7 +44,7 @@ public class AccessLinks {
 
     /** Creates a link; the token is only ever returned here. Runs with the document's tenant open. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public String create(DocumentEntity document) {
+    public String create(DocumentModel document) {
         byte[] raw = new byte[16];
         RANDOM.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);

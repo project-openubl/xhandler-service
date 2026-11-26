@@ -1,8 +1,14 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
+import io.github.projectopenubl.xhandler.models.TenantModel;
+import io.github.projectopenubl.xhandler.models.TenantProvider;
+import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
+import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
+import io.github.projectopenubl.xhandler.models.CompanyProvider;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.models.DocumentEventModel;
+import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 import io.github.projectopenubl.xhandler.utils.DocumentTypes;
@@ -15,7 +21,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.keys.SignatureLog;
@@ -52,6 +58,16 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class EmitService {
 
+    private final DocumentProvider documentProvider;
+
+    private final TenantProvider tenantProvider;
+
+    private final DocumentFileProvider documentFileProvider;
+
+    private final DocumentEventProvider documentEventProvider;
+
+    private final CompanyProvider companyProvider;
+
     /** What a client sends: an xbuilder document plus options. */
     public record EmitRequest(JsonNode document, String serie, Boolean delivered, Map<String, String> labels) {}
 
@@ -64,7 +80,7 @@ public class EmitService {
      * issue reserves no number and signs nothing. {@code issued} runs after the document insert and
      * marks the draft issued. Throwing from either rolls the emit back.
      */
-    public record DraftIssue(String key, Runnable guard, java.util.function.Consumer<DocumentEntity> issued) {}
+    public record DraftIssue(String key, Runnable guard, java.util.function.Consumer<DocumentModel> issued) {}
 
     private final TenantAccess access;
     private final Numbering numbering;
@@ -101,7 +117,12 @@ public class EmitService {
             io.github.projectopenubl.xhandler.managers.ExchangeRates rates,
             @ConfigProperty(name = "xhandler.emit.permits", defaultValue = "32") int permits,
             @ConfigProperty(name = "xhandler.emit.permit-timeout", defaultValue = "5s") Duration permitTimeout,
-            @ConfigProperty(name = "xhandler.emit.lock-timeout", defaultValue = "10s") Duration lockTimeout) {
+            @ConfigProperty(name = "xhandler.emit.lock-timeout", defaultValue = "10s") Duration lockTimeout, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, TenantProvider tenantProvider, DocumentProvider documentProvider) {
+        this.documentProvider = documentProvider;
+        this.tenantProvider = tenantProvider;
+        this.documentFileProvider = documentFileProvider;
+        this.documentEventProvider = documentEventProvider;
+        this.companyProvider = companyProvider;
         this.access = access;
         this.numbering = numbering;
         this.engine = engine;
@@ -194,7 +215,7 @@ public class EmitService {
                 } else {
                     access.enter(tenantId, Role.OPERATOR);
                 }
-                CompanyEntity company = CompanyEntity.findById(companyId);
+                CompanyModel company = companyProvider.getCompany(companyId).orElse(null);
                 if (company == null || company.getDeletedAt() != null) {
                     throw ApiException.notFound();
                 }
@@ -231,8 +252,8 @@ public class EmitService {
     }
 
     /** The company may emit this document type now: active, and authorized when it emits as PSE (§3.2). */
-    public void checkCompany(CompanyEntity company, String tipo) {
-        io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity tenant = io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity.findById(company.getTenantId());
+    public void checkCompany(CompanyModel company, String tipo) {
+        TenantModel tenant = tenantProvider.getTenant(company.getTenantId()).orElse(null);
         if (tenant != null && "exited".equals(tenant.getStatus())) {
             // Readable until its data is deleted, but it left: no new documents (§13)
             throw ApiException.conflict("tenant_exited", "La organización dejó la plataforma: no puede emitir comprobantes.");
@@ -271,7 +292,7 @@ public class EmitService {
         boundLockWaits();
         // Lock order: company → draft → series → documents (§10.8 rule 4). FOR SHARE: an environment
         // switch (FOR UPDATE) waits for running emits and blocks new ones.
-        CompanyEntity company = CompanyEntity.findById(companyId, LockModeType.PESSIMISTIC_READ);
+        CompanyModel company = companyProvider.getCompanyForShare(companyId).orElse(null);
         if (company == null || company.getDeletedAt() != null) {
             throw ApiException.notFound();
         }
@@ -316,8 +337,7 @@ public class EmitService {
         FileStore.Stored enriched = files.put(tenantId, bytes(built.enrichedJson()));
 
         Instant now = Instant.now();
-        DocumentEntity doc = new DocumentEntity();
-        doc.setId(documentId);
+        DocumentModel doc = documentProvider.newDocument(documentId);
         doc.setTenantId(tenantId);
         doc.setCompanyId(company.getId());
         doc.setSunatEnv(sunatEnv);
@@ -334,7 +354,7 @@ public class EmitService {
         doc.setCustomerNombre(DocumentTypes.customerName(spec));
         doc.setMoneda(identity.moneda());
         doc.setTotal(identity.total() == null ? null : new BigDecimal(identity.total()));
-        doc.setAmounts(DocumentEntity.amountsOf(identity.amounts()));
+        doc.setAmounts(DocumentModel.amountsOf(identity.amounts()));
         doc.setPaymentTerms(paymentTerms(tipo, spec));
         doc.setStatus("pending_send");
         doc.setDigestValue(signed.digestValue());
@@ -354,17 +374,18 @@ public class EmitService {
         doc.setCreatedAt(now);
         doc.setUpdatedAt(now);
         try {
-            doc.persistAndFlush();
+            documentProvider.persist(doc);
+            documentProvider.flush();
         } catch (jakarta.persistence.PersistenceException e) {
             if (io.github.projectopenubl.xhandler.utils.Constraints.violated(e).filter(c -> c.startsWith("document")).isPresent()) {
                 throw ApiException.conflict("number_taken", "El número ya fue usado en esta serie. Revise el número siguiente de la serie.");
             }
             throw e;
         }
-        DocumentFileEntity.record(doc, "xml_signed", xmlFile);
-        DocumentFileEntity.record(doc, "input", input);
-        DocumentFileEntity.record(doc, "enriched", enriched);
-        DocumentEventEntity.record(doc, null, "emitted", scope.actor().auditName(), correlationId);
+        documentFileProvider.addDocumentFile(doc, "xml_signed", xmlFile);
+        documentFileProvider.addDocumentFile(doc, "input", input);
+        documentFileProvider.addDocumentFile(doc, "enriched", enriched);
+        documentEventProvider.addDocumentEvent(doc, null, "emitted", scope.actor().auditName(), correlationId);
         auditor.record(scope, "document.emitted", "document", doc.getId(), Map.of("serie_numero", doc.serieNumero()));
         if (draft != null) {
             draft.issued().accept(doc);
@@ -428,7 +449,7 @@ public class EmitService {
         return credito ? "credito" : "contado";
     }
 
-    private boolean pseAuthorized(CompanyEntity company) {
+    private boolean pseAuthorized(CompanyModel company) {
         return !em.createNativeQuery("SELECT 1 FROM xhandler.pse_authorization WHERE company_id = :c AND revoked_at IS NULL AND approved_at IS NOT NULL")
                 .setParameter("c", company.getId()).getResultList().isEmpty();
     }
@@ -458,7 +479,7 @@ public class EmitService {
         return fecha;
     }
 
-    private String chooseSerie(EmitRequest request, ObjectNode spec, CompanyEntity company, String tipo) {
+    private String chooseSerie(EmitRequest request, ObjectNode spec, CompanyModel company, String tipo) {
         if (request.serie() != null) {
             return request.serie();
         }
@@ -479,7 +500,7 @@ public class EmitService {
         return numbering.defaultSerie(company.getId(), company.getSunatEnv(), tipo, prefix);
     }
 
-    private static void fillProveedor(ObjectNode spec, CompanyEntity company) {
+    private static void fillProveedor(ObjectNode spec, CompanyModel company) {
         ObjectNode proveedor = spec.hasNonNull("proveedor") && spec.get("proveedor").isObject()
                 ? (ObjectNode) spec.get("proveedor")
                 : spec.putObject("proveedor");
@@ -506,10 +527,7 @@ public class EmitService {
         } catch (NumberFormatException e) {
             return null;
         }
-        return DocumentEntity.<DocumentEntity>find(
-                        "companyId = ?1 and sunatEnv = ?2 and tipoComprobante = ?3 and serie = ?4 and numero = ?5 and origin <> 'ose_inbound'",
-                        companyId, sunatEnv, tipoAfectado, serie, numero)
-                .firstResultOptional()
+        return documentProvider.getIssuedDocument(companyId, sunatEnv, tipoAfectado, serie, numero)
                 .map(d -> d.getId())
                 .orElse(null);
     }

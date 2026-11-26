@@ -1,7 +1,8 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.JobProvider;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
-import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
+import io.github.projectopenubl.xhandler.models.JobModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
@@ -22,6 +23,8 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 /** A tenant's jobs, shaped like Pulp's tasks so xhandler-ui can reuse pulp-ui-2's patterns (§10.1). */
 @Path("/api/v1/tenants/{tenantId}/jobs")
 public class JobResource {
+
+    private final JobProvider jobProvider;
 
     public record JobView(
             UUID id,
@@ -44,7 +47,8 @@ public class JobResource {
     private final TenantAccess access;
     private final Jobs jobs;
 
-    public JobResource(TenantAccess access, Jobs jobs) {
+    public JobResource(TenantAccess access, Jobs jobs, JobProvider jobProvider) {
+        this.jobProvider = jobProvider;
         this.access = access;
         this.jobs = jobs;
     }
@@ -61,18 +65,7 @@ public class JobResource {
         access.enter(tenantId, Role.VIEWER);
         int size = Page.limit(limit);
         int from = Page.offset(offset);
-        StringBuilder query = new StringBuilder("1 = 1");
-        Map<String, Object> params = new java.util.HashMap<>();
-        if (state != null) {
-            query.append(" and state = :state");
-            params.put("state", state);
-        }
-        if (name != null) {
-            query.append(" and name = :name");
-            params.put("name", name);
-        }
-        query.append(" order by createdAt desc");
-        List<JobEntity> page = JobEntity.<JobEntity>find(query.toString(), params).range(from, from + size - 1).list();
+        List<JobModel> page = jobProvider.getJobs(state, name, from, size);
         return new Page<>(page.stream().map(JobResource::view).toList(), size, from);
     }
 
@@ -82,7 +75,7 @@ public class JobResource {
     @Transactional
     public JobView get(@PathParam("tenantId") UUID tenantId, @PathParam("jobId") UUID jobId) {
         access.enter(tenantId, Role.VIEWER);
-        JobEntity job = JobEntity.findById(jobId);
+        JobModel job = jobProvider.getJob(jobId).orElse(null);
         if (job == null) {
             throw ApiException.notFound();
         }
@@ -95,7 +88,7 @@ public class JobResource {
     @Transactional
     public JobView cancel(@PathParam("tenantId") UUID tenantId, @PathParam("jobId") UUID jobId) {
         access.enter(tenantId, Role.OPERATOR);
-        JobEntity job = JobEntity.findById(jobId);
+        JobModel job = jobProvider.getJob(jobId).orElse(null);
         if (job == null) {
             throw ApiException.notFound();
         }
@@ -107,11 +100,11 @@ public class JobResource {
             throw ApiException.conflict("job_not_cancelable", "Los envíos a SUNAT se controlan desde el documento.");
         }
         jobs.cancel(jobId);
-        JobEntity.getEntityManager().refresh(job);
+        jobProvider.refresh(job);
         return view(job);
     }
 
-    static JobView view(JobEntity j) {
+    static JobView view(JobModel j) {
         return new JobView(j.getId(), "xh:job:" + j.getId(), j.getName(), j.getState(), j.getPriorityClass(), j.getCreatedAt(), j.getUnblockedAt(), j.getStartedAt(),
                 j.getFinishedAt(), j.getWorker(), j.getAttempt(), List.of(j.getReservedResources()), j.getCreatedResources(), j.getResult(), j.getError(), j.getCorrelationId());
     }

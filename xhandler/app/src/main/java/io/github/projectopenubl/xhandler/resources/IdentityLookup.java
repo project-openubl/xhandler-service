@@ -1,11 +1,12 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.resources.CatalogResource;
-import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.managers.CredentialService;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -35,6 +36,8 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/lookup/{tipo}/{numero}")
 public class IdentityLookup {
 
+    private final CompanyManager companyManager;
+
     /** A normalized answer. */
     public record Identity(String tipo, String numero, String nombre, String direccion, String estado, String condicion, boolean cached) {}
 
@@ -53,7 +56,8 @@ public class IdentityLookup {
     public IdentityLookup(TenantAccess access, CredentialService credentials, CatalogResource catalogs, Egress egress, ObjectMapper json,
             @ConfigProperty(name = "xhandler.lookup.searchpe-url") Optional<String> searchpeUrl,
             io.github.projectopenubl.xhandler.managers.Auditor auditor, jakarta.persistence.EntityManager em,
-            @ConfigProperty(name = "xhandler.lookup.max-per-tenant-per-hour", defaultValue = "300") int maxPerHour) {
+            @ConfigProperty(name = "xhandler.lookup.max-per-tenant-per-hour", defaultValue = "300") int maxPerHour, CompanyManager companyManager) {
+        this.companyManager = companyManager;
         this.auditor = auditor;
         this.em = em;
         this.maxPerHour = maxPerHour;
@@ -87,7 +91,7 @@ public class IdentityLookup {
         record Provider(String url, String token, boolean tenantSupplied) {}
         Object cachedOrProvider = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-            CompanyEntity company = CompanyResource.find(companyId);
+            CompanyModel company = companyManager.getCompany(companyId);
             // Personal data: every lookup is audited, and limited per tenant (no free DNI → name oracle)
             auditor.record(scope, "lookup.identity", "company", companyId, Map.of("tipo", tipo, "numero", numero));
             int hits = ((Number) em.createNativeQuery("""

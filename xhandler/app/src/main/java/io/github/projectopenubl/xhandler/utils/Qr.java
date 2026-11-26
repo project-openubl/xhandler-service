@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.utils;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.DocumentModel;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
@@ -13,7 +13,7 @@ public final class Qr {
 
     private Qr() {}
 
-    public static String of(String ruc, DocumentEntity document, JsonNode enriched) {
+    public static String of(String ruc, DocumentModel document, JsonNode enriched) {
         if (document.isGuia() || document.isSummary()) {
             return null;
         }

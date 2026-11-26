@@ -1,8 +1,10 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.models.WebhookSubscriptionProvider;
+import io.github.projectopenubl.xhandler.models.WebhookDeliveryProvider;
 import io.github.projectopenubl.xhandler.clients.Egress;
-import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookDeliveryEntity;
-import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookSubscriptionEntity;
+import io.github.projectopenubl.xhandler.models.WebhookDeliveryModel;
+import io.github.projectopenubl.xhandler.models.WebhookSubscriptionModel;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
@@ -38,6 +40,10 @@ import org.jboss.logging.Logger;
 @ApplicationScoped
 public class WebhookDeliveryJob implements JobHandler {
 
+    private final WebhookSubscriptionProvider webhookSubscriptionProvider;
+
+    private final WebhookDeliveryProvider webhookDeliveryProvider;
+
     private static final Logger LOG = Logger.getLogger(WebhookDeliveryJob.class);
 
     static final List<Duration> BACKOFF = List.of(Duration.ofSeconds(10), Duration.ofMinutes(1), Duration.ofMinutes(5),
@@ -57,7 +63,9 @@ public class WebhookDeliveryJob implements JobHandler {
     private final io.github.projectopenubl.xhandler.managers.Auditor auditor;
 
     public WebhookDeliveryJob(EntityManager em, TenantAccess access, SecretBox box, Egress egress, ObjectMapper json,
-            io.github.projectopenubl.xhandler.managers.Auditor auditor) {
+            io.github.projectopenubl.xhandler.managers.Auditor auditor, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider) {
+        this.webhookSubscriptionProvider = webhookSubscriptionProvider;
+        this.webhookDeliveryProvider = webhookDeliveryProvider;
         this.auditor = auditor;
         this.em = em;
         this.access = access;
@@ -107,8 +115,8 @@ public class WebhookDeliveryJob implements JobHandler {
         record Request(String url, byte[] body, byte[] secret, String eventId, String type) {}
         Request request = QuarkusTransaction.requiringNew().call(() -> {
             io.github.projectopenubl.xhandler.security.TenantScope scope = access.enterAsPlatform(tenantId);
-            WebhookDeliveryEntity delivery = WebhookDeliveryEntity.findById(id);
-            WebhookSubscriptionEntity subscription = WebhookSubscriptionEntity.findById(delivery.getSubscriptionId());
+            WebhookDeliveryModel delivery = webhookDeliveryProvider.getWebhookDelivery(id).orElse(null);
+            WebhookSubscriptionModel subscription = webhookSubscriptionProvider.getWebhookSubscription(delivery.getSubscriptionId()).orElse(null);
             if (subscription == null || subscription.getDeletedAt() != null || !subscription.isActive()) {
                 delivery.setStatus("failed");
                 delivery.setLastError("subscription removed or disabled");
@@ -161,7 +169,7 @@ public class WebhookDeliveryJob implements JobHandler {
         String finalError = error;
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            WebhookDeliveryEntity delivery = WebhookDeliveryEntity.findById(id, LockModeType.PESSIMISTIC_WRITE);
+            WebhookDeliveryModel delivery = webhookDeliveryProvider.getWebhookDeliveryForUpdate(id).orElse(null);
             if (delivery == null || delivery.getAttempts() != attempts || !"pending".equals(delivery.getStatus())) {
                 return;
             }

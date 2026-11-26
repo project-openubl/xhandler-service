@@ -36,19 +36,8 @@ public class CredentialEntity extends PanacheEntityBase {
     private Instant updatedAt;
 
     /** Associated data binding the ciphertext to this row (see {@link SecretBox#seal}). */
-    public String context() {
-        return "credential:" + id + ":" + tenantId + ":" + companyId + ":" + kind;
-    }
 
-    public SecretBox.Sealed sealed() {
-        return new SecretBox.Sealed(ciphertext, wrappedDataKey, masterKeyId);
-    }
 
-    public void seal(SecretBox.Sealed sealed) {
-        ciphertext = sealed.ciphertext();
-        wrappedDataKey = sealed.wrappedDataKey();
-        masterKeyId = sealed.masterKeyId();
-    }
 
     public UUID getId() {
         return id;
