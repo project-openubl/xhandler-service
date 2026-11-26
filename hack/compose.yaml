@@ -1,7 +1,8 @@
 # The local stack for every service in this repository:
 #   PostgreSQL with one database per service (xhandler, searchpe), Keycloak with
 #   the shared dev realm, Grafana LGTM, and the SUNAT fake (profile "fake").
-# Each Quarkus app also runs alone with `quarkus:dev` (Dev Services start what it needs).
+# Used by hack/ui-e2e-stack.sh and hack/xhandler-e2e.sh (packaged apps). In development, prefer
+# `quarkus:dev`: Dev Services start PostgreSQL, the shared Keycloak (:8180) and Mailpit (CONTRIBUTING.md).
 #
 #   podman compose -f hack/compose.yaml up -d            # or: docker compose ...
 #   podman compose -f hack/compose.yaml --profile fake up -d

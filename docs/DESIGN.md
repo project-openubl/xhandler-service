@@ -1338,7 +1338,7 @@ P11 load tests run at these figures, including an outage followed by a drain.
 
 ### 26.3 Release and deployment
 
-- Environments: `dev` (Dev Services), `staging` (SUNAT beta, production-like), `production`.
+- Environments: `dev` (Dev Services: a PostgreSQL per app, one Keycloak on :8180 shared by xhandler-service and searchpe, Mailpit, Grafana LGTM on request), `staging` (SUNAT beta, production-like), `production`.
 - GitOps (Argo CD) with container images signed and scanned in CI.
 - Rolling deploys under the expand/contract migration rule (§15.1).
 - **The Kubernetes operator is the supported install path** (`operator/` in the monorepo, OLM bundle). Its `XHandler` kind (`xhandler.openubl.io/v1alpha1`) deploys the api and worker Deployments with the engine sidecar, the migration Job (run before the Deployments roll on an image or database change), the optional egress proxy and NetworkPolicies, and the UI with its Ingress. The `Searchpe` kind (`searchpe.openubl.io/v1alpha1`) deploys searchpe as its own pod. `deploy/base` and `deploy/monitoring` stay as the Kustomize reference for installs without OLM.

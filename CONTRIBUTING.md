@@ -14,30 +14,58 @@ says otherwise. For conventions, tests and CI, read [AGENTS.md](AGENTS.md).
 
 ## What runs where
 
-| Process               | Port  | What it is                                        |
-| --------------------- | ----- | ------------------------------------------------- |
-| UI                    | 3000  | React dev server; proxies `/api/*` to the backends |
-| xhandler-service      | 8080  | Quarkus app: the document API                     |
-| searchpe              | 8081  | Quarkus app: RUC lookup (optional)                |
-| xhandler engine       | 8090  | Rust sidecar: builds, signs, sends documents      |
-| SUNAT fake            | 8099  | Stands in for SUNAT; every new company starts here |
-| PostgreSQL            | 5432  | One database per service                          |
-| Keycloak              | 8180  | Shared dev realm `xhandler` (admin console: `admin` / `admin`) |
-| Grafana (LGTM)        | 3001  | Traces, metrics and logs (optional)               |
-
-The infrastructure (PostgreSQL, Keycloak, Grafana) comes from [hack/compose.yaml](hack/compose.yaml).
+| Process          | Port | What it is                                                     |
+| ---------------- | ---- | -------------------------------------------------------------- |
+| UI               | 3000 | React dev server; proxies `/api/*` to the backends             |
+| xhandler-service | 8080 | Quarkus app: the document API                                  |
+| searchpe         | 8081 | Quarkus app: RUC lookup (optional)                             |
+| xhandler engine  | 8090 | Rust sidecar: builds, signs, sends documents                   |
+| SUNAT fake       | 8099 | Stands in for SUNAT; every new company starts here             |
+| Keycloak         | 8180 | Shared dev realm `xhandler` (admin console: `admin` / `admin`) |
+| Grafana (LGTM)   | 3001 | Traces, metrics and logs (optional)                            |
 
 **Dev users** (password = username): `alice`, `bob`, `carol` (platform support), `dave` (email
 not verified) and `olga` (platform admin, every searchpe permission). Use `olga` to see everything.
 
-## Option 1: the whole stack in one command
+## Option 1: develop with `quarkus:dev` (recommended)
 
-Best to try the platform or to work on the UI only. It builds every backend and starts them from
-the built artifacts:
+Quarkus [Dev Services](https://quarkus.io/guides/dev-services) start the containers each app
+needs, so there is nothing to configure: code reloads on every request. One terminal per process.
+
+```bash
+(cd xhandler/engine && cargo run)                    # 1. engine on 127.0.0.1:8090
+(cd xhandler/engine && cargo run --bin sunat-fake)   # 2. SUNAT fake on 127.0.0.1:8099
+./mvnw -f xhandler quarkus:dev -pl app               # 3. xhandler-service on :8080
+./mvnw quarkus:dev -pl searchpe                      # 4. searchpe on :8081 (optional)
+(cd ui && cp .env.example .env && npm ci && npm run start:dev)   # 5. http://localhost:3000
+```
+
+Log in to the UI as `olga` / `olga`. What Dev Services start:
+
+| Container  | Started by                      | Notes                                                              |
+| ---------- | ------------------------------- | ------------------------------------------------------------------ |
+| PostgreSQL | each app, its own               | Random port; kept across live reloads                              |
+| Keycloak   | the first app, the other joins  | Port 8180, the realm in [hack/keycloak/](hack/keycloak/)           |
+| Mailpit    | xhandler-service                | Catches every email: http://localhost:8080/q/mailpit/              |
+| LGTM       | xhandler-service, when asked    | Add `-Dquarkus.observability.enabled=true`; Grafana on :3001       |
+
+- Keycloak belongs to the app that started it: stopping that app stops Keycloak, and the other
+  one loses its logins until you restart it. Start xhandler-service first and stop it last.
+- Dev UI: http://localhost:8080/q/dev-ui (configuration, Dev Services, Mailpit, Keycloak) ·
+  Swagger UI: http://localhost:8080/q/swagger-ui.
+- Traces: with LGTM on, start the engine with `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+  to see app → engine → SUNAT in one trace.
+- Without searchpe, remove `SEARCHPE_API_URL` from `ui/.env`: the UI hides the RUC section.
+
+## Option 2: the whole stack in one command
+
+Runs every backend from its built artifacts in production mode, against
+[hack/compose.yaml](hack/compose.yaml) (PostgreSQL, Keycloak on 8180). It is the stack of the UI's
+Playwright suite and suits trying the platform or working on the UI only:
 
 ```bash
 hack/ui-e2e-stack.sh build      # Maven packages of xhandler and searchpe, cargo build of the engine
-hack/ui-e2e-stack.sh up         # compose (PostgreSQL, Keycloak) + fake, engine, xhandler, searchpe
+hack/ui-e2e-stack.sh up         # compose + fake, engine, xhandler, searchpe
 
 cd ui
 cp .env.example .env
@@ -48,70 +76,7 @@ npm run start:dev               # http://localhost:3000
 Logs go to `/tmp/xhandler-ui-e2e/*.log`. Stop with `hack/ui-e2e-stack.sh down` (add `--compose`
 to stop PostgreSQL and Keycloak too). After changing a backend, run `build` and `up` again.
 
-## Option 2: run each service yourself
-
-Best to work on a backend: `quarkus:dev` reloads code on every request. Use one terminal per
-service.
-
-### 1. Infrastructure
-
-```bash
-podman compose -f hack/compose.yaml up -d postgres keycloak
-podman compose -f hack/compose.yaml up -d lgtm          # optional: Grafana on :3001
-```
-
-### 2. xhandler-service
-
-The engine and the SUNAT fake first (from `xhandler/engine`):
-
-```bash
-cd xhandler/engine && cargo run                     # engine on 127.0.0.1:8090
-cd xhandler/engine && cargo run --bin sunat-fake    # SUNAT fake on 127.0.0.1:8099
-```
-
-Then the app on 8080, against the compose database and Keycloak:
-
-```bash
-QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/xhandler \
-QUARKUS_DATASOURCE_USERNAME=xhandler_login QUARKUS_DATASOURCE_PASSWORD=xhandler_login \
-QUARKUS_FLYWAY_USERNAME=xhandler_owner QUARKUS_FLYWAY_PASSWORD=xhandler_owner \
-QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8180/realms/xhandler \
-XHANDLER_BILLING_DEFAULT_PLAN=enterprise \
-  ./mvnw -f xhandler quarkus:dev -pl app
-```
-
-- Swagger UI: http://localhost:8080/q/swagger-ui · Dev UI: http://localhost:8080/q/dev-ui
-- Without the variables, `quarkus:dev` starts its own PostgreSQL and Keycloak with Dev Services
-  (Keycloak on a random port). That is enough for the API alone, but the UI needs Keycloak
-  on 8180.
-- Traces: start the engine with `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` and open
-  Grafana.
-
-### 3. searchpe (optional)
-
-On 8081, with login and permissions on (its defaults turn both off):
-
-```bash
-QUARKUS_HTTP_PORT=8081 \
-QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/searchpe \
-QUARKUS_DATASOURCE_USERNAME=searchpe QUARKUS_DATASOURCE_PASSWORD=searchpe \
-QUARKUS_OIDC_TENANT_ENABLED=true SEARCHPE_DISABLE_AUTHORIZATION=false \
-SEARCHPE_ALLOW_ADVANCEDSEARCH=true \
-QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8180/realms/xhandler \
-QUARKUS_OIDC_CLIENT_ID=searchpe QUARKUS_OIDC_CREDENTIALS_SECRET=secret \
-  ./mvnw quarkus:dev -pl searchpe
-```
-
-Skip it and remove `SEARCHPE_API_URL` from `ui/.env`: the UI then hides the RUC section.
-
-### 4. UI
-
-```bash
-cd ui
-cp .env.example .env            # points at :8080, :8081 and Keycloak :8180
-npm ci
-npm run start:dev               # http://localhost:3000, log in as olga/olga
-```
+Don't mix the two options: both use port 8180 for Keycloak.
 
 ## First steps in the app
 
@@ -130,9 +95,14 @@ beta.
 
 ## Troubleshooting
 
-- **Port in use**: Keycloak (8180) or PostgreSQL (5432) from another project. Stop it or remap
-  the port in `hack/compose.yaml`.
-- **Start from a clean database**: `podman compose -f hack/compose.yaml down -v` drops the
-  volumes; the next `up` recreates the roles and databases.
+- **Port 8180 in use**: the compose Keycloak of Option 2 (`podman compose -f hack/compose.yaml
+  down`) or another project.
+- **Start from a clean database**: Dev Services start a fresh PostgreSQL with each app start,
+  unless Testcontainers reuse is on (`testcontainers.reuse.enable=true` in
+  `~/.testcontainers.properties`); then remove the container (`podman rm -f <id>`). For Option 2,
+  `podman compose -f hack/compose.yaml down -v` drops the volumes.
+- **Dev Services with Podman**: Testcontainers needs the Podman socket
+  (`systemctl --user enable --now podman.socket` and
+  `DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock`).
 - **The UI says a backend is unreachable**: check `ui/.env` and that the backend answers on
   `/q/health/ready`.

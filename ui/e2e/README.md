@@ -29,34 +29,17 @@ hack/ui-e2e-stack.sh down           # stops the processes; `down --compose` also
 Logs go to `/tmp/xhandler-ui-e2e/*.log` (`STACK_DIR` to change). `COMPOSE=docker compose` if you
 use Docker. The database outlives `down`: the suite passes against it run after run.
 
-## 2. The backends by hand
+## 2. The backends in dev mode
 
-To work on a backend, run it with `quarkus:dev` instead; set what the script sets
-(`hack/ui-e2e-stack.sh` is the reference). xhandler-service on 8080 needs the engine and the SUNAT
-fake to issue (`(cd xhandler/engine && cargo run)` and `cargo run --bin sunat-fake`), and the
-`enterprise` default plan for webhooks:
-
-```bash
-podman compose -f hack/compose.yaml up -d postgres keycloak
-QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/xhandler \
-QUARKUS_DATASOURCE_USERNAME=xhandler_login QUARKUS_DATASOURCE_PASSWORD=xhandler_login \
-QUARKUS_FLYWAY_USERNAME=xhandler_owner QUARKUS_FLYWAY_PASSWORD=xhandler_owner \
-QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8180/realms/xhandler \
-XHANDLER_BILLING_DEFAULT_PLAN=enterprise \
-  ./mvnw -f xhandler quarkus:dev -pl app
-```
-
-searchpe on 8081, with OIDC and authorization on (its defaults turn both off):
+To work on a backend, run it with `quarkus:dev` instead of the script (no compose stack: Dev
+Services start PostgreSQL and the shared Keycloak on 8180). xhandler-service needs the engine and
+the SUNAT fake to issue; see [CONTRIBUTING.md](../../CONTRIBUTING.md#option-1-develop-with-quarkusdev-recommended):
 
 ```bash
-QUARKUS_HTTP_PORT=8081 \
-QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/searchpe \
-QUARKUS_DATASOURCE_USERNAME=searchpe QUARKUS_DATASOURCE_PASSWORD=searchpe \
-QUARKUS_OIDC_TENANT_ENABLED=true SEARCHPE_DISABLE_AUTHORIZATION=false \
-SEARCHPE_ALLOW_ADVANCEDSEARCH=true \
-QUARKUS_OIDC_AUTH_SERVER_URL=http://localhost:8180/realms/xhandler \
-QUARKUS_OIDC_CLIENT_ID=searchpe QUARKUS_OIDC_CREDENTIALS_SECRET=secret \
-  ./mvnw quarkus:dev -pl searchpe
+(cd xhandler/engine && cargo run)
+(cd xhandler/engine && cargo run --bin sunat-fake)
+./mvnw -f xhandler quarkus:dev -pl app     # :8080, the enterprise plan by default in dev mode
+./mvnw quarkus:dev -pl searchpe            # :8081, OIDC and authorization on in dev mode
 ```
 
 Without searchpe, run with `E2E_SEARCHPE=false`: its specs skip and the UI hides its section.

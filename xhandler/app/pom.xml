@@ -90,6 +90,20 @@
             <artifactId>quarkus-mailer</artifactId>
         </dependency>
 
+        <!-- Dev Services only (provided: never in the packaged app). Mailpit catches the emails
+             sent in dev mode; LGTM is Grafana with an OpenTelemetry collector, opt-in -->
+        <dependency>
+            <groupId>io.quarkiverse.mailpit</groupId>
+            <artifactId>quarkus-mailpit</artifactId>
+            <version>4.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-observability-devservices-lgtm</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit</artifactId>

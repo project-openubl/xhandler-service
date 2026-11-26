@@ -35,7 +35,7 @@ hack/       dev and CI tooling only
 
 ```bash
 # xhandler
-./mvnw -f xhandler quarkus:dev                  # app on :8080, Dev Services start PostgreSQL
+./mvnw -f xhandler quarkus:dev -pl app          # :8080; Dev Services: PostgreSQL, Keycloak :8180, Mailpit
 ./mvnw -f xhandler verify                       # tests (need Docker or Podman)
 (cd xhandler/engine && cargo run)               # engine on 127.0.0.1:8090
 (cd xhandler/engine && cargo run --bin sunat-fake)   # SUNAT fake on 127.0.0.1:8099
@@ -43,6 +43,7 @@ hack/       dev and CI tooling only
 hack/xhandler-e2e.sh                            # full flow against SUNAT beta
 
 # searchpe, operator
+./mvnw quarkus:dev -pl searchpe                 # :8081, joins xhandler's Keycloak
 ./mvnw verify -pl searchpe
 (cd operator && make lint verify-generated test bundle bundle-validate)
 
@@ -52,7 +53,8 @@ hack/ui-e2e-stack.sh build && hack/ui-e2e-stack.sh up && (cd ui && npm run test:
 ```
 
 Toolchains: Java 25, Rust pinned in `xhandler/engine/rust-toolchain.toml` (needs `libxml2-dev`,
-`libclang-dev`, `pkg-config`), Node 22, Go. `ui-e2e-stack.sh` runs searchpe on 8081.
+`libclang-dev`, `pkg-config`), Node 22, Go. searchpe runs on 8081 (dev mode and `ui-e2e-stack.sh`);
+in dev mode both apps share one Keycloak from Dev Services (CONTRIBUTING.md).
 
 ## Conventions (all services)
 
