@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.utils.Times;
+import io.github.projectopenubl.xhandler.models.PrivacyProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
@@ -14,7 +14,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -80,13 +79,13 @@ public class DataSubjectRequests {
     public record PersonalData(DataSubjectRequestView request, List<PersonalDocument> documents, List<PersonalDraft> drafts) {}
 
     private final TenantAccess access;
-    private final EntityManager em;
+    private final PrivacyProvider privacy;
     private final Auditor auditor;
     private final Notifications notifications;
 
-    public DataSubjectRequests(TenantAccess access, EntityManager em, Auditor auditor, Notifications notifications) {
+    public DataSubjectRequests(TenantAccess access, PrivacyProvider privacy, Auditor auditor, Notifications notifications) {
         this.access = access;
-        this.em = em;
+        this.privacy = privacy;
         this.auditor = auditor;
         this.notifications = notifications;
     }
@@ -100,15 +99,8 @@ public class DataSubjectRequests {
     public UUID register(TenantScope scope, NewRequest request, String channel) {
         UUID id = Ids.newId();
         Instant now = Instant.now();
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.data_subject_request (id, tenant_id, subject_doc_type, subject_doc_number, subject_name, kind, channel,
-                            details, received_at, forward_due_at, forwarded_at, response_due_at, created_by)
-                        VALUES (:id, :t, :dt, :dn, :name, :kind, :channel, :details, :now, :forwardDue, :forwarded, :due, :by)""")
-                .setParameter("id", id).setParameter("t", scope.tenantId()).setParameter("dt", request.subjectDocType())
-                .setParameter("dn", request.subjectDocNumber()).setParameter("name", request.subjectName()).setParameter("kind", request.kind())
-                .setParameter("channel", channel).setParameter("details", request.details()).setParameter("now", now)
-                .setParameter("forwardDue", now.plus(Duration.ofDays(3))).setParameter("forwarded", now)
-                .setParameter("due", now.plus(term(request.kind()))).setParameter("by", scope.actor().auditName()).executeUpdate();
+        privacy.addRequest(id, scope.tenantId(), request.subjectDocType(), request.subjectDocNumber(), request.subjectName(), request.kind(),
+                channel, request.details(), now, now.plus(Duration.ofDays(3)), now, now.plus(term(request.kind())), scope.actor().auditName());
         notifications.publish(scope.tenantId(), "privacy.request", "Solicitud de derechos de datos personales",
                 "Se registró una solicitud de " + kindName(request.kind()) + " de datos personales. Respóndala antes del "
                         + lima(now.plus(term(request.kind()))) + ".", null);
@@ -146,11 +138,7 @@ public class DataSubjectRequests {
         access.enter(tenantId, Role.ADMIN);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
-        @SuppressWarnings("unchecked")
-        List<UUID> ids = em.createNativeQuery("""
-                        SELECT id FROM xhandler.data_subject_request WHERE (cast(:s AS text) IS NULL OR status = :s)
-                        ORDER BY received_at DESC, id DESC LIMIT :limit OFFSET :offset""")
-                .setParameter("s", status).setParameter("limit", size).setParameter("offset", start).getResultList();
+        List<UUID> ids = privacy.getRequestIds(status, size, start);
         return new Page<>(ids.stream().map(this::view).toList(), size, start);
     }
 
@@ -165,28 +153,16 @@ public class DataSubjectRequests {
     public PersonalData personalData(@PathParam("tenantId") UUID tenantId, @PathParam("id") UUID id) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         DataSubjectRequestView request = view(id);
-        @SuppressWarnings("unchecked")
-        List<Object[]> docs = em.createNativeQuery("""
-                        SELECT d.id, c.ruc, d.tipo_comprobante, d.serie, d.numero, d.fecha_emision, d.customer_nombre, d.moneda, d.total, d.status
-                        FROM xhandler.document d JOIN xhandler.company c ON c.id = d.company_id
-                        WHERE d.customer_numero = :n AND d.customer_tipo = :t ORDER BY d.fecha_emision DESC LIMIT 5000""")
-                .setParameter("n", request.subjectDocNumber()).setParameter("t", request.subjectDocType()).getResultList();
-        @SuppressWarnings("unchecked")
-        List<Object[]> drafts = em.createNativeQuery("""
-                        SELECT dd.id, c.ruc, dd.kind, dd.tipo_comprobante, dd.serie, dd.spec->'cliente'->>'nombre', dd.status, dd.created_at,
-                               dd.deleted_at
-                        FROM xhandler.document_draft dd JOIN xhandler.company c ON c.id = dd.company_id
-                        WHERE dd.spec->'cliente'->>'numero_documento_identidad' = :n AND dd.spec->'cliente'->>'tipo_documento_identidad' = :t
-                        ORDER BY dd.created_at DESC LIMIT 5000""")
-                .setParameter("n", request.subjectDocNumber()).setParameter("t", request.subjectDocType()).getResultList();
+        List<PrivacyProvider.PersonalDocumentRow> docs = privacy.getPersonalDocuments(request.subjectDocType(), request.subjectDocNumber());
+        List<PrivacyProvider.PersonalDraftRow> drafts = privacy.getPersonalDrafts(request.subjectDocType(), request.subjectDocNumber());
         auditor.record(scope, "privacy.personal_data_read", "data_subject_request", id,
                 Map.of("documents", String.valueOf(docs.size()), "drafts", String.valueOf(drafts.size())));
         return new PersonalData(request,
-                docs.stream().map(r -> new PersonalDocument((UUID) r[0], (String) r[1], (String) r[2], r[3] + "-" + r[4], String.valueOf(r[5]),
-                        String.valueOf(r[6]), String.valueOf(r[7]), String.valueOf(r[8]), (String) r[9])).toList(),
-                drafts.stream().map(r -> new PersonalDraft((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], (String) r[4], (String) r[5],
-                        (String) r[6], String.valueOf(Times.toInstant(r[7])),
-                        r[8] == null ? null : String.valueOf(Times.toInstant(r[8])))).toList());
+                docs.stream().map(r -> new PersonalDocument(r.id(), r.issuerRuc(), r.tipoComprobante(), r.serie() + "-" + r.numero(),
+                        String.valueOf(r.fechaEmision()), String.valueOf(r.nombre()), String.valueOf(r.moneda()), String.valueOf(r.total()),
+                        r.status())).toList(),
+                drafts.stream().map(r -> new PersonalDraft(r.id(), r.issuerRuc(), r.kind(), r.tipoComprobante(), r.serie(), r.nombre(),
+                        r.status(), String.valueOf(r.createdAt()), r.deletedAt() == null ? null : String.valueOf(r.deletedAt()))).toList());
     }
 
     @Operation(operationId = "closeDataSubjectRequest")
@@ -195,10 +171,7 @@ public class DataSubjectRequests {
     @Transactional
     public DataSubjectRequestView close(@PathParam("tenantId") UUID tenantId, @PathParam("id") UUID id, @Valid Close request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        int closed = em.createNativeQuery("""
-                        UPDATE xhandler.data_subject_request SET status = 'closed', resolution = :r, closed_at = now(), closed_by = :by
-                        WHERE id = :id AND status = 'open'""")
-                .setParameter("r", request.resolution()).setParameter("by", scope.actor().auditName()).setParameter("id", id).executeUpdate();
+        int closed = privacy.closeRequest(id, request.resolution(), scope.actor().auditName());
         if (closed == 0) {
             throw ApiException.notFound();
         }
@@ -207,30 +180,22 @@ public class DataSubjectRequests {
     }
 
     DataSubjectRequestView view(UUID id) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, subject_doc_type, subject_doc_number, subject_name, kind, channel, details, received_at, forwarded_at,
-                               response_due_at, status, resolution, closed_at
-                        FROM xhandler.data_subject_request WHERE id = :id""").setParameter("id", id).getResultList();
-        if (rows.isEmpty()) {
-            throw ApiException.notFound();
-        }
-        Object[] r = rows.get(0);
-        return new DataSubjectRequestView((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], (String) r[4], (String) r[5],
-                (String) r[6], String.valueOf(Times.toInstant(r[7])), r[8] == null ? null : String.valueOf(Times.toInstant(r[8])),
-                String.valueOf(Times.toInstant(r[9])), (String) r[10], (String) r[11],
-                r[12] == null ? null : String.valueOf(Times.toInstant(r[12])));
+        PrivacyProvider.DataSubjectRequestRow r = privacy.getRequest(id).orElseThrow(ApiException::notFound);
+        return new DataSubjectRequestView(r.id(), r.subjectDocType(), r.subjectDocNumber(), r.subjectName(), r.kind(), r.channel(),
+                r.details(), String.valueOf(r.receivedAt()), r.forwardedAt() == null ? null : String.valueOf(r.forwardedAt()),
+                String.valueOf(r.responseDueAt()), r.status(), r.resolution(),
+                r.closedAt() == null ? null : String.valueOf(r.closedAt()));
     }
 
     /** Reminds tenants 2 days before the term; overdue requests are logged for the platform (daily). */
     @ApplicationScoped
     public static class Deadlines implements JobHandler {
-        private final EntityManager em;
+        private final PrivacyProvider privacy;
         private final TenantAccess access;
         private final Notifications notifications;
 
-        public Deadlines(EntityManager em, TenantAccess access, Notifications notifications) {
-            this.em = em;
+        public Deadlines(PrivacyProvider privacy, TenantAccess access, Notifications notifications) {
+            this.privacy = privacy;
             this.access = access;
             this.notifications = notifications;
         }
@@ -243,12 +208,8 @@ public class DataSubjectRequests {
         @Override
         public Map<String, Object> run(JobContext context) {
             record Due(UUID tenant, UUID id, Instant dueAt) {}
-            List<Due> due = QuarkusTransaction.requiringNew().call(() -> {
-                @SuppressWarnings("unchecked")
-                List<Object[]> rows = em.createNativeQuery("SELECT tenant_id, request_id, response_due_at FROM xhandler.privacy_requests_due(2)")
-                        .getResultList();
-                return rows.stream().map(r -> new Due((UUID) r[0], (UUID) r[1], Times.toInstant(r[2]))).toList();
-            });
+            List<Due> due = QuarkusTransaction.requiringNew().call(() -> privacy.getRequestsDue().stream()
+                    .map(r -> new Due(r.tenantId(), r.requestId(), r.responseDueAt())).toList());
             int reminded = 0;
             for (Due d : due) {
                 if (d.dueAt().isBefore(Instant.now())) {
@@ -257,9 +218,7 @@ public class DataSubjectRequests {
                 }
                 boolean sent = QuarkusTransaction.requiringNew().call(() -> {
                     access.enterAsPlatform(d.tenant());
-                    int first = em.createNativeQuery(
-                                    "UPDATE xhandler.data_subject_request SET reminded_at = now() WHERE id = :id AND reminded_at IS NULL AND status = 'open'")
-                            .setParameter("id", d.id()).executeUpdate();
+                    int first = privacy.markReminded(d.id());
                     if (first == 1) {
                         notifications.publish(d.tenant(), "privacy.deadline", "Solicitud de datos personales por vencer",
                                 "Una solicitud de derechos de datos personales vence el " + lima(d.dueAt()) + ".", null);

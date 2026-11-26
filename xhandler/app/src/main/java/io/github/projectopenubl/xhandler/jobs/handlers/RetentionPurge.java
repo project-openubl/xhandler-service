@@ -3,9 +3,9 @@ package io.github.projectopenubl.xhandler.jobs.handlers;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.files.FileStore;
+import io.github.projectopenubl.xhandler.models.MaintenanceProvider;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,11 +23,11 @@ public class RetentionPurge implements JobHandler {
 
     private static final Logger LOG = Logger.getLogger(RetentionPurge.class);
 
-    private final EntityManager em;
+    private final MaintenanceProvider maintenance;
     private final FileStore files;
 
-    public RetentionPurge(EntityManager em, FileStore files) {
-        this.em = em;
+    public RetentionPurge(MaintenanceProvider maintenance, FileStore files) {
+        this.maintenance = maintenance;
         this.files = files;
     }
 
@@ -41,21 +41,16 @@ public class RetentionPurge implements JobHandler {
         int documents = 0;
         int deletedFiles = 0;
         for (int batch = 0; batch < 20; batch++) {
-            @SuppressWarnings("unchecked")
-            List<Object[]> expired = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery(
-                    "SELECT tenant_id, document_id FROM xhandler.expired_documents(500)").getResultList());
+            List<MaintenanceProvider.ExpiredDocument> expired = QuarkusTransaction.requiringNew().call(maintenance::getExpiredDocuments);
             if (expired.isEmpty()) {
                 break;
             }
             Map<UUID, List<UUID>> byTenant = new LinkedHashMap<>();
-            for (Object[] r : expired) {
-                byTenant.computeIfAbsent((UUID) r[0], k -> new ArrayList<>()).add((UUID) r[1]);
+            for (MaintenanceProvider.ExpiredDocument r : expired) {
+                byTenant.computeIfAbsent(r.tenantId(), k -> new ArrayList<>()).add(r.documentId());
             }
             for (Map.Entry<UUID, List<UUID>> e : byTenant.entrySet()) {
-                @SuppressWarnings("unchecked")
-                List<String> keys = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery(
-                                "SELECT * FROM xhandler.purge_documents(:t, cast(:ids AS uuid[]))")
-                        .setParameter("t", e.getKey()).setParameter("ids", e.getValue().toArray(UUID[]::new)).getResultList());
+                List<String> keys = QuarkusTransaction.requiringNew().call(() -> maintenance.purgeDocuments(e.getKey(), e.getValue()));
                 documents += e.getValue().size();
                 for (String key : keys) {
                     try {

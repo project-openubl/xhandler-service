@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.TenantExitProvider;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
-import io.github.projectopenubl.xhandler.utils.Times;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -19,7 +19,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -79,15 +78,15 @@ public class TenantExit {
     static final Duration DELETE_AFTER = Duration.ofDays(730);
 
     private final TenantAccess access;
-    private final EntityManager em;
+    private final TenantExitProvider exits;
     private final Jobs jobs;
     private final FileStore files;
     private final Auditor auditor;
 
-    public TenantExit(TenantAccess access, EntityManager em, Jobs jobs, FileStore files, Auditor auditor, TenantProvider tenantProvider) {
+    public TenantExit(TenantAccess access, TenantExitProvider exits, Jobs jobs, FileStore files, Auditor auditor, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.access = access;
-        this.em = em;
+        this.exits = exits;
         this.jobs = jobs;
         this.files = files;
         this.auditor = auditor;
@@ -101,16 +100,13 @@ public class TenantExit {
     @Transactional
     public Response export(@PathParam("tenantId") UUID tenantId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        if (!em.createNativeQuery("SELECT 1 FROM xhandler.tenant_export WHERE status = 'pending' OR created_at > now() - interval '1 hour'")
-                .getResultList().isEmpty()) {
+        if (exits.hasRecentExport()) {
             throw ApiException.conflict("export_recent", "Ya hay una exportación en curso o de la última hora. Use esa.");
         }
         UUID id = Ids.newId();
-        em.createNativeQuery("INSERT INTO xhandler.tenant_export (id, tenant_id, requested_by) VALUES (:id, :t, :by)")
-                .setParameter("id", id).setParameter("t", tenantId).setParameter("by", scope.actor().auditName()).executeUpdate();
+        exits.addExport(id, tenantId, scope.actor().auditName());
         JobModel job = jobs.enqueue(scope, Export.NAME, 4, Map.of("export_id", id.toString()), List.of("export:" + tenantId), null);
-        em.createNativeQuery("UPDATE xhandler.tenant_export SET job_id = :j WHERE id = :id").setParameter("j", job.getId()).setParameter("id", id)
-                .executeUpdate();
+        exits.setExportJob(id, job.getId());
         auditor.record(scope, "tenant.export_requested", "tenant", tenantId, Map.of());
         return Response.status(202).entity(view(id)).build();
     }
@@ -122,13 +118,8 @@ public class TenantExit {
     public List<ExportView> exports(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.ADMIN);
         // An export whose job died (a crashed worker) is failed, not pending forever
-        em.createNativeQuery("""
-                        UPDATE xhandler.tenant_export e SET status = 'failed', detail = 'La exportación se interrumpió. Solicítela de nuevo.',
-                            done_at = now()
-                        WHERE e.status = 'pending' AND e.job_id IS NOT NULL
-                          AND (SELECT state FROM xhandler.job_summary(e.job_id)) IN ('failed', 'canceled')""").executeUpdate();
-        @SuppressWarnings("unchecked")
-        List<UUID> ids = em.createNativeQuery("SELECT id FROM xhandler.tenant_export ORDER BY created_at DESC LIMIT 20").getResultList();
+        exits.failInterruptedExports();
+        List<UUID> ids = exits.getRecentExportIds();
         return ids.stream().map(this::view).toList();
     }
 
@@ -171,53 +162,34 @@ public class TenantExit {
         if (!tenant.getName().equals(request.confirmName())) {
             throw ApiException.invalid("invalid_request", "Escriba el nombre exacto de la organización para confirmar.", null);
         }
-        long open = ((Number) em.createNativeQuery("""
-                        SELECT count(*) FROM xhandler.document WHERE status IN ('pending_send', 'in_progress', 'unknown', 'voiding')""")
-                .getSingleResult()).longValue();
+        long open = exits.countOpenDocuments();
         if (open > 0) {
             throw ApiException.conflict("pending_documents",
                     "Hay " + open + " comprobantes esperando la respuesta de SUNAT. Salga cuando tengan respuesta definitiva.");
         }
-        if (em.createNativeQuery("""
-                        SELECT 1 FROM xhandler.tenant_export e WHERE e.status = 'done' AND e.done_at > now() - interval '30 days'
-                          AND e.created_at > coalesce((SELECT max(updated_at) FROM xhandler.document), '-infinity')""")
-                .getResultList().isEmpty()) {
+        if (!exits.hasExportCoveringAllDocuments()) {
             throw ApiException.conflict("export_required",
                     "Descargue primero una exportación completa, posterior al último comprobante (de los últimos 30 días).");
         }
         Instant deleteAfter = tenant.isArchivePlan() ? null : Instant.now().plus(DELETE_AFTER);
-        em.createNativeQuery("""
-                        UPDATE xhandler.tenant SET exit_requested_at = now(), delete_after = :d, status = 'exited', updated_at = now()
-                        WHERE id = :id""").setParameter("d", deleteAfter).setParameter("id", tenantId).executeUpdate();
+        exits.markExited(tenantId, deleteAfter);
         auditor.record(scope, "tenant.exit", "tenant", tenantId, Map.of("delete_after", String.valueOf(deleteAfter)));
         return new ExitView("exited", deleteAfter == null ? null : deleteAfter.toString());
     }
 
     ExportView view(UUID id) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, status, cast(parts AS text), documents, detail, created_at, done_at FROM xhandler.tenant_export WHERE id = :id""")
-                .setParameter("id", id).getResultList();
-        if (rows.isEmpty()) {
-            throw ApiException.notFound();
-        }
-        Object[] r = rows.get(0);
-        List<ExportPart> parts = parse((String) r[2]).stream()
+        TenantExitProvider.ExportRow r = exits.getExport(id).orElseThrow(ApiException::notFound);
+        List<ExportPart> parts = parse(r.parts()).stream()
                 .map(p -> new ExportPart(String.valueOf(p.get("name")), ((Number) p.get("size")).longValue(),
                         p.get("documents") == null ? null : ((Number) p.get("documents")).intValue()))
                 .toList();
-        return new ExportView((UUID) r[0], (String) r[1], parts, r[3] == null ? null : ((Number) r[3]).intValue(), (String) r[4],
-                String.valueOf(Times.toInstant(r[5])), r[6] == null ? null : String.valueOf(Times.toInstant(r[6])));
+        return new ExportView(r.id(), r.status(), parts, r.documents(), r.detail(), String.valueOf(r.createdAt()),
+                r.doneAt() == null ? null : String.valueOf(r.doneAt()));
     }
 
     /** The parts as stored, with their storage keys ({@code ref}): only for downloads, never returned. */
     private List<Map<String, Object>> storedParts(UUID id) {
-        List<?> rows = em.createNativeQuery("SELECT cast(parts AS text) FROM xhandler.tenant_export WHERE id = :id").setParameter("id", id)
-                .getResultList();
-        if (rows.isEmpty()) {
-            throw ApiException.notFound();
-        }
-        return parse((String) rows.get(0));
+        return parse(exits.getExportParts(id).orElseThrow(ApiException::notFound).parts());
     }
 
     private static List<Map<String, Object>> parse(String parts) {
@@ -243,13 +215,13 @@ public class TenantExit {
         private static final ObjectMapper JSON = new ObjectMapper();
 
         private final TenantAccess access;
-        private final EntityManager em;
+        private final TenantExitProvider exits;
         private final FileStore files;
         private final DocumentPdf pdf;
 
-        public Export(TenantAccess access, EntityManager em, FileStore files, DocumentPdf pdf) {
+        public Export(TenantAccess access, TenantExitProvider exits, FileStore files, DocumentPdf pdf) {
             this.access = access;
-            this.em = em;
+            this.exits = exits;
             this.files = files;
             this.pdf = pdf;
         }
@@ -314,17 +286,14 @@ public class TenantExit {
                 int total = documents;
                 QuarkusTransaction.requiringNew().run(() -> {
                     access.enterAsPlatform(tenantId);
-                    em.createNativeQuery("""
-                                    UPDATE xhandler.tenant_export SET status = 'done', parts = cast(:p AS jsonb), documents = :n, done_at = now()
-                                    WHERE id = :id""").setParameter("p", partsJson).setParameter("n", total).setParameter("id", exportId).executeUpdate();
+                    exits.markExportDone(exportId, partsJson, total);
                 });
                 return Map.of("documents", documents, "parts", parts.size());
             } catch (Exception e) {
                 Logger.getLogger(Export.class).errorf(e, "export %s failed", exportId);
                 QuarkusTransaction.requiringNew().run(() -> {
                     access.enterAsPlatform(tenantId);
-                    em.createNativeQuery("UPDATE xhandler.tenant_export SET status = 'failed', detail = :d, done_at = now() WHERE id = :id")
-                            .setParameter("d", "No se pudo generar la exportación.").setParameter("id", exportId).executeUpdate();
+                    exits.markExportFailed(exportId, "No se pudo generar la exportación.");
                 });
                 return Map.of("status", "failed");
             }
@@ -333,34 +302,24 @@ public class TenantExit {
         private List<Item> documents(UUID tenantId, Instant afterCreated, UUID afterId) {
             return QuarkusTransaction.requiringNew().call(() -> {
                 access.enterAsPlatform(tenantId);
-                @SuppressWarnings("unchecked")
-                List<Object[]> rows = em.createNativeQuery("""
-                                SELECT d.id, c.ruc, d.sunat_env, d.tipo_comprobante, d.serie, d.numero, d.fecha_emision, d.status, d.sunat_code,
-                                       d.moneda, d.total, d.customer_tipo, d.customer_numero, d.created_at,
-                                       (SELECT storage_key FROM xhandler.document_file f WHERE f.document_id = d.id AND f.kind = 'xml_signed'),
-                                       (SELECT storage_key FROM xhandler.document_file f WHERE f.document_id = d.id AND f.kind = 'cdr_zip')
-                                FROM xhandler.document d JOIN xhandler.company c ON c.id = d.company_id
-                                WHERE (d.created_at, d.id) > (:at, :id)
-                                ORDER BY d.created_at, d.id LIMIT :n""")
-                        .setParameter("at", afterCreated).setParameter("id", afterId).setParameter("n", PART_DOCUMENTS).getResultList();
                 List<Item> out = new ArrayList<>();
-                for (Object[] r : rows) {
+                for (TenantExitProvider.ExportDocumentRow r : exits.getExportDocuments(afterCreated, afterId, PART_DOCUMENTS)) {
                     Map<String, Object> meta = new LinkedHashMap<>();
-                    meta.put("id", r[0].toString());
-                    meta.put("ruc", r[1]);
-                    meta.put("sunat_env", r[2]);
-                    meta.put("tipo_comprobante", r[3]);
-                    meta.put("serie_numero", r[4] + "-" + r[5]);
-                    meta.put("fecha_emision", String.valueOf(r[6]));
-                    meta.put("status", r[7]);
-                    meta.put("sunat_code", r[8]);
-                    meta.put("moneda", r[9]);
-                    meta.put("total", r[10] == null ? null : r[10].toString());
-                    meta.put("customer_tipo", r[11]);
-                    meta.put("customer", r[12]);
-                    meta.put("created_at", String.valueOf(Times.toInstant(r[13])));
-                    String name = r[2] + "/" + r[1] + "-" + r[3] + "-" + r[4] + "-" + r[5];
-                    out.add(new Item((UUID) r[0], name, (String) r[14], (String) r[15], meta));
+                    meta.put("id", r.id().toString());
+                    meta.put("ruc", r.ruc());
+                    meta.put("sunat_env", r.sunatEnv());
+                    meta.put("tipo_comprobante", r.tipoComprobante());
+                    meta.put("serie_numero", r.serie() + "-" + r.numero());
+                    meta.put("fecha_emision", String.valueOf(r.fechaEmision()));
+                    meta.put("status", r.status());
+                    meta.put("sunat_code", r.sunatCode());
+                    meta.put("moneda", r.moneda());
+                    meta.put("total", r.total() == null ? null : r.total().toString());
+                    meta.put("customer_tipo", r.customerTipo());
+                    meta.put("customer", r.customerNumero());
+                    meta.put("created_at", String.valueOf(r.createdAt()));
+                    String name = r.sunatEnv() + "/" + r.ruc() + "-" + r.tipoComprobante() + "-" + r.serie() + "-" + r.numero();
+                    out.add(new Item(r.id(), name, r.xmlRef(), r.cdrRef(), meta));
                 }
                 return out;
             });
@@ -372,42 +331,36 @@ public class TenantExit {
             UUID after = new UUID(0, 0);
             while (true) {
                 UUID from = after;
-                @SuppressWarnings("unchecked")
-                List<Object[]> rows = QuarkusTransaction.requiringNew().call(() -> {
+                List<TenantExitProvider.ExportReceptionRow> rows = QuarkusTransaction.requiringNew().call(() -> {
                     access.enterAsPlatform(tenantId);
-                    return em.createNativeQuery("""
-                                    SELECT r.id, c.ruc, r.supplier_ruc, r.tipo_comprobante, r.serie, r.numero, r.fecha_emision, r.validity_state,
-                                           r.xml_ref, r.pdf_ref, r.cdr_ref
-                                    FROM xhandler.reception r JOIN xhandler.company c ON c.id = r.company_id
-                                    WHERE r.id > :after ORDER BY r.id LIMIT :n""").setParameter("after", from).setParameter("n", PART_DOCUMENTS)
-                            .getResultList();
+                    return exits.getExportReceptions(from, PART_DOCUMENTS);
                 });
                 if (rows.isEmpty()) {
                     return parts;
                 }
                 Map<String, byte[]> entries = new LinkedHashMap<>();
-                for (Object[] r : rows) {
-                    String name = "recepciones/" + r[1] + "/" + r[2] + "-" + r[3] + "-" + r[4] + "-" + r[5];
-                    entries.put(name + ".xml", files.get((String) r[8]));
-                    if (r[9] != null) {
-                        entries.put(name + ".pdf", files.get((String) r[9]));
+                for (TenantExitProvider.ExportReceptionRow r : rows) {
+                    String name = "recepciones/" + r.ruc() + "/" + r.supplierRuc() + "-" + r.tipoComprobante() + "-" + r.serie() + "-" + r.numero();
+                    entries.put(name + ".xml", files.get(r.xmlRef()));
+                    if (r.pdfRef() != null) {
+                        entries.put(name + ".pdf", files.get(r.pdfRef()));
                     }
-                    if (r[10] != null) {
-                        entries.put("R-" + name.replace("recepciones/", "recepciones/R-") + ".zip", files.get((String) r[10]));
+                    if (r.cdrRef() != null) {
+                        entries.put("R-" + name.replace("recepciones/", "recepciones/R-") + ".zip", files.get(r.cdrRef()));
                     }
                     Map<String, Object> meta = new LinkedHashMap<>();
-                    meta.put("reception_id", r[0].toString());
-                    meta.put("ruc", r[1]);
-                    meta.put("supplier_ruc", r[2]);
-                    meta.put("serie_numero", r[4] + "-" + r[5]);
-                    meta.put("fecha_emision", String.valueOf(r[6]));
-                    meta.put("validity_state", r[7]);
+                    meta.put("reception_id", r.id().toString());
+                    meta.put("ruc", r.ruc());
+                    meta.put("supplier_ruc", r.supplierRuc());
+                    meta.put("serie_numero", r.serie() + "-" + r.numero());
+                    meta.put("fecha_emision", String.valueOf(r.fechaEmision()));
+                    meta.put("validity_state", r.validityState());
                     index.add(meta);
                 }
                 FileStore.Stored stored = files.put(tenantId, zip(entries));
                 parts.add(Map.of("name", String.format("recepciones-%04d.zip", parts.size() + 1), "ref", stored.key(), "size", stored.size(),
                         "documents", rows.size()));
-                after = (UUID) rows.get(rows.size() - 1)[0];
+                after = rows.get(rows.size() - 1).id();
             }
         }
 
@@ -431,11 +384,11 @@ public class TenantExit {
      */
     @ApplicationScoped
     public static class Deletion implements JobHandler {
-        private final EntityManager em;
+        private final TenantExitProvider exits;
         private final FileStore files;
 
-        public Deletion(EntityManager em, FileStore files) {
-            this.em = em;
+        public Deletion(TenantExitProvider exits, FileStore files) {
+            this.exits = exits;
             this.files = files;
         }
 
@@ -446,9 +399,7 @@ public class TenantExit {
 
         @Override
         public Map<String, Object> run(JobContext context) {
-            @SuppressWarnings("unchecked")
-            List<UUID> due = QuarkusTransaction.requiringNew().call(() -> em.createNativeQuery("SELECT tenant_id FROM xhandler.tenants_to_delete()")
-                    .getResultList());
+            List<UUID> due = QuarkusTransaction.requiringNew().call(exits::getTenantsToDelete);
             int deleted = 0;
             for (UUID tenantId : due) {
                 int filesDeleted = 0;
@@ -457,9 +408,7 @@ public class TenantExit {
                     filesDeleted++;
                 }
                 int count = filesDeleted;
-                String counts = QuarkusTransaction.requiringNew().call(() -> String.valueOf(em.createNativeQuery(
-                                "SELECT cast(xhandler.purge_tenant(:t, :f) AS text)").setParameter("t", tenantId).setParameter("f", count)
-                        .getSingleResult()));
+                String counts = QuarkusTransaction.requiringNew().call(() -> exits.purgeTenant(tenantId, count));
                 Logger.getLogger("xhandler.audit.platform").infof("tenant %s deleted after its exit period: %s, %d files", tenantId, counts, count);
                 deleted++;
             }

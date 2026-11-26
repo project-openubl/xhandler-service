@@ -13,7 +13,7 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.MembershipProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -50,15 +50,15 @@ public class TenantResource {
 
     public record TenantView(UUID id, String name, String plan, String status, int retentionYears) {}
 
-    private final EntityManager em;
+    private final MembershipProvider membership;
     private final CurrentActor currentActor;
     private final TenantAccess access;
     private final Auditor auditor;
 
-    public TenantResource(EntityManager em, CurrentActor currentActor, TenantAccess access, Auditor auditor, TenantProvider tenantProvider, TenantMemberProvider tenantMemberProvider) {
+    public TenantResource(MembershipProvider membership, CurrentActor currentActor, TenantAccess access, Auditor auditor, TenantProvider tenantProvider, TenantMemberProvider tenantMemberProvider) {
         this.tenantMemberProvider = tenantMemberProvider;
         this.tenantProvider = tenantProvider;
-        this.em = em;
+        this.membership = membership;
         this.currentActor = currentActor;
         this.access = access;
         this.auditor = auditor;
@@ -69,13 +69,8 @@ public class TenantResource {
     @Transactional
     public List<TenantSummary> list() {
         Actor actor = currentActor.get();
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT id, name, role FROM xhandler.tenants_of(:kind, :subject)")
-                .setParameter("kind", actor.kind())
-                .setParameter("subject", actor.subject())
-                .getResultList();
-        return rows.stream()
-                .map(r -> new TenantSummary((UUID) r[0], (String) r[1], (String) r[2]))
+        return membership.getTenantsOf(actor.kind(), actor.subject()).stream()
+                .map(r -> new TenantSummary(r.id(), r.name(), r.role()))
                 .toList();
     }
 
@@ -93,10 +88,7 @@ public class TenantResource {
         if (!actor.emailVerified()) {
             throw new ApiException(403, "email_not_verified", "Debe verificar su correo electrónico antes de crear una cuenta.");
         }
-        Number created = (Number) em.createNativeQuery("SELECT xhandler.free_tenants_created_by(:subject)")
-                .setParameter("subject", actor.subject())
-                .getSingleResult();
-        if (created.longValue() >= MAX_FREE_TENANTS_PER_USER) {
+        if (membership.countFreeTenantsCreatedBy(actor.subject()) >= MAX_FREE_TENANTS_PER_USER) {
             throw ApiException.conflict("limit_reached", "Ya tiene una cuenta gratuita.");
         }
 
