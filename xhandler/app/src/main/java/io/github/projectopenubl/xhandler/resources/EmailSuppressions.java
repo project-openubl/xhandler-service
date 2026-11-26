@@ -6,7 +6,6 @@ import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
@@ -62,13 +61,6 @@ public class EmailSuppressions {
         return Response.noContent().build();
     }
 
-    /** With the tenant open (platform bounce processing). */
-    public static void suppress(EntityManager em, UUID tenantId, String address, String reason) {
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.email_suppression (tenant_id, address, reason) VALUES (:t, :a, :r)
-                        ON CONFLICT (tenant_id, address) DO UPDATE SET reason = excluded.reason""")
-                .setParameter("t", tenantId).setParameter("a", normalize(address)).setParameter("r", reason).executeUpdate();
-    }
 
     static String normalize(String address) {
         return address.strip().toLowerCase(Locale.ROOT);

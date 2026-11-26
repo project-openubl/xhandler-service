@@ -8,7 +8,6 @@ import jakarta.transaction.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,14 +27,6 @@ public class JpaPlatformProvider implements PlatformProvider {
         return Optional.ofNullable((UUID) tenant);
     }
 
-    @Override
-    public void suppressEmail(UUID tenantId, String address, String reason) {
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.email_suppression (tenant_id, address, reason) VALUES (:t, :a, :r)
-                        ON CONFLICT (tenant_id, address) DO UPDATE SET reason = excluded.reason""")
-                .setParameter("t", tenantId).setParameter("a", address.strip().toLowerCase(Locale.ROOT)).setParameter("r", reason)
-                .executeUpdate();
-    }
 
     @Override
     public void createPartner(UUID id, String name) {

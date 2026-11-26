@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources.admin;
 
+import io.github.projectopenubl.xhandler.models.EmailProvider;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.PlatformProvider;
@@ -37,6 +38,8 @@ import java.util.UUID;
 @Path("/api/admin/v1")
 public class AdminResource {
 
+    private final EmailProvider emailProvider;
+
     private final TenantProvider tenantProvider;
 
     private final CompanyProvider companyProvider;
@@ -68,7 +71,8 @@ public class AdminResource {
     private final io.github.projectopenubl.xhandler.managers.Entitlements entitlements;
 
     public AdminResource(PlatformAdmin admin, TenantAccess access, DocumentControl control, JobStore jobs, KeyRotation rotation,
-            Auditor auditor, PlatformProvider platform, io.github.projectopenubl.xhandler.managers.Entitlements entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider) {
+            Auditor auditor, PlatformProvider platform, io.github.projectopenubl.xhandler.managers.Entitlements entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider, EmailProvider emailProvider) {
+        this.emailProvider = emailProvider;
         this.tenantProvider = tenantProvider;
         this.companyProvider = companyProvider;
         this.entitlements = entitlements;
@@ -174,7 +178,7 @@ public class AdminResource {
             throw ApiException.invalid("invalid_request", "Indique el correo.", null);
         }
         String reason = body.getOrDefault("reason", "hard_bounce");
-        platform.suppressEmail(tenantId, address, reason);
+        emailProvider.suppressEmail(tenantId, address, reason);
         auditor.record(scope, "email.suppressed", "email", null, Map.of("address", address, "reason", reason));
         return Map.of("address", address, "reason", reason);
     }

@@ -22,8 +22,6 @@ public interface PlatformProvider {
     /** The tenant of a document, whichever tenant it is (SECURITY DEFINER). */
     Optional<UUID> getDocumentTenant(UUID documentId);
 
-    /** Adds (or updates the reason of) a suppressed address of the open tenant; the address is normalized. */
-    void suppressEmail(UUID tenantId, String address, String reason);
 
     void createPartner(UUID id, String name);
 
