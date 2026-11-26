@@ -1,9 +1,9 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.representations.idm.ExchangeRateRepresentation;
 import jakarta.enterprise.context.ApplicationScoped;
 import io.github.projectopenubl.xhandler.models.ExchangeRateProvider;
 import jakarta.transaction.Transactional;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -17,8 +17,6 @@ import java.util.Optional;
 @ApplicationScoped
 public class ExchangeRateManager {
 
-    /** A day's rate. */
-    public record Rate(LocalDate day, BigDecimal compra, BigDecimal venta, String source) {}
 
     /** An older rate means the import is broken: better no rate than a stale one. */
     static final int MAX_AGE_DAYS = 10;
@@ -31,7 +29,7 @@ public class ExchangeRateManager {
 
     /** The rate for a day, or the latest earlier one. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Optional<Rate> on(LocalDate day) {
-        return rates.getLatestRate(day, day.minusDays(MAX_AGE_DAYS)).map(r -> new Rate(r.day(), r.compra(), r.venta(), r.source()));
+    public Optional<ExchangeRateRepresentation> on(LocalDate day) {
+        return rates.getLatestRate(day, day.minusDays(MAX_AGE_DAYS)).map(r -> new ExchangeRateRepresentation(r.day(), r.compra(), r.venta(), r.source()));
     }
 }

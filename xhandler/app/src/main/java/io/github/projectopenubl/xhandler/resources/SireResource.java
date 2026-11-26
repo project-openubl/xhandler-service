@@ -1,5 +1,8 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.SirePeriodSummaryRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.SirePeriodRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.ReplaceRequestRepresentation;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.SireProvider;
 import io.github.projectopenubl.xhandler.jobs.handlers.SireJobs;
@@ -8,7 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
@@ -24,7 +27,6 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -45,21 +47,13 @@ public class SireResource {
 
     private final CompanyManager companyManager;
 
-    public record SirePeriodView(
-            UUID id, String book, String period, String sunatEnv, String status, String detail, JsonNode reconciliation,
-            boolean proposalFile, boolean replacementFile, Instant createdAt, Instant updatedAt) {}
 
     /**
      * {@code acknowledgeDifferences}: submit although the stored rows don't match SUNAT's proposal
      * (what SUNAT has and the platform doesn't is left out). {@code confirmNotReceived}: after an
      * unknown outcome, the user checked in SOL that SUNAT didn't get the earlier replacement.
      */
-    /** A period in a list: its state, without the reconciliation (read it with {@code getSirePeriod}). */
-    public record SirePeriodSummary(
-            UUID id, String book, String period, String sunatEnv, String status, String detail, boolean proposalFile,
-            boolean replacementFile, Instant createdAt, Instant updatedAt) {}
 
-    public record ReplaceRequest(Boolean acknowledgeDifferences, Boolean confirmNotReceived) {}
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -90,7 +84,7 @@ public class SireResource {
 
     /** Asks SUNAT for its proposal (again, to start over after an error or a change). */
     @APIResponse(responseCode = "202", description = "Propuesta solicitada a SUNAT; la trae un trabajo.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = SirePeriodView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = SirePeriodRepresentation.class)))
     @Operation(operationId = "requestSireProposal")
     @POST
     @Path("/{book}/{period}/proposal")
@@ -130,13 +124,13 @@ public class SireResource {
 
     /** Submits the stored rows as the replacement of SUNAT's proposal. */
     @APIResponse(responseCode = "202", description = "Reemplazo enviado a SUNAT; lo sigue un trabajo.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = SirePeriodView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = SirePeriodRepresentation.class)))
     @Operation(operationId = "replaceSireProposal")
     @POST
     @Path("/{book}/{period}/replace")
     @Transactional
     public Response replace(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("book") String book,
-            @PathParam("period") String period, ReplaceRequest request) {
+            @PathParam("period") String period, ReplaceRequestRepresentation request) {
         check(book, period);
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompany(companyId);
@@ -185,7 +179,7 @@ public class SireResource {
     @GET
     @Path("/{book}/{period}")
     @Transactional
-    public SirePeriodView get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("book") String book,
+    public SirePeriodRepresentation get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("book") String book,
             @PathParam("period") String period) {
         check(book, period);
         access.enter(tenantId, Role.VIEWER);
@@ -197,7 +191,7 @@ public class SireResource {
     @Operation(operationId = "listSirePeriods")
     @GET
     @Transactional
-    public Page<SirePeriodSummary> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+    public PageRepresentation<SirePeriodSummaryRepresentation> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @Schema(description = "rvie (ventas) o rce (compras); sin filtro, ambos.") @QueryParam("book") String book,
             @QueryParam("limit") Integer limit, @QueryParam("offset") Integer offset) {
         if (book != null && !"rvie".equals(book) && !"rce".equals(book)) {
@@ -205,10 +199,10 @@ public class SireResource {
         }
         access.enter(tenantId, Role.VIEWER);
         CompanyModel company = companyManager.getCompany(companyId);
-        int size = Page.limit(limit);
-        int start = Page.offset(offset);
-        return new Page<>(sireProvider.getPeriods(companyId, company.getSunatEnv(), book, size, start).stream()
-                .map(r -> new SirePeriodSummary(r.id(), r.book(), r.period(), r.sunatEnv(), r.status(), r.detail(), r.proposalFile(),
+        int size = PageRepresentation.limit(limit);
+        int start = PageRepresentation.offset(offset);
+        return new PageRepresentation<>(sireProvider.getPeriods(companyId, company.getSunatEnv(), book, size, start).stream()
+                .map(r -> new SirePeriodSummaryRepresentation(r.id(), r.book(), r.period(), r.sunatEnv(), r.status(), r.detail(), r.proposalFile(),
                         r.replacementFile(), r.createdAt(), r.updatedAt())).toList(), size, start);
     }
 
@@ -243,7 +237,7 @@ public class SireResource {
         return sireProvider.getPeriodId(companyId, sunatEnv, book, period).orElseThrow(ApiException::notFound);
     }
 
-    private SirePeriodView view(UUID id) {
+    private SirePeriodRepresentation view(UUID id) {
         SireProvider.PeriodView r = sireProvider.getPeriodView(id);
         JsonNode reconciliation;
         try {
@@ -251,7 +245,7 @@ public class SireResource {
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
-        return new SirePeriodView(r.id(), r.book(), r.period(), r.sunatEnv(), r.status(), r.detail(), reconciliation,
+        return new SirePeriodRepresentation(r.id(), r.book(), r.period(), r.sunatEnv(), r.status(), r.detail(), reconciliation,
                 r.proposalFile(), r.replacementFile(), r.createdAt(), r.updatedAt());
     }
 }

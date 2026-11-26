@@ -205,6 +205,13 @@ Other rules:
 - **One artifact**: the same image for api and worker, selected by configuration (`xhandler.role=api|worker`). Both scale horizontally.
 - **engine**: a stateless sidecar; it holds no data, no keys and no HSM session. Signing takes two calls (§4.1): the engine prepares SignedInfo, Java signs it in the HSM through SunPKCS11, and the engine assembles the signature.
 - Observability: OpenTelemetry traces cross Quarkus → engine → SUNAT, and Micrometer metrics are exported to Prometheus (§15).
+- **Code layout** (`app/`), layered like [openubl's api](https://github.com/project-openubl/openubl/tree/master/api):
+  - `resources/` (JAX-RS; `resources/admin/` is the platform admin API, kept out of the public OpenAPI) call `managers/` (business logic) and providers;
+  - `models/` holds the domain: `*Model` interfaces and `*Provider` storage interfaces (one per entity, plus area providers such as `JobQueueProvider` or `OseProvider` for SQL without an entity);
+  - `models/jpa/` implements them: `Jpa*Provider`, `*Adapter` (a model over an entity), `entities/*Entity`, `repositories/*Repository`. All SQL lives here, SECURITY DEFINER calls included;
+  - `representations/idm/` are the API's records (`*Representation`; `@Schema(name)` keeps the OpenAPI names), built by `models/utils/ModelToRepresentation` and applied by `RepresentationToModel`;
+  - infrastructure: `jobs/` (runtime) and `jobs/handlers/`, `events/`, `security/` (tenancy, §6), `keys/`, `files/`, `xml/` (engine client), `mail/`, `pdf/`, `clients/`, `bootstrap/` (startup checks), `utils/`.
+  - Providers are `TxType.MANDATORY`: they join the transaction that entered the tenant (§6) and never open one, so no query runs without `app.tenant_id`.
 
 ### 4.1 Engine API (HTTP on localhost, versioned `/v1`)
 

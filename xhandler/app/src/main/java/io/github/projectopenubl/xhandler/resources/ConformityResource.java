@@ -1,9 +1,10 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.ConformityRepresentation;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -17,7 +18,6 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,9 +39,6 @@ public class ConformityResource {
 
     private final DocumentProvider documentProvider;
 
-    public record ConformityView(
-            UUID documentId, String serieNumero, String buyerRuc, String state, Instant acceptedAt, Instant windowEndsAt, Instant checkedAt,
-            String checkDetail, Instant resolvedAt, Map<String, Object> suggestedCreditNote) {}
 
     private final TenantAccess access;
     private final ConformityProvider conformityProvider;
@@ -59,7 +56,7 @@ public class ConformityResource {
     @GET
     @Path("/documents/{documentId}/conformity")
     @Transactional
-    public ConformityView document(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
+    public ConformityRepresentation document(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
         access.enter(tenantId, Role.VIEWER);
         ConformityProvider.ConformityRow r = conformityProvider.getDocumentConformity(documentId).orElseThrow(ApiException::notFound);
         Map<String, Object> creditNote = null;
@@ -73,14 +70,14 @@ public class ConformityResource {
     @GET
     @Path("/companies/{companyId}/conformity")
     @Transactional
-    public Page<ConformityView> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+    public PageRepresentation<ConformityRepresentation> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @Schema(description = "pending, agreed, objected o silent_agreement; sin filtro, todas.") @QueryParam("state") String state,
             @QueryParam("limit") Integer limit, @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
         companyManager.getCompany(companyId);
-        int size = Page.limit(limit);
-        int start = Page.offset(offset);
-        return new Page<>(rows(companyId, state, size, start).stream().map(r -> view(r, null)).toList(), size, start);
+        int size = PageRepresentation.limit(limit);
+        int start = PageRepresentation.offset(offset);
+        return new PageRepresentation<>(rows(companyId, state, size, start).stream().map(r -> view(r, null)).toList(), size, start);
     }
 
     /** For factoring: facturas negociables and their conformity, as CSV. */
@@ -137,8 +134,8 @@ public class ConformityResource {
         return Map.of("kind", "CreditNote", "spec", spec);
     }
 
-    private static ConformityView view(ConformityProvider.ConformityRow r, Map<String, Object> creditNote) {
-        return new ConformityView(r.documentId(), r.serie() + "-" + r.numero(), r.buyerRuc(), r.state(), r.acceptedAt(),
+    private static ConformityRepresentation view(ConformityProvider.ConformityRow r, Map<String, Object> creditNote) {
+        return new ConformityRepresentation(r.documentId(), r.serie() + "-" + r.numero(), r.buyerRuc(), r.state(), r.acceptedAt(),
                 r.windowEndsAt(), r.checkedAt(), r.checkDetail(), r.resolvedAt(), creditNote);
     }
 

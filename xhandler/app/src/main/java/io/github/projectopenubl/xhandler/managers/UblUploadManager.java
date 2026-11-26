@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
 import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
@@ -11,7 +12,7 @@ import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
+import io.github.projectopenubl.xhandler.representations.idm.DocumentRepresentation;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.keys.SignatureLog;
@@ -38,6 +39,8 @@ import java.util.stream.Collectors;
  */
 @ApplicationScoped
 public class UblUploadManager {
+
+    private final ModelToRepresentation modelToRepresentation;
 
     private final JobQueueProvider jobQueueProvider;
 
@@ -66,7 +69,8 @@ public class UblUploadManager {
 
     public UblUploadManager(TenantAccess access, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
             NumberingManager numbering, RouteManager routes, AccessLinkManager links, AuditManager auditor, ObjectMapper json,
-            io.github.projectopenubl.xhandler.managers.EmitManager emit, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+            io.github.projectopenubl.xhandler.managers.EmitManager emit, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
@@ -85,7 +89,7 @@ public class UblUploadManager {
         this.json = json;
     }
 
-    public DocumentView upload(UUID tenantId, UUID companyId, byte[] xmlBytes, String correlationId) {
+    public DocumentRepresentation upload(UUID tenantId, UUID companyId, byte[] xmlBytes, String correlationId) {
         if (xmlBytes == null || xmlBytes.length == 0 || xmlBytes.length > MAX_BYTES) {
             throw ApiException.invalid("invalid_document", "El XML debe tener entre 1 byte y 5 MB.", null);
         }
@@ -184,7 +188,7 @@ public class UblUploadManager {
             auditor.record(scope, "document.uploaded", "document", doc.getId(), Map.of("serie_numero", doc.serieNumero()));
             String token = links.create(doc);
             jobQueueProvider.notifyReconcile();
-            return DocumentView.of(doc, links.url(token), null);
+            return modelToRepresentation.toRepresentation(doc, links.url(token), null);
         }));
     }
 }

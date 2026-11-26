@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.representations.idm.VoidRequestRepresentation;
 import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
@@ -43,8 +44,6 @@ public class VoidingManager {
 
     private final CompanyProvider companyProvider;
 
-    /** A void request. {@code reversalCommunicatedAt} is required for percepciones and retenciones. */
-    public record VoidRequest(String motivo, Boolean notDelivered, LocalDate reversalCommunicatedAt) {}
 
     private final TenantAccess access;
     private final SummaryManager summaries;
@@ -91,16 +90,16 @@ public class VoidingManager {
     }
 
     /** Creates the RA/RC/RR and moves the original to voiding. Returns the voiding document. */
-    public DocumentModel voidDocument(UUID tenantId, UUID documentId, VoidRequest request, String correlationId) {
+    public DocumentModel voidDocument(UUID tenantId, UUID documentId, VoidRequestRepresentation request, String correlationId) {
         return QuarkusTransaction.requiringNew().call(() -> voidInTransaction(tenantId, documentId, request, correlationId, false));
     }
 
     /** The same, for an already-authenticated adapter client (Nubefact-compatible API). */
-    public DocumentModel voidDocumentAsPlatform(UUID tenantId, UUID documentId, VoidRequest request, String correlationId) {
+    public DocumentModel voidDocumentAsPlatform(UUID tenantId, UUID documentId, VoidRequestRepresentation request, String correlationId) {
         return QuarkusTransaction.requiringNew().call(() -> voidInTransaction(tenantId, documentId, request, correlationId, true));
     }
 
-    private DocumentModel voidInTransaction(UUID tenantId, UUID documentId, VoidRequest request, String correlationId, boolean platform) {
+    private DocumentModel voidInTransaction(UUID tenantId, UUID documentId, VoidRequestRepresentation request, String correlationId, boolean platform) {
         TenantScope scope = platform ? access.enterAsPlatform(tenantId) : access.enter(tenantId, Role.OPERATOR);
         DocumentModel original = documentProvider.getDocument(documentId).orElse(null);
         if (original == null) {
@@ -160,7 +159,7 @@ public class VoidingManager {
         return documentProvider.getReversedDocuments(rrs, original.getTipoComprobante(), original.getFechaEmision());
     }
 
-    private static void check(DocumentModel original, VoidRequest request) {
+    private static void check(DocumentModel original, VoidRequestRepresentation request) {
         if (request == null || request.motivo() == null || request.motivo().isBlank()) {
             throw ApiException.invalid("invalid_request", "Indique el motivo de la anulación.", null);
         }

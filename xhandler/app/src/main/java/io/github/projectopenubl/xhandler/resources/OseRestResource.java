@@ -1,12 +1,13 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.SubmissionRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.CdrResultRepresentation;
 import io.github.projectopenubl.xhandler.clients.OseClients;
 import io.github.projectopenubl.xhandler.managers.OseIntakeManager;
 import io.github.projectopenubl.xhandler.utils.ZipGuard;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
@@ -29,10 +30,7 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/ose/documents")
 public class OseRestResource {
 
-    public record Submission(@NotBlank String fileName, @NotBlank String contentBase64) {}
 
-    /** The CDR-OSE: {@code result} is always {@code cdr} (an inconsistency is a 422). */
-    public record CdrResult(String result, String name, String cdrZipBase64) {}
 
     private final OseClients clients;
     private final OseIntakeManager intake;
@@ -43,10 +41,10 @@ public class OseRestResource {
     }
 
     @APIResponse(responseCode = "200", description = "El CDR-OSE del comprobante.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = CdrResult.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = CdrResultRepresentation.class)))
     @Operation(operationId = "submitOseDocument")
     @POST
-    public Response submit(@HeaderParam("Authorization") String authorization, @Valid Submission submission) {
+    public Response submit(@HeaderParam("Authorization") String authorization, @Valid SubmissionRepresentation submission) {
         OseClients.Client client = authenticate(authorization);
         byte[] zip;
         try {
@@ -56,7 +54,7 @@ public class OseRestResource {
         }
         try {
             OseIntakeManager.Cdr cdr = intake.sendBill(client, "rest", submission.fileName(), zip);
-            return Response.ok(new CdrResult("cdr", cdr.name(), Base64.getEncoder().encodeToString(cdr.zip()))).build();
+            return Response.ok(new CdrResultRepresentation("cdr", cdr.name(), Base64.getEncoder().encodeToString(cdr.zip()))).build();
         } catch (OseIntakeManager.Fault e) {
             throw inconsistency(e.code, e.getMessage());
         } catch (ZipGuard.Refused e) {

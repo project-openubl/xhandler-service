@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources.admin;
 
+import io.github.projectopenubl.xhandler.representations.idm.NewRequestRepresentation;
 import io.github.projectopenubl.xhandler.security.PlatformAdmin;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -84,7 +85,7 @@ public class TenantLifecycleAdminResource {
     @POST
     @Path("/data-subject-requests")
     @Transactional
-    public Map<String, Object> dataSubjectRequest(@PathParam("tenantId") UUID tenantId, @Valid DataSubjectRequests.NewRequest request) {
+    public Map<String, Object> dataSubjectRequest(@PathParam("tenantId") UUID tenantId, @Valid NewRequestRepresentation request) {
         String who = admin.require();
         // Platform admins act on any tenant: opened explicitly, after the platform check
         TenantScope scope = access.enterAsPlatform(tenantId);

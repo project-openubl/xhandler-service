@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.representations.idm.EmitRequestRepresentation;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
@@ -134,7 +135,7 @@ public class SelfInvoicingJob implements JobHandler {
         spec.put("detalles", detalles);
         spec.put("observaciones", "Factura Lago " + invoice.path("number").asText(lagoId));
         EmitManager.Emitted emitted = emit.emitAsPlatform(issuer.tenant(), issuer.company(), "lago:" + lagoId,
-                new EmitManager.EmitRequest(json.valueToTree(Map.of("kind", "Invoice", "spec", spec)), null, false,
+                new EmitRequestRepresentation(json.valueToTree(Map.of("kind", "Invoice", "spec", spec)), null, false,
                         Map.of("lago_invoice", lagoId, "tenant_id", customer.toString())),
                 context.correlationId());
         UUID documentId = UUID.fromString(emitted.body().path("id").asText());

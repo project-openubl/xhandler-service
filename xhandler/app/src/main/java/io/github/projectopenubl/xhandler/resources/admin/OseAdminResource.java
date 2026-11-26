@@ -1,5 +1,8 @@
 package io.github.projectopenubl.xhandler.resources.admin;
 
+import io.github.projectopenubl.xhandler.representations.idm.NewClientRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.BlockedRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.AssociationRepresentation;
 import io.github.projectopenubl.xhandler.security.PlatformAdmin;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -10,9 +13,6 @@ import io.github.projectopenubl.xhandler.managers.PlatformCredentialManager;
 import io.github.projectopenubl.xhandler.models.OseProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
@@ -20,7 +20,6 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,12 +34,8 @@ import org.jboss.resteasy.reactive.multipart.FileUpload;
 @Path("/api/admin/v1/ose")
 public class OseAdminResource {
 
-    public record NewClient(@NotBlank @Pattern(regexp = "\\d{11}") String issuerRuc, @Pattern(regexp = "[A-Za-z0-9._-]{4,60}") String username,
-            UUID tenantId) {}
 
-    public record Association(@NotBlank @Pattern(regexp = "\\d{11}") String ruc, @NotNull LocalDate startsOn, LocalDate endsOn) {}
 
-    public record Blocked(@NotBlank @Pattern(regexp = "\\d{11}") String ruc, LocalDate listedOn) {}
 
     private final PlatformAdmin admin;
     private final OseProvider oseProvider;
@@ -61,7 +56,7 @@ public class OseAdminResource {
     @POST
     @Path("/clients")
     @Transactional
-    public Map<String, Object> createClient(@Valid NewClient request) {
+    public Map<String, Object> createClient(@Valid NewClientRepresentation request) {
         String who = admin.require();
         UUID id = Ids.newId();
         String username = request.username() != null ? request.username() : request.issuerRuc() + "OSE" + id.toString().substring(0, 4).toUpperCase();
@@ -128,7 +123,7 @@ public class OseAdminResource {
     @PUT
     @Path("/association")
     @Transactional
-    public Map<String, Object> association(@Valid List<@Valid Association> entries,
+    public Map<String, Object> association(@Valid List<@Valid AssociationRepresentation> entries,
             @jakarta.ws.rs.QueryParam("confirm_empty") boolean confirmEmpty) {
         String who = admin.require();
         if (entries == null || entries.isEmpty() && !confirmEmpty) {
@@ -136,7 +131,7 @@ public class OseAdminResource {
             throw ApiException.invalid("invalid_request", "Envíe la lista de contribuyentes asociados (o confirme vaciarla).", null);
         }
         oseProvider.deleteAssociations();
-        for (Association a : entries) {
+        for (AssociationRepresentation a : entries) {
             oseProvider.addAssociation(a.ruc(), a.startsOn(), a.endsOn());
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s imported the OSE association list (%d issuers)", who, entries.size());
@@ -147,13 +142,13 @@ public class OseAdminResource {
     @PUT
     @Path("/blocked/{list}")
     @Transactional
-    public Map<String, Object> blocked(@PathParam("list") String list, @Valid List<@Valid Blocked> entries) {
+    public Map<String, Object> blocked(@PathParam("list") String list, @Valid List<@Valid BlockedRepresentation> entries) {
         String who = admin.require();
         if (entries == null || !list.matches("[a-z0-9_-]{2,40}")) {
             throw ApiException.invalid("invalid_request", "Envíe la lista y un nombre de lista válido.", null);
         }
         oseProvider.deleteBlockedList(list);
-        for (Blocked b : entries) {
+        for (BlockedRepresentation b : entries) {
             oseProvider.addBlockedIssuer(b.ruc(), list, b.listedOn());
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s imported blocked list %s (%d issuers)", who, list, entries.size());

@@ -1,5 +1,8 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.ExchangeRateRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EmitRequestRepresentation;
 import io.github.projectopenubl.xhandler.models.PseProvider;
 import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
@@ -9,7 +12,6 @@ import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 import io.github.projectopenubl.xhandler.utils.DocumentTypes;
 import io.github.projectopenubl.xhandler.utils.Qr;
@@ -56,6 +58,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class EmitManager {
 
+    private final ModelToRepresentation modelToRepresentation;
+
     private final PseProvider pseProvider;
 
     private final JobQueueProvider jobQueueProvider;
@@ -70,8 +74,6 @@ public class EmitManager {
 
     private final CompanyProvider companyProvider;
 
-    /** What a client sends: an xbuilder document plus options. */
-    public record EmitRequest(JsonNode document, String serie, Boolean delivered, Map<String, String> labels) {}
 
     public record Emitted(int status, JsonNode body) {}
 
@@ -119,7 +121,8 @@ public class EmitManager {
             io.github.projectopenubl.xhandler.managers.ExchangeRateManager rates,
             @ConfigProperty(name = "xhandler.emit.permits", defaultValue = "32") int permits,
             @ConfigProperty(name = "xhandler.emit.permit-timeout", defaultValue = "5s") Duration permitTimeout,
-            @ConfigProperty(name = "xhandler.emit.lock-timeout", defaultValue = "10s") Duration lockTimeout, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, TenantProvider tenantProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider, PseProvider pseProvider) {
+            @ConfigProperty(name = "xhandler.emit.lock-timeout", defaultValue = "10s") Duration lockTimeout, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, TenantProvider tenantProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider, PseProvider pseProvider, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.pseProvider = pseProvider;
         this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
@@ -146,18 +149,18 @@ public class EmitManager {
         this.lockTimeout = lockTimeout.toMillis() + "ms";
     }
 
-    public Emitted emit(UUID tenantId, UUID companyId, String idempotencyKey, EmitRequest request, String correlationId) {
+    public Emitted emit(UUID tenantId, UUID companyId, String idempotencyKey, EmitRequestRepresentation request, String correlationId) {
         return emit(tenantId, companyId, idempotencyKey, request, correlationId, false, null, "api", null);
     }
 
     /** Issues a draft (manual issuing, §11.10): see {@link DraftIssue}. */
-    public Emitted emitDraft(UUID tenantId, UUID companyId, String idempotencyKey, EmitRequest request, String correlationId,
+    public Emitted emitDraft(UUID tenantId, UUID companyId, String idempotencyKey, EmitRequestRepresentation request, String correlationId,
             DraftIssue draft) {
         return emit(tenantId, companyId, idempotencyKey, request, correlationId, false, null, "api", draft);
     }
 
     /** Emits as the platform (its own invoices, §14), not as a tenant member. */
-    public Emitted emitAsPlatform(UUID tenantId, UUID companyId, String idempotencyKey, EmitRequest request, String correlationId) {
+    public Emitted emitAsPlatform(UUID tenantId, UUID companyId, String idempotencyKey, EmitRequestRepresentation request, String correlationId) {
         return emit(tenantId, companyId, idempotencyKey, request, correlationId, true, null, "api", null);
     }
 
@@ -165,12 +168,12 @@ public class EmitManager {
      * An adapter's document with the client's own number (the serie comes from the request, §5). The
      * caller already authenticated: {@code platform} opens the tenant without a member (token-based adapters).
      */
-    public Emitted emitNumbered(UUID tenantId, UUID companyId, String idempotencyKey, EmitRequest request, long numero, String correlationId,
+    public Emitted emitNumbered(UUID tenantId, UUID companyId, String idempotencyKey, EmitRequestRepresentation request, long numero, String correlationId,
             boolean platform) {
         return emit(tenantId, companyId, idempotencyKey, request, correlationId, platform, numero, "adapter", null);
     }
 
-    private Emitted emit(UUID tenantId, UUID companyId, String idempotencyKey, EmitRequest request, String correlationId,
+    private Emitted emit(UUID tenantId, UUID companyId, String idempotencyKey, EmitRequestRepresentation request, String correlationId,
             boolean platform, Long numeroDado, String origin, DraftIssue draft) {
         if (request == null || request.document() == null || !request.document().hasNonNull("kind")
                 || !request.document().path("spec").isObject()) {
@@ -289,7 +292,7 @@ public class EmitManager {
     }
 
     private JsonNode emitInTransaction(UUID tenantId, UUID companyId, UUID documentId, String idempotencyKey, UUID claim,
-            EmitRequest request, String correlationId, boolean platform, Long numeroDado, String origin,
+            EmitRequestRepresentation request, String correlationId, boolean platform, Long numeroDado, String origin,
             DraftIssue draft) {
         TenantScope scope = platform ? access.enterAsPlatform(tenantId) : access.enter(tenantId, Role.OPERATOR);
         // Waits on the series row (another emit holds it across engine, HSM and storage) are bounded
@@ -398,11 +401,11 @@ public class EmitManager {
         jobQueueProvider.notifyReconcile();
 
         String qr = Qr.of(company.getRuc(), doc, built.enrichedJson());
-        JsonNode body = json.valueToTree(DocumentView.of(doc, links.url(token), qr));
+        JsonNode body = json.valueToTree(modelToRepresentation.toRepresentation(doc, links.url(token), qr));
         if (idempotencyKey != null) {
             // Stored without the buyer link: its token is never stored in clear (§12); a replay
             // gets everything else, and a new link can be created
-            idempotency.complete(tenantId, idempotencyKey, claim, 201, json.valueToTree(DocumentView.of(doc, null, qr)));
+            idempotency.complete(tenantId, idempotencyKey, claim, 201, json.valueToTree(modelToRepresentation.toRepresentation(doc, null, qr)));
         }
         return body;
     }
@@ -426,7 +429,7 @@ public class EmitManager {
                 throw ApiException.invalid("invalid_document", "tipo_cambio debe ser mayor que cero.", null);
             }
         } else {
-            rate = rates.on(fecha).map(io.github.projectopenubl.xhandler.managers.ExchangeRateManager.Rate::venta).orElse(null);
+            rate = rates.on(fecha).map(ExchangeRateRepresentation::venta).orElse(null);
         }
         if (rate == null) {
             throw ApiException.invalid("invalid_document",
@@ -482,7 +485,7 @@ public class EmitManager {
         return fecha;
     }
 
-    private String chooseSerie(EmitRequest request, ObjectNode spec, CompanyModel company, String tipo) {
+    private String chooseSerie(EmitRequestRepresentation request, ObjectNode spec, CompanyModel company, String tipo) {
         if (request.serie() != null) {
             return request.serie();
         }
@@ -544,7 +547,7 @@ public class EmitManager {
     }
 
     /** Hash of the request in canonical JSON (keys sorted), so reordered fields are the same request. */
-    private String hash(Object scope, EmitRequest request) {
+    private String hash(Object scope, EmitRequestRepresentation request) {
         try {
             JsonNode canonical = canonical(json.valueToTree(request));
             return FileStore.sha256((scope + ":" + json.writeValueAsString(canonical)).getBytes(StandardCharsets.UTF_8));

@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.representations.idm.UsageRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.PlanRepresentation;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -20,13 +22,7 @@ import java.util.UUID;
 @ApplicationScoped
 public class EntitlementManager implements EmitQuota {
 
-    /** A plan's limits. Null limits are unlimited. */
-    public record Plan(String code, String name, Integer productionPerMonth, Integer betaPerDay, Integer sandboxPerDay,
-            boolean customSmtp, boolean webhooks) {}
 
-    /** What a tenant may do now, and what it used. */
-    public record Usage(Plan plan, String source, Instant syncedAt, boolean stale, long productionThisMonth, long betaToday,
-            long sandboxToday) {}
 
     static final Duration STALE_AFTER = Duration.ofHours(24);
 
@@ -46,8 +42,8 @@ public class EntitlementManager implements EmitQuota {
     @Override
     @Transactional(Transactional.TxType.MANDATORY)
     public void checkEmit(UUID tenantId, String sunatEnv) {
-        Usage usage = usage(tenantId);
-        Plan plan = usage.plan();
+        UsageRepresentation usage = usage(tenantId);
+        PlanRepresentation plan = usage.plan();
         switch (sunatEnv) {
             case "production" -> {
                 Integer limit = plan.productionPerMonth();
@@ -77,25 +73,25 @@ public class EntitlementManager implements EmitQuota {
 
     /** With the tenant open. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Usage usage(UUID tenantId) {
+    public UsageRepresentation usage(UUID tenantId) {
         java.util.Optional<BillingProvider.EntitlementRow> row = billingProvider.getEntitlement(tenantId);
         String code = row.isEmpty() ? defaultPlan : row.get().planCode();
         String source = row.isEmpty() ? "default" : row.get().source();
         Instant syncedAt = row.isEmpty() ? null : row.get().syncedAt();
         boolean stale = "lago".equals(source) && syncedAt != null && syncedAt.isBefore(Instant.now().minus(STALE_AFTER));
         // Lago unreachable for too long: fail closed to the free plan's quotas
-        Plan plan = plan(stale ? "free" : code);
+        PlanRepresentation plan = plan(stale ? "free" : code);
         LocalDate today = io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima();
         Instant monthStart = YearMonth.from(today).atDay(1).atStartOfDay(io.github.projectopenubl.xhandler.utils.Deadlines.LIMA).toInstant();
         Instant dayStart = today.atStartOfDay(io.github.projectopenubl.xhandler.utils.Deadlines.LIMA).toInstant();
         BillingProvider.UsageCounts counts = billingProvider.countApiDocuments(monthStart, dayStart);
-        return new Usage(plan, source, syncedAt, stale, counts.productionThisMonth(), counts.betaToday(), counts.sandboxToday());
+        return new UsageRepresentation(plan, source, syncedAt, stale, counts.productionThisMonth(), counts.betaToday(), counts.sandboxToday());
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
-    public Plan plan(String code) {
+    public PlanRepresentation plan(String code) {
         BillingProvider.PlanRow r = billingProvider.getPlan(code).orElseGet(billingProvider::getFreePlan);
-        return new Plan(r.code(), r.name(), r.productionPerMonth(), r.betaPerDay(), r.sandboxPerDay(), r.customSmtp(), r.webhooks());
+        return new PlanRepresentation(r.code(), r.name(), r.productionPerMonth(), r.betaPerDay(), r.sandboxPerDay(), r.customSmtp(), r.webhooks());
     }
 
     /** Whether the service knows this plan code. */
@@ -122,7 +118,7 @@ public class EntitlementManager implements EmitQuota {
     }
 
     /** 80% and 100% of the monthly quota, notified once per month each (§26.6). */
-    private void notifyQuota(UUID tenantId, Usage usage, int percent) {
+    private void notifyQuota(UUID tenantId, UsageRepresentation usage, int percent) {
         String period = YearMonth.now(io.github.projectopenubl.xhandler.utils.Deadlines.LIMA).toString();
         billingProvider.ensureEntitlement(tenantId);
         int updated = billingProvider.markQuotaNotified(tenantId, percent, period);

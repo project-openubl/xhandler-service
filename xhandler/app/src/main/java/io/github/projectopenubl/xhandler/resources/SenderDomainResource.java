@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.DomainRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.DomainRepresentation;
 import io.github.projectopenubl.xhandler.models.EmailProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -10,15 +12,12 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.core.Response;
 import java.security.SecureRandom;
-import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Hashtable;
 import java.util.List;
@@ -40,9 +39,7 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}/sender-domains")
 public class SenderDomainResource {
 
-    public record DomainRequest(@NotBlank @Pattern(regexp = "(?i)[a-z0-9-]+(\\.[a-z0-9-]+)+") String domain) {}
 
-    public record DomainView(UUID id, String domain, String txtName, String txtValue, Instant verifiedAt) {}
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -57,11 +54,11 @@ public class SenderDomainResource {
     }
 
     @APIResponse(responseCode = "201", description = "Dominio agregado (o el existente).",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DomainView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DomainRepresentation.class)))
     @Operation(operationId = "addSenderDomain")
     @POST
     @Transactional
-    public Response add(@PathParam("tenantId") UUID tenantId, @Valid DomainRequest request) {
+    public Response add(@PathParam("tenantId") UUID tenantId, @Valid DomainRequestRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         byte[] raw = new byte[16];
         RANDOM.nextBytes(raw);
@@ -75,7 +72,7 @@ public class SenderDomainResource {
     @Operation(operationId = "listSenderDomains")
     @GET
     @Transactional
-    public List<DomainView> list(@PathParam("tenantId") UUID tenantId) {
+    public List<DomainRepresentation> list(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
         return emailProvider.getSenderDomains().stream().map(SenderDomainResource::view).toList();
     }
@@ -83,8 +80,8 @@ public class SenderDomainResource {
     @Operation(operationId = "verifySenderDomain")
     @POST
     @Path("/{domain}/verify")
-    public DomainView verify(@PathParam("tenantId") UUID tenantId, @PathParam("domain") String domain) {
-        DomainView pending = QuarkusTransaction.requiringNew().call(() -> {
+    public DomainRepresentation verify(@PathParam("tenantId") UUID tenantId, @PathParam("domain") String domain) {
+        DomainRepresentation pending = QuarkusTransaction.requiringNew().call(() -> {
             access.enter(tenantId, Role.ADMIN);
             return find(domain.toLowerCase(java.util.Locale.ROOT));
         });
@@ -117,12 +114,12 @@ public class SenderDomainResource {
         }
     }
 
-    private DomainView find(String domain) {
+    private DomainRepresentation find(String domain) {
         return emailProvider.getSenderDomain(domain).map(SenderDomainResource::view).orElseThrow(ApiException::notFound);
     }
 
-    static DomainView view(EmailProvider.SenderDomain r) {
+    static DomainRepresentation view(EmailProvider.SenderDomain r) {
         String domain = r.domain();
-        return new DomainView(r.id(), domain, "_xhandler." + domain, "xhandler-verification=" + r.verificationToken(), r.verifiedAt());
+        return new DomainRepresentation(r.id(), domain, "_xhandler." + domain, "xhandler-verification=" + r.verificationToken(), r.verifiedAt());
     }
 }

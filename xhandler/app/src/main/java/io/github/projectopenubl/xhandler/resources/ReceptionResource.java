@@ -1,12 +1,13 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.ReceptionRepresentation;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.jobs.handlers.ReceptionValidity;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.Engine;
@@ -28,7 +29,6 @@ import jakarta.ws.rs.core.Response;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -52,8 +52,6 @@ public class ReceptionResource {
 
     private final CompanyManager companyManager;
 
-    public record ReceptionView(UUID id, String supplierRuc, String tipoComprobante, String serieNumero, LocalDate fechaEmision, String moneda,
-            BigDecimal total, String validityState, Instant validityCheckedAt, boolean hasPdf, boolean hasCdr, Instant createdAt) {}
 
     static final int MAX_XML = 5 * 1024 * 1024;
     static final int MAX_ATTACHMENT = 10 * 1024 * 1024;
@@ -76,7 +74,7 @@ public class ReceptionResource {
     }
 
     @APIResponse(responseCode = "201", description = "Comprobante recibido.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ReceptionView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ReceptionRepresentation.class)))
     @Operation(operationId = "receiveDocument")
     @POST
     public Response receive(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @RestForm("xml") FileUpload xml,
@@ -138,22 +136,22 @@ public class ReceptionResource {
     @Operation(operationId = "listReceptions")
     @GET
     @Transactional
-    public Page<ReceptionView> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+    public PageRepresentation<ReceptionRepresentation> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @QueryParam("from") LocalDate from, @QueryParam("to") LocalDate to, @QueryParam("limit") Integer limit,
             @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
         companyManager.getCompany(companyId);
-        int size = Page.limit(limit);
-        int start = Page.offset(offset);
+        int size = PageRepresentation.limit(limit);
+        int start = PageRepresentation.offset(offset);
         List<UUID> ids = receptionProvider.getReceptionIds(companyId, from, to, size, start);
-        return new Page<>(ids.stream().map(this::find).toList(), size, start);
+        return new PageRepresentation<>(ids.stream().map(this::find).toList(), size, start);
     }
 
     @Operation(operationId = "getReception")
     @GET
     @Path("/{receptionId}")
     @Transactional
-    public ReceptionView get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+    public ReceptionRepresentation get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @PathParam("receptionId") UUID receptionId) {
         access.enter(tenantId, Role.VIEWER);
         companyManager.getCompany(companyId);
@@ -197,9 +195,9 @@ public class ReceptionResource {
 
     private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
 
-    private ReceptionView find(UUID id) {
+    private ReceptionRepresentation find(UUID id) {
         ReceptionProvider.ReceptionRow r = receptionProvider.getReception(id).orElseThrow(ApiException::notFound);
-        return new ReceptionView(r.id(), r.supplierRuc(), r.tipoComprobante(), r.serieNumero(), r.fechaEmision(), r.moneda(), r.total(),
+        return new ReceptionRepresentation(r.id(), r.supplierRuc(), r.tipoComprobante(), r.serieNumero(), r.fechaEmision(), r.moneda(), r.total(),
                 r.validityState(), r.validityCheckedAt(), r.hasPdf(), r.hasCdr(), r.createdAt());
     }
 

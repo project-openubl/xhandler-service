@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.representations.idm;
 
-import io.github.projectopenubl.xhandler.models.DocumentModel;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.math.BigDecimal;
@@ -15,7 +15,8 @@ import java.util.UUID;
  * when the link was just created: the token is never stored in clear.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record DocumentView(
+@Schema(name = "DocumentView")
+public record DocumentRepresentation(
         UUID id,
         String prn,
         UUID companyId,
@@ -53,16 +54,5 @@ public record DocumentView(
 
     public record Customer(String tipo, String numero, String nombre) {}
 
-    public static DocumentView of(DocumentModel d) {
-        return of(d, null, null);
-    }
 
-    public static DocumentView of(DocumentModel d, String accessUrl, String qr) {
-        return new DocumentView(d.getId(), "xh:document:" + d.getId(), d.getCompanyId(), d.getSunatEnv(), d.getKind(), d.getTipoComprobante(), d.getSerie(), d.getNumero(),
-                d.serieNumero(), d.getFechaEmision(), d.getDeadlineAt(), d.getStatus(), d.getHoldReason(), d.getSunatCode(), d.getSunatDescription(), d.getSunatNotes(),
-                d.getCodeClass(), d.getDigestValue(), d.getMoneda(), d.getTotal(),
-                d.getCustomerNumero() == null ? null : new Customer(d.getCustomerTipo(), d.getCustomerNumero(), d.getCustomerNombre()), d.getLabels(),
-                d.getDeliveredAt(), d.getDeliveredSource(), d.getAttempts(), d.getNextAttemptAt(), d.getFirstSentAt(), d.getCdrReceivedAt(), d.getAffectedDocumentId(),
-                d.getSummaryDocumentId(), d.getVoidedByDocumentId(), d.getCreatedAt(), accessUrl, qr);
-    }
 }

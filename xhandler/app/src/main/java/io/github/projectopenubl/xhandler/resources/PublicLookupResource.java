@@ -1,16 +1,16 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.OseLookupResultRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.OseLookupRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.LookupResultRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.LookupRequestRepresentation;
 import io.github.projectopenubl.xhandler.utils.PublicStatus;
 import io.github.projectopenubl.xhandler.models.PublicLookupProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
-import java.math.BigDecimal;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -18,7 +18,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.util.Optional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -31,16 +30,7 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/public/lookup")
 public class PublicLookupResource {
 
-    public record LookupRequest(
-            @NotBlank @Pattern(regexp = "\\d{11}") String ruc,
-            @NotBlank @Pattern(regexp = "\\d{2}") String tipoComprobante,
-            @NotBlank @Pattern(regexp = "[A-Z0-9]{4}") String serie,
-            @NotNull Long numero,
-            @NotNull LocalDate fechaEmision,
-            @NotNull BigDecimal total,
-            @NotBlank String captcha) {}
 
-    public record LookupResult(String status) {}
 
 
     private final PublicLookupProvider lookups;
@@ -64,7 +54,7 @@ public class PublicLookupResource {
 
     @Operation(operationId = "lookupDocument")
     @POST
-    public LookupResult lookup(@Valid LookupRequest request) {
+    public LookupResultRepresentation lookup(@Valid LookupRequestRepresentation request) {
         if (!captchaValid(request.captcha())) {
             throw new ApiException(403, "captcha_failed", "Verificación CAPTCHA inválida.");
         }
@@ -75,19 +65,11 @@ public class PublicLookupResource {
             }
             String status = lookups.getPublicDocumentStatus(request.ruc(), request.tipoComprobante(), request.serie(), request.numero(),
                     request.fechaEmision(), request.total());
-            return new LookupResult(status == null ? "no_encontrado" : PublicStatus.of(status));
+            return new LookupResultRepresentation(status == null ? "no_encontrado" : PublicStatus.of(status));
         });
     }
 
-    public record OseLookupRequest(
-            @NotBlank @Pattern(regexp = "\\d{11}") String ruc,
-            @NotBlank @Pattern(regexp = "\\d{2}") String tipoComprobante,
-            @NotBlank @Pattern(regexp = "[A-Z0-9]{4}") String serie,
-            @NotNull Long numero,
-            @NotBlank String captcha) {}
 
-    /** {@code state}: con_cdr, con_inconsistencia, no_encontrado; {@code checked_at}: when the OSE checked it. */
-    public record OseLookupResult(String state, String checkedAt) {}
 
     /**
      * The OSE's public validity query (RS 242-2018, RS 117-2017 art. 7.15): during the retention
@@ -97,7 +79,7 @@ public class PublicLookupResource {
     @Operation(operationId = "lookupOseDocument")
     @POST
     @jakarta.ws.rs.Path("/ose")
-    public OseLookupResult ose(@Valid OseLookupRequest request) {
+    public OseLookupResultRepresentation ose(@Valid OseLookupRequestRepresentation request) {
         if (!captchaValid(request.captcha())) {
             throw new ApiException(403, "captcha_failed", "Verificación CAPTCHA inválida.");
         }
@@ -109,11 +91,11 @@ public class PublicLookupResource {
             Optional<PublicLookupProvider.OseSubmission> rows =
                     lookups.getOseSubmission(request.ruc(), request.tipoComprobante(), request.serie(), request.numero());
             if (rows.isEmpty()) {
-                return new OseLookupResult("no_encontrado", null);
+                return new OseLookupResultRepresentation("no_encontrado", null);
             }
             PublicLookupProvider.OseSubmission r = rows.get();
             boolean cdr = "cdr".equals(r.result());
-            return new OseLookupResult(cdr ? "con_cdr" : "con_inconsistencia",
+            return new OseLookupResultRepresentation(cdr ? "con_cdr" : "con_inconsistencia",
                     String.valueOf(cdr ? r.cdrIssuedAt() : r.receivedAt()));
         });
     }

@@ -1,6 +1,7 @@
 package io.github.projectopenubl.xhandler.resources.exceptions;
 
 import io.quarkus.smallrye.openapi.OpenApiFilter;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.eclipse.microprofile.openapi.OASFactory;
@@ -18,8 +19,10 @@ import org.eclipse.microprofile.openapi.models.responses.APIResponses;
  *
  * <ul>
  *   <li>every operation under {@code /api/} except the public ones requires the bearer scheme;
- *   <li>{@link ApiError} is a reusable schema, referenced by the {@code 4XX} and {@code 5XX}
+ *   <li>{@code ApiError} is a reusable schema, referenced by the {@code 4XX} and {@code 5XX}
  *       responses of every operation under {@code /api/} (an OIDC {@code 401} has no body);
+ *   <li>a page schema is named after its items ({@code Page} + the item schema, e.g.
+ *       {@code PageDocumentView}), not after Java class names, so the names SDKs see stay stable.
  * </ul>
  *
  * <p>Runs at build time, so the stored document ({@code target/openapi}) and {@code /q/openapi}
@@ -50,6 +53,7 @@ public class OpenApiDocumentFilter implements OASFilter {
             openAPI.setComponents(components);
         }
         components.addSchema(ERROR_SCHEMA, errorSchema());
+        renamePageSchemas(openAPI);
         if (openAPI.getPaths() == null) {
             return;
         }
@@ -63,6 +67,79 @@ public class OpenApiDocumentFilter implements OASFilter {
                     operation.setSecurity(List.of(OASFactory.createSecurityRequirement().addScheme(SECURITY_SCHEME)));
                 }
                 addErrorResponses(operation, secured);
+            }
+        }
+    }
+
+    private static final String SCHEMA_REF = "#/components/schemas/";
+
+    private static void renamePageSchemas(OpenAPI openAPI) {
+        Map<String, Schema> schemas = openAPI.getComponents().getSchemas();
+        if (schemas == null) {
+            return;
+        }
+        Map<String, String> renames = new LinkedHashMap<>();
+        for (Map.Entry<String, Schema> schema : schemas.entrySet()) {
+            Map<String, Schema> properties = schema.getValue().getProperties();
+            Schema items = properties == null ? null : properties.get("items");
+            if (!schema.getKey().startsWith("Page") || items == null || items.getItems() == null || items.getItems().getRef() == null
+                    || !items.getItems().getRef().startsWith(SCHEMA_REF)) {
+                continue;
+            }
+            String name = "Page" + items.getItems().getRef().substring(SCHEMA_REF.length());
+            if (!name.equals(schema.getKey()) && !schemas.containsKey(name)) {
+                renames.put(schema.getKey(), name);
+            }
+        }
+        if (renames.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, String> rename : renames.entrySet()) {
+            Schema schema = schemas.get(rename.getKey());
+            openAPI.getComponents().removeSchema(rename.getKey());
+            openAPI.getComponents().addSchema(rename.getValue(), schema);
+        }
+        for (Schema schema : openAPI.getComponents().getSchemas().values()) {
+            rewriteRefs(schema, renames);
+        }
+        if (openAPI.getPaths() == null) {
+            return;
+        }
+        for (PathItem path : openAPI.getPaths().getPathItems().values()) {
+            for (Operation operation : path.getOperations().values()) {
+                if (operation.getParameters() != null) {
+                    operation.getParameters().forEach(p -> rewriteRefs(p.getSchema(), renames));
+                }
+                if (operation.getRequestBody() != null && operation.getRequestBody().getContent() != null) {
+                    operation.getRequestBody().getContent().getMediaTypes().values().forEach(m -> rewriteRefs(m.getSchema(), renames));
+                }
+                if (operation.getResponses() != null) {
+                    for (APIResponse response : operation.getResponses().getAPIResponses().values()) {
+                        if (response.getContent() != null) {
+                            response.getContent().getMediaTypes().values().forEach(m -> rewriteRefs(m.getSchema(), renames));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static void rewriteRefs(Schema schema, Map<String, String> renames) {
+        if (schema == null) {
+            return;
+        }
+        String ref = schema.getRef();
+        if (ref != null && ref.startsWith(SCHEMA_REF) && renames.containsKey(ref.substring(SCHEMA_REF.length()))) {
+            schema.setRef(SCHEMA_REF + renames.get(ref.substring(SCHEMA_REF.length())));
+        }
+        if (schema.getProperties() != null) {
+            schema.getProperties().values().forEach(s -> rewriteRefs(s, renames));
+        }
+        rewriteRefs(schema.getItems(), renames);
+        rewriteRefs(schema.getAdditionalPropertiesSchema(), renames);
+        for (List<Schema> composed : java.util.Arrays.asList(schema.getAllOf(), schema.getAnyOf(), schema.getOneOf())) {
+            if (composed != null) {
+                composed.forEach(s -> rewriteRefs(s, renames));
             }
         }
     }

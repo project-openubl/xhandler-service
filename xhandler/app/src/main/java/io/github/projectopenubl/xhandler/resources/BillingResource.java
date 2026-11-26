@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.BillingRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.BillingDetailsRepresentation;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.managers.EntitlementManager;
 
@@ -10,9 +12,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -26,10 +25,7 @@ public class BillingResource {
 
     private final TenantProvider tenantProvider;
 
-    public record BillingDetails(@Pattern(regexp = "\\d{11}") String billingRuc, @Size(max = 300) String billingName,
-            @Email String billingEmail) {}
 
-    public record BillingView(EntitlementManager.Usage usage, String billingRuc, String billingName, String billingEmail) {}
 
     private final TenantAccess access;
     private final EntitlementManager entitlements;
@@ -45,16 +41,16 @@ public class BillingResource {
     @Operation(operationId = "getBilling")
     @GET
     @Transactional
-    public BillingView get(@PathParam("tenantId") UUID tenantId) {
+    public BillingRepresentation get(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
         TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
-        return new BillingView(entitlements.usage(tenantId), tenant.getBillingRuc(), tenant.getBillingName(), tenant.getBillingEmail());
+        return new BillingRepresentation(entitlements.usage(tenantId), tenant.getBillingRuc(), tenant.getBillingName(), tenant.getBillingEmail());
     }
 
     @Operation(operationId = "updateBillingDetails")
     @PUT
     @Transactional
-    public BillingView details(@PathParam("tenantId") UUID tenantId, @Valid BillingDetails details) {
+    public BillingRepresentation details(@PathParam("tenantId") UUID tenantId, @Valid BillingDetailsRepresentation details) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         TenantModel tenant = tenantProvider.getTenantForUpdate(tenantId).orElse(null);
         tenant.setBillingRuc(details.billingRuc());

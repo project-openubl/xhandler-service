@@ -1,5 +1,8 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.VoidRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EmitRequestRepresentation;
 import io.github.projectopenubl.xhandler.utils.Tokens;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
@@ -11,7 +14,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.managers.EmitManager;
 import io.github.projectopenubl.xhandler.managers.VoidingManager;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -41,6 +43,8 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/public/nubefact/{companyId}")
 public class NubefactResource {
 
+    private final ModelToRepresentation modelToRepresentation;
+
     private final DocumentProvider documentProvider;
 
     private final DocumentEventProvider documentEventProvider;
@@ -53,7 +57,8 @@ public class NubefactResource {
     private final VoidingManager voiding;
     private final ObjectMapper json;
 
-    public NubefactResource(AdapterTokenProvider adapterTokens, TenantAccess access, EmitManager emit, VoidingManager voiding, ObjectMapper json, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+    public NubefactResource(AdapterTokenProvider adapterTokens, TenantAccess access, EmitManager emit, VoidingManager voiding, ObjectMapper json, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.documentProvider = documentProvider;
         this.documentEventProvider = documentEventProvider;
         this.companyProvider = companyProvider;
@@ -102,7 +107,7 @@ public class NubefactResource {
         String key = "nubefact:" + client.companyId() + ":" + client.sunatEnv() + ":" + converted.tipo() + ":" + converted.serie() + ":"
                 + converted.numero();
         EmitManager.Emitted emitted = emit.emitNumbered(client.tenantId(), client.companyId(), key,
-                new EmitManager.EmitRequest(converted.document(), converted.serie(), null, Map.of("adapter", "nubefact")),
+                new EmitRequestRepresentation(converted.document(), converted.serie(), null, Map.of("adapter", "nubefact")),
                 converted.numero(), UUID.randomUUID().toString(), true);
         return Response.ok(NubefactAdapter.answer(emitted.body(), null, null, null)).build();
     }
@@ -115,7 +120,7 @@ public class NubefactResource {
         }
         String motivo = request.path("motivo").asText("Anulación");
         DocumentModel voidingDocument = voiding.voidDocumentAsPlatform(client.tenantId(), UUID.fromString(view.path("id").asText()),
-                new VoidingManager.VoidRequest(motivo, true, null), UUID.randomUUID().toString());
+                new VoidRequestRepresentation(motivo, true, null), UUID.randomUUID().toString());
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(client.tenantId());
             documentEventProvider.addDocumentEvent(documentProvider.getDocument(UUID.fromString(view.path("id").asText())).orElse(null), null,
@@ -135,7 +140,7 @@ public class NubefactResource {
             if (found.isEmpty()) {
                 throw ApiException.notFound();
             }
-            return json.valueToTree(DocumentView.of(found.get(0)));
+            return json.valueToTree(modelToRepresentation.toRepresentation(found.get(0)));
         });
     }
 

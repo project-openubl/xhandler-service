@@ -1,5 +1,10 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.TokenRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.SfsRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.NubefactTokenRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EmitRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.AdapterTokenRepresentation;
 import io.github.projectopenubl.xhandler.utils.Tokens;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.AdapterTokenProvider;
@@ -10,7 +15,7 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
+import io.github.projectopenubl.xhandler.representations.idm.DocumentRepresentation;
 import io.github.projectopenubl.xhandler.managers.EmitManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -18,8 +23,6 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.HeaderParam;
@@ -42,12 +45,8 @@ public class AdapterResource {
 
     private final CompanyManager companyManager;
 
-    public record SfsRequest(@NotBlank String fileName, @NotBlank String cab, @NotBlank String det) {}
 
-    public record TokenRequest(@NotBlank @Size(max = 100) String label) {}
 
-    /** A new adapter token: {@code token} is shown only here. */
-    public record NubefactToken(UUID id, String token, String url) {}
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -71,20 +70,20 @@ public class AdapterResource {
 
     /** A UBL XML built elsewhere: validated, signed if unsigned, stored and sent. */
     @APIResponse(responseCode = "201", description = "Documento recibido y emitido.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentRepresentation.class)))
     @Operation(operationId = "uploadUblDocument")
     @POST
     @Path("/documents/ubl")
     @Consumes({"application/xml", "text/xml"})
     public Response uploadUbl(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @HeaderParam("X-Correlation-Id") String correlationId, byte[] xml) {
-        DocumentView view = ubl.upload(tenantId, companyId, xml, correlationId == null ? UUID.randomUUID().toString() : correlationId);
+        DocumentRepresentation view = ubl.upload(tenantId, companyId, xml, correlationId == null ? UUID.randomUUID().toString() : correlationId);
         return Response.status(201).entity(view).build();
     }
 
     /** SUNAT SFS TXT files (.CAB/.NOT + .DET) converted to native JSON; the document keeps its number. */
     @APIResponse(responseCode = "201", description = "Documento emitido (también la respuesta repetida de una Idempotency-Key ya usada, sin access_url).",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentRepresentation.class)))
     @APIResponse(responseCode = "402", description = "Sin cuota de documentos en el plan (quota_exceeded).",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @APIResponse(responseCode = "409", description = "Conflicto: Idempotency-Key en proceso, número ya usado, empresa desactivada o no autorizada.",
@@ -97,7 +96,7 @@ public class AdapterResource {
     @POST
     @Path("/documents/sfs")
     public Response sfs(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
-            @HeaderParam("Idempotency-Key") String idempotencyKey, @Valid SfsRequest request) {
+            @HeaderParam("Idempotency-Key") String idempotencyKey, @Valid SfsRequestRepresentation request) {
         SfsAdapter.Converted converted = SfsAdapter.convert(request.fileName(), request.cab(), request.det());
         String ruc = QuarkusTransaction.requiringNew().call(() -> {
             access.enter(tenantId, Role.OPERATOR);
@@ -107,19 +106,19 @@ public class AdapterResource {
             throw ApiException.invalid("invalid_document", "El RUC del archivo no es el de la empresa.", null);
         }
         EmitManager.Emitted emitted = emit.emitNumbered(tenantId, companyId, idempotencyKey,
-                new EmitManager.EmitRequest(converted.document(), converted.serie(), null, Map.of("adapter", "sfs")), converted.numero(),
+                new EmitRequestRepresentation(converted.document(), converted.serie(), null, Map.of("adapter", "sfs")), converted.numero(),
                 UUID.randomUUID().toString(), false);
         return Response.status(emitted.status()).entity(emitted.body()).build();
     }
 
     /** A token for the Nubefact-compatible API (shown once). */
     @APIResponse(responseCode = "201", description = "Token creado; se muestra solo esta vez.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = NubefactToken.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = NubefactTokenRepresentation.class)))
     @Operation(operationId = "createNubefactToken")
     @POST
     @Path("/adapter-tokens/nubefact")
     @Transactional
-    public Response createToken(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid TokenRequest request) {
+    public Response createToken(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid TokenRequestRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompany(companyId);
         byte[] raw = new byte[24];
@@ -128,7 +127,7 @@ public class AdapterResource {
         UUID id = Ids.newId();
         adapterTokens.addNubefactToken(id, tenantId, company.getId(), Tokens.hash(token), request.label(), scope.actor().auditName());
         auditor.record(scope, "adapter_token.created", "company", companyId, Map.of("kind", "nubefact", "label", request.label()));
-        return Response.status(201).entity(new NubefactToken(id, token, "/api/v1/public/nubefact/" + company.getId())).build();
+        return Response.status(201).entity(new NubefactTokenRepresentation(id, token, "/api/v1/public/nubefact/" + company.getId())).build();
     }
 
     /** The company's adapter tokens (never the token itself). */
@@ -136,16 +135,13 @@ public class AdapterResource {
     @jakarta.ws.rs.GET
     @Path("/adapter-tokens")
     @Transactional
-    public java.util.List<AdapterTokenView> listTokens(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
+    public java.util.List<AdapterTokenRepresentation> listTokens(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.ADMIN);
         companyManager.getCompany(companyId);
         return adapterTokens.getAdapterTokens(companyId).stream()
-                .map(t -> new AdapterTokenView(t.id(), t.kind(), t.label(), t.createdBy(), t.createdAt(), t.revokedAt())).toList();
+                .map(t -> new AdapterTokenRepresentation(t.id(), t.kind(), t.label(), t.createdBy(), t.createdAt(), t.revokedAt())).toList();
     }
 
-    /** An adapter token as listed: never the token itself. */
-    public record AdapterTokenView(UUID id, String kind, String label, String createdBy, java.time.Instant createdAt,
-            java.time.Instant revokedAt) {}
 
     @APIResponse(responseCode = "204", description = "Token revocado.")
     @Operation(operationId = "revokeAdapterToken")

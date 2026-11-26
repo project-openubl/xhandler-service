@@ -1,8 +1,11 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.PreferenceRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.NotificationSettingsRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.NotificationRepresentation;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.models.TenantModel;
@@ -11,8 +14,6 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.github.projectopenubl.xhandler.models.NotificationProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
@@ -20,7 +21,6 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -32,11 +32,8 @@ public class NotificationResource {
 
     private final TenantProvider tenantProvider;
 
-    public record NotificationView(UUID id, String kind, String title, String body, UUID documentId, Instant createdAt, Instant readAt) {}
 
-    public record Preference(@NotBlank String kind, boolean email, boolean inApp) {}
 
-    public record NotificationSettings(@Email String notificationEmail) {}
 
     private final TenantAccess access;
     private final NotificationProvider notificationProvider;
@@ -53,13 +50,13 @@ public class NotificationResource {
     @GET
     @Path("/notifications")
     @Transactional
-    public Page<NotificationView> list(@PathParam("tenantId") UUID tenantId, @QueryParam("unread") Boolean unread,
+    public PageRepresentation<NotificationRepresentation> list(@PathParam("tenantId") UUID tenantId, @QueryParam("unread") Boolean unread,
             @QueryParam("limit") Integer limit, @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
-        int size = Page.limit(limit);
-        int from = Page.offset(offset);
-        return new Page<>(notificationProvider.getNotifications(Boolean.TRUE.equals(unread), size, from).stream()
-                .map(r -> new NotificationView(r.id(), r.kind(), r.title(), r.body(), r.documentId(), r.createdAt(), r.readAt())).toList(),
+        int size = PageRepresentation.limit(limit);
+        int from = PageRepresentation.offset(offset);
+        return new PageRepresentation<>(notificationProvider.getNotifications(Boolean.TRUE.equals(unread), size, from).stream()
+                .map(r -> new NotificationRepresentation(r.id(), r.kind(), r.title(), r.body(), r.documentId(), r.createdAt(), r.readAt())).toList(),
                 size, from);
     }
 
@@ -91,18 +88,18 @@ public class NotificationResource {
     @GET
     @Path("/notification-preferences")
     @Transactional
-    public List<Preference> preferences(@PathParam("tenantId") UUID tenantId) {
+    public List<PreferenceRepresentation> preferences(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        return notificationProvider.getNotificationPreferences().stream().map(r -> new Preference(r.kind(), r.email(), r.inApp())).toList();
+        return notificationProvider.getNotificationPreferences().stream().map(r -> new PreferenceRepresentation(r.kind(), r.email(), r.inApp())).toList();
     }
 
     @Operation(operationId = "setNotificationPreferences")
     @PUT
     @Path("/notification-preferences")
     @Transactional
-    public List<Preference> setPreferences(@PathParam("tenantId") UUID tenantId, List<@Valid Preference> preferences) {
+    public List<PreferenceRepresentation> setPreferences(@PathParam("tenantId") UUID tenantId, List<@Valid PreferenceRepresentation> preferences) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        for (Preference p : preferences) {
+        for (PreferenceRepresentation p : preferences) {
             notificationProvider.setNotificationPreference(tenantId, p.kind(), p.email(), p.inApp());
         }
         auditor.record(scope, "notification.preferences_updated", "tenant", tenantId);
@@ -113,25 +110,25 @@ public class NotificationResource {
     @GET
     @Path("/notification-settings")
     @Transactional
-    public NotificationSettings getSettings(@PathParam("tenantId") UUID tenantId) {
+    public NotificationSettingsRepresentation getSettings(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
         TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
         if (tenant == null) {
             throw ApiException.notFound();
         }
-        return new NotificationSettings(tenant.getNotificationEmail());
+        return new NotificationSettingsRepresentation(tenant.getNotificationEmail());
     }
 
     @Operation(operationId = "updateNotificationSettings")
     @PUT
     @Path("/notification-settings")
     @Transactional
-    public NotificationSettings settings(@PathParam("tenantId") UUID tenantId, @Valid NotificationSettings settings) {
+    public NotificationSettingsRepresentation settings(@PathParam("tenantId") UUID tenantId, @Valid NotificationSettingsRepresentation settings) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         TenantModel tenant = tenantProvider.getTenantForUpdate(tenantId).orElse(null);
         tenant.setNotificationEmail(settings.notificationEmail() == null || settings.notificationEmail().isBlank()
                 ? null : settings.notificationEmail().strip());
         auditor.record(scope, "tenant.notification_email_changed", "tenant", tenantId);
-        return new NotificationSettings(tenant.getNotificationEmail());
+        return new NotificationSettingsRepresentation(tenant.getNotificationEmail());
     }
 }

@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.QueuedRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EmailRequestRepresentation;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.jobs.handlers.DocumentEmailJob;
@@ -19,8 +21,6 @@ import jakarta.enterprise.event.Observes;
 import io.github.projectopenubl.xhandler.models.EmailProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -41,9 +41,7 @@ public class DocumentEmailResource {
 
     private final CompanyProvider companyProvider;
 
-    public record EmailRequest(@NotEmpty @Size(max = 10) List<String> to, @Size(max = 10) List<String> cc, Boolean includeCdr) {}
 
-    public record Queued(UUID jobId, String jobPrn) {}
 
     static final String EMAIL = "[^@\\s<>\"]+@[^@\\s<>\"]+\\.[A-Za-z]{2,}";
 
@@ -66,11 +64,11 @@ public class DocumentEmailResource {
     }
 
     @APIResponse(responseCode = "202", description = "Correo encolado: lo envía un trabajo.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Queued.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = QueuedRepresentation.class)))
     @Operation(operationId = "emailDocument")
     @POST
     @Transactional
-    public Response send(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId, @Valid EmailRequest request) {
+    public Response send(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId, @Valid EmailRequestRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
         DocumentModel doc = documentProvider.getDocument(documentId).orElse(null);
         if (doc == null) {
@@ -99,7 +97,7 @@ public class DocumentEmailResource {
         JobModel job = jobs.enqueue(scope, DocumentEmailJob.NAME, 3, Map.of("document_id", documentId.toString(), "to", request.to(), "cc", cc,
                 "include_cdr", Boolean.TRUE.equals(request.includeCdr())), List.of(), null);
         auditor.record(scope, "document.email_requested", "document", documentId, Map.of("to", String.join(",", request.to())));
-        return Response.status(202).entity(new Queued(job.getId(), "xh:job:" + job.getId())).build();
+        return Response.status(202).entity(new QueuedRepresentation(job.getId(), "xh:job:" + job.getId())).build();
     }
 
     /**

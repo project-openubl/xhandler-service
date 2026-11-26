@@ -1,5 +1,11 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.TenantUsageRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.PartnerTenantRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.PartnerRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.PartnerCreateTenantRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.PartnerBrandingRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.BrandingRepresentation;
 import io.github.projectopenubl.xhandler.managers.LogoManager;
 import io.github.projectopenubl.xhandler.models.PartnerProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -9,9 +15,6 @@ import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.CurrentActor;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -38,21 +41,11 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/partners")
 public class PartnerResource {
 
-    public record PartnerView(UUID id, String name, String role) {}
 
-    @Schema(name = "CreatePartnerTenant")
-    public record CreateTenant(@NotBlank @Size(max = 200) String name, @Pattern(regexp = "user|client") String ownerKind,
-            @Size(max = 200) String ownerSubject) {}
 
-    public record PartnerTenant(UUID id, String name, UUID partnerId) {}
 
-    public record TenantUsage(UUID id, String name, String status, String plan, long productionDocuments, long otherDocuments) {}
 
-    public record Branding(@Pattern(regexp = "#[0-9a-fA-F]{6}") String color, @Size(max = 300) String footer,
-            @Size(max = 200) String senderName) {}
 
-    public record PartnerBrandingView(UUID partnerId, Branding branding,
-            @Schema(description = "Si el socio subió un logo; los PDF de sus cuentas lo usan cuando la empresa no tiene uno.") boolean hasLogo) {}
 
     private final CurrentActor currentActor;
     private final PartnerProvider partners;
@@ -69,25 +62,25 @@ public class PartnerResource {
     @Operation(operationId = "listMyPartners")
     @GET
     @Transactional
-    public List<PartnerView> mine() {
+    public List<PartnerRepresentation> mine() {
         Actor actor = currentActor.get();
         return partners.getPartnersOf(actor.kind(), actor.subject()).stream()
-                .map(r -> new PartnerView(r.id(), r.name(), r.role())).toList();
+                .map(r -> new PartnerRepresentation(r.id(), r.name(), r.role())).toList();
     }
 
     @APIResponse(responseCode = "201", description = "Cuenta creada para el socio.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = PartnerTenant.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = PartnerTenantRepresentation.class)))
     @Operation(operationId = "createPartnerTenant")
     @POST
     @Path("/{partnerId}/tenants")
     @Transactional
-    public Response createTenant(@PathParam("partnerId") UUID partnerId, @Valid CreateTenant request) {
+    public Response createTenant(@PathParam("partnerId") UUID partnerId, @Valid PartnerCreateTenantRepresentation request) {
         Actor actor = require(partnerId, "admin");
         UUID id = Ids.newId();
         partners.createPartnerTenant(partnerId, id, request.name().strip(), actor.auditName(),
                 request.ownerSubject() == null ? null : (request.ownerKind() == null ? "user" : request.ownerKind()),
                 request.ownerSubject());
-        return Response.status(201).entity(new PartnerTenant(id, request.name().strip(), partnerId)).build();
+        return Response.status(201).entity(new PartnerTenantRepresentation(id, request.name().strip(), partnerId)).build();
     }
 
     /** The partner's tenants with their documents in a month (default: this month, Lima). */
@@ -95,7 +88,7 @@ public class PartnerResource {
     @GET
     @Path("/{partnerId}/tenants")
     @Transactional
-    public List<TenantUsage> tenants(@PathParam("partnerId") UUID partnerId, @QueryParam("month") String month) {
+    public List<TenantUsageRepresentation> tenants(@PathParam("partnerId") UUID partnerId, @QueryParam("month") String month) {
         require(partnerId, "viewer");
         YearMonth period;
         try {
@@ -105,7 +98,7 @@ public class PartnerResource {
         }
         Instant from = period.atDay(1).atStartOfDay(io.github.projectopenubl.xhandler.utils.Deadlines.LIMA).toInstant();
         Instant to = period.plusMonths(1).atDay(1).atStartOfDay(io.github.projectopenubl.xhandler.utils.Deadlines.LIMA).toInstant();
-        return partners.getPartnerTenants(partnerId, from, to).stream().map(r -> new TenantUsage(r.id(), r.name(), r.status(), r.plan(),
+        return partners.getPartnerTenants(partnerId, from, to).stream().map(r -> new TenantUsageRepresentation(r.id(), r.name(), r.status(), r.plan(),
                 r.productionDocuments(), r.otherDocuments())).toList();
     }
 
@@ -113,7 +106,7 @@ public class PartnerResource {
     @GET
     @Path("/{partnerId}/branding")
     @Transactional
-    public PartnerBrandingView getBranding(@PathParam("partnerId") UUID partnerId) {
+    public PartnerBrandingRepresentation getBranding(@PathParam("partnerId") UUID partnerId) {
         require(partnerId, "viewer");
         return brandingView(partnerId);
     }
@@ -122,7 +115,7 @@ public class PartnerResource {
     @PUT
     @Path("/{partnerId}/branding")
     @Transactional
-    public PartnerBrandingView branding(@PathParam("partnerId") UUID partnerId, @Valid Branding branding) {
+    public PartnerBrandingRepresentation branding(@PathParam("partnerId") UUID partnerId, @Valid BrandingRepresentation branding) {
         require(partnerId, "admin");
         String brandingJson;
         try {
@@ -131,7 +124,7 @@ public class PartnerResource {
             throw new IllegalStateException(e);
         }
         partners.setPartnerBranding(partnerId, brandingJson);
-        return new PartnerBrandingView(partnerId, branding, brandingView(partnerId).hasLogo());
+        return new PartnerBrandingRepresentation(partnerId, branding, brandingView(partnerId).hasLogo());
     }
 
     /**
@@ -144,7 +137,7 @@ public class PartnerResource {
     @Path("/{partnerId}/logo")
     @jakarta.ws.rs.Consumes({"image/png", "image/jpeg"})
     @Transactional
-    public PartnerBrandingView uploadLogo(@PathParam("partnerId") UUID partnerId, byte[] image) {
+    public PartnerBrandingRepresentation uploadLogo(@PathParam("partnerId") UUID partnerId, byte[] image) {
         require(partnerId, "admin");
         String ref = files.put(partnerId, LogoManager.normalize(image)).key();
         partners.setPartnerLogo(partnerId, ref);
@@ -162,22 +155,22 @@ public class PartnerResource {
         return Response.noContent().build();
     }
 
-    private PartnerBrandingView brandingView(UUID partnerId) {
+    private PartnerBrandingRepresentation brandingView(UUID partnerId) {
         PartnerProvider.PartnerBranding row = partners.getPartnerBranding(partnerId);
-        Branding branding;
+        BrandingRepresentation branding;
         try {
-            branding = row.brandingJson() == null ? new Branding(null, null, null) : json.readValue(row.brandingJson(), Branding.class);
+            branding = row.brandingJson() == null ? new BrandingRepresentation(null, null, null) : json.readValue(row.brandingJson(), BrandingRepresentation.class);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             // Branding written before the record's shape: shown empty rather than failing
-            branding = new Branding(null, null, null);
+            branding = new BrandingRepresentation(null, null, null);
         }
-        return new PartnerBrandingView(partnerId, branding, row.hasLogo());
+        return new PartnerBrandingRepresentation(partnerId, branding, row.hasLogo());
     }
 
     /** The caller must be a member of the partner with at least {@code role} (admin > viewer). Unknown partners are 404. */
     private Actor require(UUID partnerId, String role) {
         Actor actor = currentActor.get();
-        String mine = mine().stream().filter(p -> p.id().equals(partnerId)).map(PartnerView::role).findFirst()
+        String mine = mine().stream().filter(p -> p.id().equals(partnerId)).map(PartnerRepresentation::role).findFirst()
                 .orElseThrow(ApiException::notFound);
         if ("admin".equals(role) && !"admin".equals(mine)) {
             throw ApiException.forbidden();

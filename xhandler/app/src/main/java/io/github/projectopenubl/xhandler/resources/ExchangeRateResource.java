@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.ExchangeRateRepresentation;
 import io.github.projectopenubl.xhandler.managers.ExchangeRateManager;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -23,7 +24,7 @@ public class ExchangeRateResource {
     @Operation(operationId = "getExchangeRate")
     @GET
     @Transactional
-    public ExchangeRateManager.Rate get(@QueryParam("date") LocalDate date) {
+    public ExchangeRateRepresentation get(@QueryParam("date") LocalDate date) {
         LocalDate day = date == null ? io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima() : date;
         return rates.on(day).orElseThrow(() -> new ApiException(404, "no_rate", "No hay tipo de cambio registrado para esa fecha."));
     }
