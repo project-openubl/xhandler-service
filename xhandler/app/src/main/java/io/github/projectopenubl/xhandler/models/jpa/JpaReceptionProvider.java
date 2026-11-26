@@ -115,6 +115,34 @@ public class JpaReceptionProvider implements ReceptionProvider {
     }
 
     private static LocalDate date(Object value) {
-        return value == null ? null : value instanceof LocalDate d ? d : ((java.sql.Date) value).toLocalDate();
+        return value == null ? null : Times.toLocalDate(value);
+    }
+
+    @Override
+    public List<ReceptionRef> getReceptionsWithoutAmounts() {
+        @SuppressWarnings("unchecked")
+        List<Object[]> receptions = em.createNativeQuery("SELECT tenant_id, reception_id FROM xhandler.receptions_without_amounts(200)")
+                .getResultList();
+        return receptions.stream().map(r -> new ReceptionRef((UUID) r[0], (UUID) r[1])).toList();
+    }
+
+    @Override
+    public Optional<String> getReceptionXmlRef(UUID receptionId) {
+        List<?> ref = em.createNativeQuery("SELECT xml_ref FROM xhandler.reception WHERE id = :id")
+                .setParameter("id", receptionId).getResultList();
+        return ref.isEmpty() ? Optional.empty() : Optional.ofNullable((String) ref.get(0));
+    }
+
+    @Override
+    public void setReceptionAmounts(UUID receptionId, String amountsJson) {
+        em.createNativeQuery("UPDATE xhandler.reception SET amounts = cast(:a AS jsonb) WHERE id = :id AND amounts IS NULL")
+                .setParameter("a", amountsJson).setParameter("id", receptionId).executeUpdate();
+    }
+
+    @Override
+    public void markReceptionAmountsUnreadable(UUID receptionId) {
+        em.createNativeQuery(
+                        "UPDATE xhandler.reception SET amounts = cast('{\"_error\": \"unreadable\"}' AS jsonb) WHERE id = :id AND amounts IS NULL")
+                .setParameter("id", receptionId).executeUpdate();
     }
 }

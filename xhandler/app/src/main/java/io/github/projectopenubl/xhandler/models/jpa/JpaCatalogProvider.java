@@ -81,13 +81,6 @@ public class JpaCatalogProvider implements CatalogProvider {
         em.flush();
     }
 
-    @Override
-    public int countLookupHit(String key) {
-        return ((Number) em.createNativeQuery("""
-                        INSERT INTO xhandler.public_lookup_counter (bucket, key, hits) VALUES (date_trunc('hour', now()), :k, 1)
-                        ON CONFLICT (bucket, key) DO UPDATE SET hits = public_lookup_counter.hits + 1 RETURNING hits""")
-                .setParameter("k", key).getSingleResult()).intValue();
-    }
 
     private static CatalogRow row(Object[] r) {
         return new CatalogRow((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], Times.toInstant(r[4]), Times.toInstant(r[5]));

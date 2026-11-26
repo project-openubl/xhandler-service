@@ -157,6 +157,6 @@ public class JpaReportProvider implements ReportProvider {
         if (value == null) {
             return null;
         }
-        return value instanceof LocalDate d ? d : ((java.sql.Date) value).toLocalDate();
+        return Times.toLocalDate(value);
     }
 }

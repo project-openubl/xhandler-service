@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.models.jpa;
 
+import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.models.ExchangeRateProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
@@ -27,7 +28,7 @@ public class JpaExchangeRateProvider implements ExchangeRateProvider {
                 .setParameter("oldest", oldest)
                 .setParameter("day", day)
                 .getResultList();
-        return rows.stream().findFirst().map(r -> new ExchangeRate(toDate(r[0]), (BigDecimal) r[1], (BigDecimal) r[2], (String) r[3]));
+        return rows.stream().findFirst().map(r -> new ExchangeRate(Times.toLocalDate(r[0]), (BigDecimal) r[1], (BigDecimal) r[2], (String) r[3]));
     }
 
     @Override
@@ -43,7 +44,4 @@ public class JpaExchangeRateProvider implements ExchangeRateProvider {
                 .executeUpdate();
     }
 
-    private static LocalDate toDate(Object value) {
-        return value instanceof LocalDate d ? d : ((java.sql.Date) value).toLocalDate();
-    }
 }

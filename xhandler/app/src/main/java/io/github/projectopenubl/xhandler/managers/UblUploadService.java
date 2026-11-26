@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
@@ -45,6 +46,8 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class UblUploadService {
 
+    private final JobQueueProvider jobQueueProvider;
+
     private final DocumentProvider documentProvider;
 
     private final DocumentFileProvider documentFileProvider;
@@ -70,7 +73,8 @@ public class UblUploadService {
 
     public UblUploadService(TenantAccess access, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
             Numbering numbering, Routes routes, AccessLinks links, Auditor auditor, ObjectMapper json,
-            io.github.projectopenubl.xhandler.managers.EmitService emit, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+            io.github.projectopenubl.xhandler.managers.EmitService emit, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+        this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
         this.documentEventProvider = documentEventProvider;
@@ -186,7 +190,7 @@ public class UblUploadService {
                     scope.actor().auditName(), correlationId);
             auditor.record(scope, "document.uploaded", "document", doc.getId(), Map.of("serie_numero", doc.serieNumero()));
             String token = links.create(doc);
-            documentProvider.notifyReconcile();
+            jobQueueProvider.notifyReconcile();
             return DocumentView.of(doc, links.url(token), null);
         }));
     }

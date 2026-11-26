@@ -34,6 +34,4 @@ public interface CatalogProvider {
     /** Writes pending changes now, so constraint violations surface here. */
     void flush();
 
-    /** Counts one hit for {@code key} in the current hour's bucket; returns the bucket's hits. */
-    int countLookupHit(String key);
 }

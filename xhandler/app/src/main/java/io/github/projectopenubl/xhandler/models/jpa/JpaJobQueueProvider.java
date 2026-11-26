@@ -150,4 +150,13 @@ public class JpaJobQueueProvider implements JobQueueProvider {
     public void notifyReconcile() {
         em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
     }
+
+    @Override
+    public boolean hasActiveJob(UUID documentId) {
+        return !em.createNativeQuery("""
+                        SELECT 1 FROM xhandler.job WHERE state IN ('waiting', 'running', 'canceling')
+                        AND reserved_resources @> ARRAY[CAST(:resource AS text)]""")
+                .setParameter("resource", "document:" + documentId)
+                .getResultList().isEmpty();
+    }
 }

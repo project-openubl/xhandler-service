@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.PseProvider;
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
@@ -57,6 +59,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  */
 @ApplicationScoped
 public class EmitService {
+
+    private final PseProvider pseProvider;
+
+    private final JobQueueProvider jobQueueProvider;
 
     private final DocumentProvider documentProvider;
 
@@ -117,7 +123,9 @@ public class EmitService {
             io.github.projectopenubl.xhandler.managers.ExchangeRates rates,
             @ConfigProperty(name = "xhandler.emit.permits", defaultValue = "32") int permits,
             @ConfigProperty(name = "xhandler.emit.permit-timeout", defaultValue = "5s") Duration permitTimeout,
-            @ConfigProperty(name = "xhandler.emit.lock-timeout", defaultValue = "10s") Duration lockTimeout, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, TenantProvider tenantProvider, DocumentProvider documentProvider) {
+            @ConfigProperty(name = "xhandler.emit.lock-timeout", defaultValue = "10s") Duration lockTimeout, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, TenantProvider tenantProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider, PseProvider pseProvider) {
+        this.pseProvider = pseProvider;
+        this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.tenantProvider = tenantProvider;
         this.documentFileProvider = documentFileProvider;
@@ -391,7 +399,7 @@ public class EmitService {
             draft.issued().accept(doc);
         }
         String token = links.create(doc);
-        documentProvider.notifyReconcile();
+        jobQueueProvider.notifyReconcile();
 
         String qr = Qr.of(company.getRuc(), doc, built.enrichedJson());
         JsonNode body = json.valueToTree(DocumentView.of(doc, links.url(token), qr));
@@ -450,7 +458,7 @@ public class EmitService {
     }
 
     private boolean pseAuthorized(CompanyModel company) {
-        return companyProvider.isPseAuthorized(company.getId());
+        return pseProvider.hasApprovedAuthorization(company.getId());
     }
 
     /** D defaults to today in Lima; SUNAT refuses more than 2 days ahead (2329) and late documents lose their validity. */

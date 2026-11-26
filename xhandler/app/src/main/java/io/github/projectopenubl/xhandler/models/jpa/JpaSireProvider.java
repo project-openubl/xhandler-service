@@ -172,7 +172,7 @@ public class JpaSireProvider implements SireProvider {
     public List<DeadlineDue> getDeadlinesDue() {
         return rows(em.createNativeQuery("SELECT tenant_id, company_id, ruc, period, due_date FROM xhandler.sire_deadlines_due(3)"))
                 .stream().map(r -> new DeadlineDue((UUID) r[0], (UUID) r[1], (String) r[2], (String) r[3],
-                        r[4] instanceof LocalDate d ? d : ((java.sql.Date) r[4]).toLocalDate())).toList();
+                        Times.toLocalDate(r[4]))).toList();
     }
 
     @Override

@@ -74,8 +74,6 @@ public interface DocumentProvider {
     /** A company, environment and issue day whose boletas need a resumen diario. */
     record SummaryGroup(UUID tenantId, UUID companyId, String sunatEnv, LocalDate fecha) {}
 
-    /** Wakes the reconciler ({@code pg_notify('xhandler_reconcile')}), on commit. */
-    void notifyReconcile();
 
     /**
      * Moves an accepted, undelivered, not yet voided document to {@code voiding}; returns how many
@@ -92,8 +90,6 @@ public interface DocumentProvider {
     /** Groups of boletas needing a resumen diario, across tenants (SECURITY DEFINER). */
     List<SummaryGroup> getBoletasNeedingSummary(LocalDate today);
 
-    /** Whether a job holding the document's resource is waiting, running or canceling. */
-    boolean hasActiveJob(UUID documentId);
 
     /** Documents whose legal deadline falls within {@code horizon}, across tenants (SECURITY DEFINER). */
     List<TenantRow> getDocumentsAtRisk(java.time.Duration horizon);
@@ -101,21 +97,15 @@ public interface DocumentProvider {
     /** Up to 200 documents without amounts, across tenants (SECURITY DEFINER). */
     List<TenantRow> getDocumentsWithoutAmounts();
 
-    /** Up to 200 receptions without amounts, across tenants (SECURITY DEFINER). */
-    List<TenantRow> getReceptionsWithoutAmounts();
 
-    /** Marks a document's (or reception's) amounts as unreadable, if not recorded yet. */
-    void markAmountsUnreadable(UUID id, boolean reception);
 
     /** The storage key of the document's signed XML. */
     Optional<String> getSignedXmlStorageKey(UUID documentId);
 
-    /** The storage key of a reception's XML. */
-    Optional<String> getReceptionXmlRef(UUID receptionId);
 
     /** Records a document's amounts (and default payment terms of a factura), if not recorded yet. */
     void setDocumentAmounts(UUID documentId, String amountsJson, String paymentTerms);
 
-    /** Records a reception's amounts, if not recorded yet. */
-    void setReceptionAmounts(UUID receptionId, String amountsJson);
+    /** Marks a document's amounts as unreadable, if not recorded yet. */
+    void markAmountsUnreadable(UUID documentId);
 }

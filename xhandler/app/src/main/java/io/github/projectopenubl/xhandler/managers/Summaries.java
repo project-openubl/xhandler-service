@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
@@ -40,6 +41,8 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class Summaries {
 
+    private final JobQueueProvider jobQueueProvider;
+
     private final DocumentProvider documentProvider;
 
     private final DocumentFileProvider documentFileProvider;
@@ -60,7 +63,8 @@ public class Summaries {
     private final ObjectMapper json;
 
     public Summaries(Numbering numbering, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
-            Routes routes, ObjectMapper json, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+            Routes routes, ObjectMapper json, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+        this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
         this.documentEventProvider = documentEventProvider;
@@ -213,7 +217,7 @@ public class Summaries {
         documentFileProvider.addDocumentFile(doc, "xml_signed", xml);
         documentFileProvider.addDocumentFile(doc, "input", input);
         documentEventProvider.addDocumentEvent(doc, null, "emitted", scope.actor().auditName(), correlationId);
-        documentProvider.notifyReconcile();
+        jobQueueProvider.notifyReconcile();
         return doc;
     }
 

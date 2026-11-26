@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
@@ -33,6 +34,8 @@ import org.jboss.logging.Logger;
 @ApplicationScoped
 public class BoletaSummaryFallback implements JobHandler {
 
+    private final JobQueueProvider jobQueueProvider;
+
     private final DocumentProvider documentProvider;
 
     private final DocumentEventProvider documentEventProvider;
@@ -44,7 +47,8 @@ public class BoletaSummaryFallback implements JobHandler {
     private final TenantAccess access;
     private final Summaries summaries;
 
-    public BoletaSummaryFallback(TenantAccess access, Summaries summaries, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+    public BoletaSummaryFallback(TenantAccess access, Summaries summaries, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+        this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentEventProvider = documentEventProvider;
         this.companyProvider = companyProvider;
@@ -119,7 +123,7 @@ public class BoletaSummaryFallback implements JobHandler {
     }
 
     private boolean attemptActive(UUID documentId) {
-        return documentProvider.hasActiveJob(documentId);
+        return jobQueueProvider.hasActiveJob(documentId);
     }
 
     /** A chunk whose RC couldn't be built: set its lines aside for a person instead of retrying every hour. */

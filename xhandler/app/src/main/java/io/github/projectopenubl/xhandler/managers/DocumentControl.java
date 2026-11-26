@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.managers;
 
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
@@ -29,6 +30,8 @@ import java.util.UUID;
 @ApplicationScoped
 public class DocumentControl {
 
+    private final JobQueueProvider jobQueueProvider;
+
     private final DocumentProvider documentProvider;
 
     private final DocumentEventProvider documentEventProvider;
@@ -41,7 +44,8 @@ public class DocumentControl {
     private final Event<DocumentStatusChanged> statusChanged;
 
     public DocumentControl(Auditor auditor, Event<DocumentStatusChanged> statusChanged,
-            io.github.projectopenubl.xhandler.jobs.JobStore jobs, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+            io.github.projectopenubl.xhandler.jobs.JobStore jobs, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+        this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentEventProvider = documentEventProvider;
         this.auditor = auditor;
@@ -164,6 +168,6 @@ public class DocumentControl {
     }
 
     private void notifyReconciler() {
-        documentProvider.notifyReconcile();
+        jobQueueProvider.notifyReconcile();
     }
 }

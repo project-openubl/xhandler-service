@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.models.ReceptionProvider;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 
 import io.github.projectopenubl.xhandler.xml.Engine;
@@ -26,6 +27,8 @@ import org.jboss.logging.Logger;
 @ApplicationScoped
 public class AmountsBackfill implements JobHandler {
 
+    private final ReceptionProvider receptionProvider;
+
     private static final Logger LOG = Logger.getLogger(AmountsBackfill.class);
     private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
 
@@ -34,7 +37,8 @@ public class AmountsBackfill implements JobHandler {
     private final Engine engine;
     private final FileStore files;
 
-    public AmountsBackfill(DocumentProvider documentProvider, TenantAccess access, Engine engine, FileStore files) {
+    public AmountsBackfill(DocumentProvider documentProvider, TenantAccess access, Engine engine, FileStore files, ReceptionProvider receptionProvider) {
+        this.receptionProvider = receptionProvider;
         this.documentProvider = documentProvider;
         this.access = access;
         this.engine = engine;
@@ -51,7 +55,7 @@ public class AmountsBackfill implements JobHandler {
         record Item(UUID tenant, UUID id, boolean reception) {}
         List<Item> items = QuarkusTransaction.requiringNew().call(() -> {
             List<DocumentProvider.TenantRow> docs = documentProvider.getDocumentsWithoutAmounts();
-            List<DocumentProvider.TenantRow> receptions = documentProvider.getReceptionsWithoutAmounts();
+            List<ReceptionProvider.ReceptionRef> receptions = receptionProvider.getReceptionsWithoutAmounts();
             return java.util.stream.Stream.concat(docs.stream().map(r -> new Item(r.tenantId(), r.id(), false)),
                     receptions.stream().map(r -> new Item(r.tenantId(), r.id(), true))).toList();
         });
@@ -73,14 +77,18 @@ public class AmountsBackfill implements JobHandler {
     private void markUnavailable(UUID tenantId, UUID id, boolean reception) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            documentProvider.markAmountsUnreadable(id, reception);
+            if (reception) {
+                receptionProvider.markReceptionAmountsUnreadable(id);
+            } else {
+                documentProvider.markAmountsUnreadable(id);
+            }
         });
     }
 
     private boolean fill(UUID tenantId, UUID id, boolean reception) {
         String key = QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            return (reception ? documentProvider.getReceptionXmlRef(id) : documentProvider.getSignedXmlStorageKey(id)).orElse(null);
+            return (reception ? receptionProvider.getReceptionXmlRef(id) : documentProvider.getSignedXmlStorageKey(id)).orElse(null);
         });
         if (key == null) {
             throw new IllegalStateException("no stored XML");
@@ -96,7 +104,7 @@ public class AmountsBackfill implements JobHandler {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
             if (reception) {
-                documentProvider.setReceptionAmounts(id, json);
+                receptionProvider.setReceptionAmounts(id, json);
             } else {
                 documentProvider.setDocumentAmounts(id, json, identity.paymentTerms() == null ? "contado" : identity.paymentTerms());
             }

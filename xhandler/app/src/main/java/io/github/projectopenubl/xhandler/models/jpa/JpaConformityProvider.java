@@ -97,7 +97,7 @@ public class JpaConformityProvider implements ConformityProvider {
     private static ConformityRow row(Object[] r) {
         return new ConformityRow((UUID) r[0], (String) r[1], r[2] == null ? null : ((Number) r[2]).longValue(), (String) r[3], (String) r[4],
                 Times.toInstant(r[5]), Times.toInstant(r[6]), Times.toInstant(r[7]), (String) r[8], Times.toInstant(r[9]), (BigDecimal) r[10],
-                (String) r[11], r[12] == null ? null : r[12] instanceof LocalDate d ? d : ((java.sql.Date) r[12]).toLocalDate(),
+                (String) r[11], r[12] == null ? null : Times.toLocalDate(r[12]),
                 (String) r[13]);
     }
 }

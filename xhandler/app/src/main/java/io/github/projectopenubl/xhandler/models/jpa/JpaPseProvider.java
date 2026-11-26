@@ -25,7 +25,7 @@ public class JpaPseProvider implements PseProvider {
         List<Object[]> rows = em.createNativeQuery("""
                         SELECT id, authorized_at, evidence_ref IS NOT NULL, registered_by, approved_at, revoked_at FROM xhandler.pse_authorization
                         WHERE company_id = :c ORDER BY created_at DESC""").setParameter("c", companyId).getResultList();
-        return rows.stream().map(r -> new AuthorizationRow((UUID) r[0], toDate(r[1]), (Boolean) r[2], (String) r[3],
+        return rows.stream().map(r -> new AuthorizationRow((UUID) r[0], Times.toLocalDate(r[1]), (Boolean) r[2], (String) r[3],
                 Times.toInstant(r[4]),
                 Times.toInstant(r[5]))).toList();
     }
@@ -66,7 +66,4 @@ public class JpaPseProvider implements PseProvider {
                 .longValue();
     }
 
-    private static LocalDate toDate(Object value) {
-        return value instanceof LocalDate d ? d : ((java.sql.Date) value).toLocalDate();
-    }
 }

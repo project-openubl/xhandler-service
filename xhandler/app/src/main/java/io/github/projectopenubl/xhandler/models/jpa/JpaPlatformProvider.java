@@ -104,10 +104,6 @@ public class JpaPlatformProvider implements PlatformProvider {
                 .toList();
     }
 
-    @Override
-    public void ensurePartitions(LocalDate day) {
-        em.createNativeQuery("SELECT xhandler.ensure_partitions(:day)").setParameter("day", day).getSingleResult();
-    }
 
     @Override
     public int requeueStuckDocuments() {
@@ -126,10 +122,6 @@ public class JpaPlatformProvider implements PlatformProvider {
         return Optional.of(new JobSummary((String) r[0], (String) r[1], (String) r[2], (String) r[3]));
     }
 
-    @Override
-    public void notifyReconcile() {
-        em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
-    }
 
     private static EndpointRow endpoint(Object[] r) {
         return new EndpointRow((String) r[0], (String) r[1], Times.toInstant(r[2]), ((Number) r[3]).intValue(), (Boolean) r[4]);

@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.PublicLookupProvider;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +37,8 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/lookup/{tipo}/{numero}")
 public class IdentityLookup {
 
+    private final PublicLookupProvider publicLookupProvider;
+
     private final CompanyManager companyManager;
 
     /** A normalized answer. */
@@ -56,7 +59,8 @@ public class IdentityLookup {
     public IdentityLookup(TenantAccess access, CredentialService credentials, CatalogResource catalogs, Egress egress, ObjectMapper json,
             @ConfigProperty(name = "xhandler.lookup.searchpe-url") Optional<String> searchpeUrl,
             io.github.projectopenubl.xhandler.managers.Auditor auditor, io.github.projectopenubl.xhandler.models.CatalogProvider catalogProvider,
-            @ConfigProperty(name = "xhandler.lookup.max-per-tenant-per-hour", defaultValue = "300") int maxPerHour, CompanyManager companyManager) {
+            @ConfigProperty(name = "xhandler.lookup.max-per-tenant-per-hour", defaultValue = "300") int maxPerHour, CompanyManager companyManager, PublicLookupProvider publicLookupProvider) {
+        this.publicLookupProvider = publicLookupProvider;
         this.companyManager = companyManager;
         this.auditor = auditor;
         this.catalogProvider = catalogProvider;
@@ -94,7 +98,7 @@ public class IdentityLookup {
             CompanyModel company = companyManager.getCompany(companyId);
             // Personal data: every lookup is audited, and limited per tenant (no free DNI → name oracle)
             auditor.record(scope, "lookup.identity", "company", companyId, Map.of("tipo", tipo, "numero", numero));
-            int hits = catalogProvider.countLookupHit("lookup:" + tenantId);
+            int hits = publicLookupProvider.countLookup("lookup:" + tenantId);
             if (hits > maxPerHour) {
                 throw new ApiException(429, "too_many_requests", "Demasiadas consultas de RUC/DNI. Intente en una hora.");
             }

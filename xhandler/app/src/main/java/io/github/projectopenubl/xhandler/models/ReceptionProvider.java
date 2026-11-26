@@ -50,4 +50,18 @@ public interface ReceptionProvider {
 
     /** Records a validity check; a null state keeps the current one. */
     void stampValidity(UUID id, String state);
+
+    record ReceptionRef(UUID tenantId, UUID id) {}
+
+    /** Up to 200 receptions without amounts, across tenants (SECURITY DEFINER). */
+    List<ReceptionRef> getReceptionsWithoutAmounts();
+
+    /** The storage key of a reception's XML. */
+    Optional<String> getReceptionXmlRef(UUID receptionId);
+
+    /** Records a reception's amounts, if not recorded yet. */
+    void setReceptionAmounts(UUID receptionId, String amountsJson);
+
+    /** Marks a reception's amounts as unreadable, if not recorded yet. */
+    void markReceptionAmountsUnreadable(UUID receptionId);
 }

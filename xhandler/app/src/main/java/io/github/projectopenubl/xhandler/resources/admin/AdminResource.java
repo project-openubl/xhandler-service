@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.resources.admin;
 
+import io.github.projectopenubl.xhandler.models.MaintenanceProvider;
+import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.EmailProvider;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
@@ -38,6 +40,10 @@ import java.util.UUID;
 @Path("/api/admin/v1")
 public class AdminResource {
 
+    private final MaintenanceProvider maintenanceProvider;
+
+    private final JobQueueProvider jobQueueProvider;
+
     private final EmailProvider emailProvider;
 
     private final TenantProvider tenantProvider;
@@ -71,7 +77,9 @@ public class AdminResource {
     private final io.github.projectopenubl.xhandler.managers.Entitlements entitlements;
 
     public AdminResource(PlatformAdmin admin, TenantAccess access, DocumentControl control, JobStore jobs, KeyRotation rotation,
-            Auditor auditor, PlatformProvider platform, io.github.projectopenubl.xhandler.managers.Entitlements entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider, EmailProvider emailProvider) {
+            Auditor auditor, PlatformProvider platform, io.github.projectopenubl.xhandler.managers.Entitlements entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider, EmailProvider emailProvider, JobQueueProvider jobQueueProvider, MaintenanceProvider maintenanceProvider) {
+        this.maintenanceProvider = maintenanceProvider;
+        this.jobQueueProvider = jobQueueProvider;
         this.emailProvider = emailProvider;
         this.tenantProvider = tenantProvider;
         this.companyProvider = companyProvider;
@@ -361,7 +369,7 @@ public class AdminResource {
     public Map<String, Object> repairPartitions() {
         admin.require();
         LocalDate today = io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima();
-        platform.ensurePartitions(today);
+        maintenanceProvider.ensurePartitions(today);
         return Map.of("day", today.toString());
     }
 
@@ -442,7 +450,7 @@ public class AdminResource {
     }
 
     private void notifyReconcile() {
-        platform.notifyReconcile();
+        jobQueueProvider.notifyReconcile();
     }
 
     private static Endpoint endpoint(PlatformProvider.EndpointRow r) {

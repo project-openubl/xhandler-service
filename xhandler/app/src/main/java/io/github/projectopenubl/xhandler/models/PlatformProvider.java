@@ -49,13 +49,10 @@ public interface PlatformProvider {
 
     List<MigrationRow> getMigrations();
 
-    void ensurePartitions(LocalDate day);
 
     /** Makes due again the stuck non-definitive documents; returns how many. */
     int requeueStuckDocuments();
 
     Optional<JobSummary> getJobSummary(UUID id);
 
-    /** Wakes up the reconciler ({@code pg_notify('xhandler_reconcile')}). */
-    void notifyReconcile();
 }

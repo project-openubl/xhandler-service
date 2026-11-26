@@ -59,4 +59,7 @@ public interface JobQueueProvider {
     void notifyWakeup();
 
     void notifyReconcile();
+
+    /** Whether a job holding the document's resource is waiting, running or canceling. */
+    boolean hasActiveJob(UUID documentId);
 }
