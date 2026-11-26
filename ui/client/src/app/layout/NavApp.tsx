@@ -78,6 +78,10 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
       label: "Recepciones",
     },
     {
+      to: "/organizaciones/$tenantId/empresas/$companyId/catalogos",
+      label: "Catálogos",
+    },
+    {
       to: "/organizaciones/$tenantId/empresas/$companyId/reportes",
       label: "Reportes",
     },
