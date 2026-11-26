@@ -5,7 +5,8 @@ electronic documents, built, tested and deployed together. This is the only agen
 
 **Behavior is defined in [docs/DESIGN.md](docs/DESIGN.md)** (UI: the ADRs in
 [docs/adr/](docs/adr/)). Read the relevant section before changing behavior; a behavior
-change updates DESIGN.md or an ADR in the same commit.
+change updates DESIGN.md or an ADR in the same commit. How to run the stack locally:
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Layout
 

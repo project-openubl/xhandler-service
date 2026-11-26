@@ -26,7 +26,8 @@ hack/ui-e2e-stack.sh build && hack/ui-e2e-stack.sh up            # todos los ser
 (cd ui && cp .env.example .env && npm ci && npm run start:dev)   # http://localhost:3000
 ```
 
-Usuarios de prueba: `alice/alice`, `bob/bob`; administradora `olga/olga`.
+Usuarios de prueba: `alice/alice`, `bob/bob`; administradora `olga/olga`. Para levantar cada
+servicio por separado, ver [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Desplegar
 
@@ -35,7 +36,8 @@ Instala el operador desde OperatorHub y crea un `Searchpe` y un `XHandler`
 
 ## Contribuir
 
-Comandos y convenciones: [AGENTS.md](./AGENTS.md). Los releases se hacen solo con
+Cómo levantar el entorno: [CONTRIBUTING.md](./CONTRIBUTING.md). Comandos y convenciones:
+[AGENTS.md](./AGENTS.md). Los releases se hacen solo con
 [release-tools](https://github.com/project-openubl/release-tools#releasing-xhandler-service).
 
 [Documentación](https://project-openubl.github.io) ·
