@@ -121,9 +121,10 @@ export const ensureFixtures = async (page: Page): Promise<IE2eFixtures> => {
   const tenantId = tenants[0].id;
 
   // The company
-  const companies = await get<{ id: string; ruc: string }[]>(
-    `/tenants/${tenantId}/companies`,
-  );
+  // Paged (PageCompanyView): the first page is enough to reuse one
+  const { items: companies } = await get<{
+    items: { id: string; ruc: string }[];
+  }>(`/tenants/${tenantId}/companies`);
   const company =
     companies[0] ??
     (await (async () => {
