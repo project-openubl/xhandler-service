@@ -1024,7 +1024,7 @@ xhandler-ui (`ui/` at the root of this monorepo, separate container) is the only
   - an Express production server; OIDC login.
 - **Repo layout**: npm workspaces `common/`, `client/`, `server/` and `e2e/`, with the same `client/src/app/` structure (`pages/`, `queries/`, `components/`, `hooks/`, generated `client/`, `axios-config/`).
 - **Guidance**:
-  - `AGENTS.md`;
+  - the root `AGENTS.md` (the only agent guide of the monorepo);
   - `docs/adr/` (what the UI does, each ADR with `## Rules`; design changes need a new or superseding ADR);
   - `.rulesync/` rules and skills generated into `.claude/` and `.cursor/`;
   - `docs/internals/`.
@@ -1390,7 +1390,7 @@ A daily job imports the SBS/SUNAT exchange rate (purchase and sale) from SUNAT's
 
 ### 26.9 Repo conventions
 
-- The monorepo (searchpe, xhandler, operator, ui; one top-level directory per service) and each directory get `AGENTS.md`/`CLAUDE.md` mirroring xhandler-rust's conventions:
+- The monorepo (searchpe, xhandler, operator, ui; one top-level directory per service) has one `AGENTS.md` at its root, mirroring xhandler-rust's conventions:
   - SUNAT and domain concepts in Spanish (`Detalle`, `tipoComprobante`), infrastructure in English (`Job`, `Worker`, `…Service`, `…Repository`, `…Error`);
   - acronyms as words (`Igv`, `Sunat`, `Ruc`);
   - Java naming per Google Java Style.

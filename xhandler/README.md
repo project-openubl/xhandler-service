@@ -7,7 +7,7 @@ an OSE. Built with Quarkus on top of
 
 - Design: [docs/DESIGN.md](docs/DESIGN.md)
 - Regulatory research: [docs/research/](docs/research/README.md)
-- Contributor and agent guide: [AGENTS.md](AGENTS.md)
+- Contributor and agent guide: [AGENTS.md](../AGENTS.md)
 
 ## Run it locally
 

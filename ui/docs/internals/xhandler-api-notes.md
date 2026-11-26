@@ -1,7 +1,7 @@
 # xhandler-service API notes
 
 Behaviour of the xhandler API that shaped the code. The contract is xhandler `docs/DESIGN.md`
-§12; the conventions are in its `AGENTS.md`.
+§12; the conventions are in the root `AGENTS.md`.
 
 - **Base path** `/api/v1`; the UI calls it as `/api/xhandler/v1`.
 - **JSON is snake_case** everywhere, including bodies the UI sends. The spec documents the
