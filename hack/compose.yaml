@@ -28,7 +28,7 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
     volumes:
-      - ../xhandler/deploy/keycloak/xhandler-realm-dev.json:/opt/keycloak/data/import/xhandler-realm.json:Z
+      - ./keycloak/xhandler-realm-dev.json:/opt/keycloak/data/import/xhandler-realm.json:Z
     ports:
       - "8180:8080"
 

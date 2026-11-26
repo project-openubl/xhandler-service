@@ -326,7 +326,7 @@ jobs:
         timeout-minutes: 10
         run: |
           kubectl -n openubl create configmap xhandler-db-init --from-file=init.sql=hack/postgres/xhandler.sql
-          kubectl -n openubl create configmap xhandler-realm --from-file=xhandler-realm-dev.json=xhandler/deploy/keycloak/xhandler-realm-dev.json
+          kubectl -n openubl create configmap xhandler-realm --from-file=xhandler-realm-dev.json=hack/keycloak/xhandler-realm-dev.json
           kubectl -n openubl apply -f hack/minikube/xhandler-deps.yaml
           kubectl -n openubl rollout status deployment/xhandler-db deployment/keycloak deployment/s3 --timeout=6m
           kubectl -n openubl apply -f hack/minikube/xhandler.yaml

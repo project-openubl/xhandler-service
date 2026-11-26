@@ -20,9 +20,14 @@ searchpe/   RUC lookup over SUNAT's padrón reducido (Quarkus)
 ui/         the one UI of both services (React 19, PatternFly 6, pulp-ui-2 blueprint)
 operator/   Kubernetes operator (Go, OLM): XHandler and Searchpe kinds
 docs/       DESIGN.md, adr/ (repo-wide decisions), research, runbooks, quickstarts, ui/
-hack/       dev and CI tooling: compose.yaml (PostgreSQL, Keycloak :8180, Grafana :3001),
-            postgres/ (database roles), ui-e2e-stack.sh (every service, for the UI's
-            Playwright suite), xhandler-e2e.sh (SUNAT beta), load/ (k6), minikube/ (CI e2e)
+hack/       dev and CI tooling only
+  compose.yaml       PostgreSQL, Keycloak :8180, Grafana :3001, SUNAT fake
+  postgres/          database roles of each service
+  keycloak/          the shared dev realm (never for a real environment)
+  ui-e2e-stack.sh    every service, for the UI's Playwright suite
+  xhandler-e2e.sh    full flow against SUNAT beta
+  load/              k6 load tests
+  minikube/          manifests of the CI minikube e2e
 ```
 
 ## Commands

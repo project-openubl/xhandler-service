@@ -278,7 +278,7 @@ Adapter documents keep the client's own numbering: the series is created if need
 - **Protected deletion.** A tenant or company that has documents cannot be deleted (legal retention); it can only be deactivated.
 - **Identity.**
   - Keycloak realm(s) with roles per partner and tenant (admin, operator, viewer, billing) and optional per-company scoping.
-  - Machine clients use OAuth2 client credentials. A token counts as a machine client only when `client_id` = `azp` and the username is `service-account-<azp>`; the API only accepts tokens whose audience includes `xhandler-service` (deploy/keycloak/README.md).
+  - Machine clients use OAuth2 client credentials. A token counts as a machine client only when `client_id` = `azp` and the username is `service-account-<azp>`; the API only accepts tokens whose audience includes `xhandler-service` (hack/keycloak/README.md).
   - 2FA for users; stronger authentication for platform operators.
   - Self-service signup creates the tenant on first login, with the free tier and SUNAT beta.
 - **Keys.**
