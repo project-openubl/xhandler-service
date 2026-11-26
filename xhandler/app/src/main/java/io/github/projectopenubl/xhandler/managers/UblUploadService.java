@@ -27,7 +27,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -66,12 +65,11 @@ public class UblUploadService {
     private final Routes routes;
     private final AccessLinks links;
     private final Auditor auditor;
-    private final EntityManager em;
     private final ObjectMapper json;
     private final io.github.projectopenubl.xhandler.managers.EmitService emit;
 
     public UblUploadService(TenantAccess access, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
-            Numbering numbering, Routes routes, AccessLinks links, Auditor auditor, EntityManager em, ObjectMapper json,
+            Numbering numbering, Routes routes, AccessLinks links, Auditor auditor, ObjectMapper json,
             io.github.projectopenubl.xhandler.managers.EmitService emit, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
@@ -87,7 +85,6 @@ public class UblUploadService {
         this.routes = routes;
         this.links = links;
         this.auditor = auditor;
-        this.em = em;
         this.json = json;
     }
 
@@ -189,7 +186,7 @@ public class UblUploadService {
                     scope.actor().auditName(), correlationId);
             auditor.record(scope, "document.uploaded", "document", doc.getId(), Map.of("serie_numero", doc.serieNumero()));
             String token = links.create(doc);
-            em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
+            documentProvider.notifyReconcile();
             return DocumentView.of(doc, links.url(token), null);
         }));
     }

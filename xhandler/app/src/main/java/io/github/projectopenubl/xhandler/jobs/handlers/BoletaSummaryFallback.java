@@ -15,7 +15,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -42,15 +41,13 @@ public class BoletaSummaryFallback implements JobHandler {
 
     private static final Logger LOG = Logger.getLogger(BoletaSummaryFallback.class);
 
-    private final EntityManager em;
     private final TenantAccess access;
     private final Summaries summaries;
 
-    public BoletaSummaryFallback(EntityManager em, TenantAccess access, Summaries summaries, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+    public BoletaSummaryFallback(TenantAccess access, Summaries summaries, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentEventProvider = documentEventProvider;
         this.companyProvider = companyProvider;
-        this.em = em;
         this.access = access;
         this.summaries = summaries;
     }
@@ -65,12 +62,8 @@ public class BoletaSummaryFallback implements JobHandler {
         record Group(UUID tenantId, UUID companyId, String sunatEnv, LocalDate fecha) {}
         LocalDate today = Deadlines.todayInLima();
         List<Group> groups = QuarkusTransaction.requiringNew().call(() -> {
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = em.createNativeQuery(
-                            "SELECT tenant_id, company_id, sunat_env, fecha_emision FROM xhandler.boletas_needing_summary(:today)")
-                    .setParameter("today", today)
-                    .getResultList();
-            return rows.stream().map(r -> new Group((UUID) r[0], (UUID) r[1], (String) r[2], toDate(r[3]))).toList();
+            return documentProvider.getBoletasNeedingSummary(today).stream()
+                    .map(r -> new Group(r.tenantId(), r.companyId(), r.sunatEnv(), r.fecha())).toList();
         });
         int summariesCreated = 0;
         List<String> failures = new ArrayList<>();
@@ -126,11 +119,7 @@ public class BoletaSummaryFallback implements JobHandler {
     }
 
     private boolean attemptActive(UUID documentId) {
-        return !em.createNativeQuery("""
-                        SELECT 1 FROM xhandler.job WHERE state IN ('waiting', 'running', 'canceling')
-                        AND reserved_resources @> ARRAY[CAST(:resource AS text)]""")
-                .setParameter("resource", "document:" + documentId)
-                .getResultList().isEmpty();
+        return documentProvider.hasActiveJob(documentId);
     }
 
     /** A chunk whose RC couldn't be built: set its lines aside for a person instead of retrying every hour. */
@@ -151,12 +140,5 @@ public class BoletaSummaryFallback implements JobHandler {
         } catch (RuntimeException e) {
             LOG.errorf(e, "could not set aside boletas of company %s, day %s", companyId, fecha);
         }
-    }
-
-    static LocalDate toDate(Object value) {
-        if (value instanceof LocalDate date) {
-            return date;
-        }
-        return ((java.sql.Date) value).toLocalDate();
     }
 }

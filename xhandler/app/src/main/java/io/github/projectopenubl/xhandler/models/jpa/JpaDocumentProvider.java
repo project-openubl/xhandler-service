@@ -217,6 +217,134 @@ public class JpaDocumentProvider implements DocumentProvider {
         return wrap(repository.find(query.toString(), params).range(offset, offset + limit - 1).list());
     }
 
+    @Override
+    public void notifyReconcile() {
+        repository.getEntityManager().createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
+    }
+
+    @Override
+    public int markVoiding(UUID documentId, UUID voidingId, String motivo, java.time.Instant reversalCommunicatedAt) {
+        return repository.getEntityManager().createNativeQuery("""
+                        UPDATE xhandler.document SET status_before_voiding = status, status = 'voiding', voided_by_document_id = :voiding,
+                            void_reason = :motivo, reversal_communicated_at = :reversal, updated_at = now()
+                        WHERE id = :id AND status IN ('accepted', 'accepted_with_observations') AND delivered_at IS NULL
+                          AND voided_by_document_id IS NULL""")
+                .setParameter("voiding", voidingId)
+                .setParameter("motivo", motivo)
+                .setParameter("reversal", reversalCommunicatedAt)
+                .setParameter("id", documentId)
+                .executeUpdate();
+    }
+
+    @Override
+    public void addPortalDelivery(UUID id, UUID tenantId, UUID documentId) {
+        repository.getEntityManager().createNativeQuery("""
+                        INSERT INTO xhandler.delivery (id, tenant_id, document_id, channel, result) VALUES (:id, :tenant, :document, 'portal', 'downloaded')""")
+                .setParameter("id", id)
+                .setParameter("tenant", tenantId)
+                .setParameter("document", documentId)
+                .executeUpdate();
+    }
+
+    @Override
+    public void addSunatCall(String endpoint, boolean healthy, java.time.Instant startedAt) {
+        repository.getEntityManager()
+                .createNativeQuery("INSERT INTO xhandler.sunat_call (endpoint, healthy, started_at) VALUES (:endpoint, :healthy, :started)")
+                .setParameter("endpoint", endpoint)
+                .setParameter("healthy", healthy)
+                .setParameter("started", startedAt)
+                .executeUpdate();
+    }
+
+    @Override
+    public List<SummaryGroup> getBoletasNeedingSummary(LocalDate today) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = repository.getEntityManager().createNativeQuery(
+                        "SELECT tenant_id, company_id, sunat_env, fecha_emision FROM xhandler.boletas_needing_summary(:today)")
+                .setParameter("today", today)
+                .getResultList();
+        return rows.stream().map(r -> new SummaryGroup((UUID) r[0], (UUID) r[1], (String) r[2], toDate(r[3]))).toList();
+    }
+
+    @Override
+    public boolean hasActiveJob(UUID documentId) {
+        return !repository.getEntityManager().createNativeQuery("""
+                        SELECT 1 FROM xhandler.job WHERE state IN ('waiting', 'running', 'canceling')
+                        AND reserved_resources @> ARRAY[CAST(:resource AS text)]""")
+                .setParameter("resource", "document:" + documentId)
+                .getResultList().isEmpty();
+    }
+
+    @Override
+    public List<TenantRow> getDocumentsAtRisk(java.time.Duration horizon) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = repository.getEntityManager().createNativeQuery(
+                        "SELECT tenant_id, document_id FROM xhandler.documents_at_risk(make_interval(secs => :secs))")
+                .setParameter("secs", (double) horizon.toSeconds())
+                .getResultList();
+        return rows.stream().map(r -> new TenantRow((UUID) r[0], (UUID) r[1])).toList();
+    }
+
+    @Override
+    public List<TenantRow> getDocumentsWithoutAmounts() {
+        @SuppressWarnings("unchecked")
+        List<Object[]> docs = repository.getEntityManager()
+                .createNativeQuery("SELECT tenant_id, document_id FROM xhandler.documents_without_amounts(200)").getResultList();
+        return docs.stream().map(r -> new TenantRow((UUID) r[0], (UUID) r[1])).toList();
+    }
+
+    @Override
+    public List<TenantRow> getReceptionsWithoutAmounts() {
+        @SuppressWarnings("unchecked")
+        List<Object[]> receptions = repository.getEntityManager()
+                .createNativeQuery("SELECT tenant_id, reception_id FROM xhandler.receptions_without_amounts(200)")
+                .getResultList();
+        return receptions.stream().map(r -> new TenantRow((UUID) r[0], (UUID) r[1])).toList();
+    }
+
+    @Override
+    public void markAmountsUnreadable(UUID id, boolean reception) {
+        repository.getEntityManager().createNativeQuery("UPDATE xhandler." + (reception ? "reception" : "document")
+                        + " SET amounts = cast('{\"_error\": \"unreadable\"}' AS jsonb) WHERE id = :id AND amounts IS NULL")
+                .setParameter("id", id).executeUpdate();
+    }
+
+    @Override
+    public Optional<String> getSignedXmlStorageKey(UUID documentId) {
+        List<?> ref = repository.getEntityManager()
+                .createNativeQuery("SELECT storage_key FROM xhandler.document_file WHERE document_id = :id AND kind = 'xml_signed'")
+                .setParameter("id", documentId).getResultList();
+        return ref.isEmpty() ? Optional.empty() : Optional.ofNullable((String) ref.get(0));
+    }
+
+    @Override
+    public Optional<String> getReceptionXmlRef(UUID receptionId) {
+        List<?> ref = repository.getEntityManager().createNativeQuery("SELECT xml_ref FROM xhandler.reception WHERE id = :id")
+                .setParameter("id", receptionId).getResultList();
+        return ref.isEmpty() ? Optional.empty() : Optional.ofNullable((String) ref.get(0));
+    }
+
+    @Override
+    public void setDocumentAmounts(UUID documentId, String amountsJson, String paymentTerms) {
+        repository.getEntityManager().createNativeQuery("""
+                        UPDATE xhandler.document SET amounts = cast(:a AS jsonb),
+                            payment_terms = CASE WHEN tipo_comprobante = '01' AND payment_terms IS NULL THEN :terms ELSE payment_terms END
+                        WHERE id = :id AND amounts IS NULL""")
+                .setParameter("a", amountsJson).setParameter("terms", paymentTerms)
+                .setParameter("id", documentId).executeUpdate();
+    }
+
+    @Override
+    public void setReceptionAmounts(UUID receptionId, String amountsJson) {
+        repository.getEntityManager()
+                .createNativeQuery("UPDATE xhandler.reception SET amounts = cast(:a AS jsonb) WHERE id = :id AND amounts IS NULL")
+                .setParameter("a", amountsJson).setParameter("id", receptionId).executeUpdate();
+    }
+
+    private static LocalDate toDate(Object value) {
+        return value instanceof LocalDate d ? d : ((java.sql.Date) value).toLocalDate();
+    }
+
     private static List<DocumentModel> wrap(List<DocumentEntity> entities) {
         return entities.stream().map(e -> (DocumentModel) new DocumentAdapter(e)).toList();
     }

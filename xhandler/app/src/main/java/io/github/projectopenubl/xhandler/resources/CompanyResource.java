@@ -14,7 +14,6 @@ import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.managers.Idempotency;
 import io.github.projectopenubl.xhandler.managers.Numbering;
-import jakarta.persistence.EntityManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -83,7 +82,6 @@ public class CompanyResource {
     private final TenantAccess access;
     private final Auditor auditor;
     private final Idempotency idempotency;
-    private final EntityManager em;
     /**
      * Unverified companies a tenant may have (DESIGN.md §26.8): RUCs are claimed only when verified,
      * and this keeps a free signup from registering RUCs in bulk.
@@ -94,7 +92,6 @@ public class CompanyResource {
             TenantAccess access,
             Auditor auditor,
             Idempotency idempotency,
-            EntityManager em,
             @org.eclipse.microprofile.config.inject.ConfigProperty(name = "xhandler.limits.max-unverified-companies", defaultValue = "3")
                     long maxUnverifiedCompanies, CompanyProvider companyProvider, SeriesProvider seriesProvider, CompanyManager companyManager) {
         this.companyManager = companyManager;
@@ -103,7 +100,6 @@ public class CompanyResource {
         this.access = access;
         this.auditor = auditor;
         this.idempotency = idempotency;
-        this.em = em;
         this.maxUnverifiedCompanies = maxUnverifiedCompanies;
     }
 
@@ -232,10 +228,7 @@ public class CompanyResource {
         Map<String, Object> changes = new java.util.LinkedHashMap<>();
         if (request.nextNumber() != null) {
             // Forward only, against the counter as it is when the row lock is ours
-            int moved = em.createNativeQuery("""
-                            UPDATE xhandler.series SET next_number = :next, updated_at = now()
-                            WHERE id = :id AND next_number <= :next""")
-                    .setParameter("next", request.nextNumber()).setParameter("id", seriesId).executeUpdate();
+            int moved = seriesProvider.moveNextNumber(seriesId, request.nextNumber());
             if (moved == 0) {
                 throw ApiException.conflict("series_number_used",
                         "La serie ya usó números hasta " + (current(seriesId).getNextNumber() - 1) + "; el siguiente número no puede retroceder.");
@@ -243,8 +236,7 @@ public class CompanyResource {
             changes.put("next_number", request.nextNumber());
         }
         if (request.active() != null) {
-            em.createNativeQuery("UPDATE xhandler.series SET active = :active, updated_at = now() WHERE id = :id")
-                    .setParameter("active", request.active()).setParameter("id", seriesId).executeUpdate();
+            seriesProvider.setActive(seriesId, request.active());
             changes.put("active", request.active());
         }
         if (!changes.isEmpty()) {

@@ -25,7 +25,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -104,7 +103,6 @@ public class AttemptHandler implements JobHandler {
     private final Routes routes;
     private final Engine engine;
     private final FileStore files;
-    private final EntityManager em;
     private final Event<DocumentStatusChanged> statusChanged;
     private final MeterRegistry metrics;
     private final Duration resolveSafety;
@@ -115,7 +113,6 @@ public class AttemptHandler implements JobHandler {
             Routes routes,
             Engine engine,
             FileStore files,
-            EntityManager em,
             Event<DocumentStatusChanged> statusChanged,
             MeterRegistry metrics,
             // SUNAT read timeout (120 s) + margin; nests inside the app → engine timeout (§10.8)
@@ -129,7 +126,6 @@ public class AttemptHandler implements JobHandler {
         this.routes = routes;
         this.engine = engine;
         this.files = files;
-        this.em = em;
         this.statusChanged = statusChanged;
         this.metrics = metrics;
         this.resolveSafety = resolveSafety;
@@ -455,11 +451,7 @@ public class AttemptHandler implements JobHandler {
             return false;
         }
         if (outcome.kind() != Outcome.Kind.LOCAL_ERROR && outcome.kind() != Outcome.Kind.ENGINE_UNAVAILABLE) {
-            em.createNativeQuery("INSERT INTO xhandler.sunat_call (endpoint, healthy, started_at) VALUES (:endpoint, :healthy, :started)")
-                    .setParameter("endpoint", plan.endpoint())
-                    .setParameter("healthy", outcome.healthy())
-                    .setParameter("started", callStartedAt)
-                    .executeUpdate();
+            documentProvider.addSunatCall(plan.endpoint(), outcome.healthy(), callStartedAt);
         }
         Instant now = Instant.now();
         if (cdr != null && documentFileProvider.getDocumentFile(doc.getId(), "cdr_zip").isEmpty()) {

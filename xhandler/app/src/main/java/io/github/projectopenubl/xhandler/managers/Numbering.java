@@ -4,10 +4,11 @@ import io.github.projectopenubl.xhandler.models.SeriesProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.SeriesModel;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.NumberingProvider;
 import jakarta.transaction.Transactional;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -27,29 +28,18 @@ public class Numbering {
     /** The largest number of a series (8 digits, SUNAT). */
     public static final long MAX_NUMBER = 99_999_999;
 
-    private final EntityManager em;
+    private final NumberingProvider numberingProvider;
 
-    public Numbering(EntityManager em, SeriesProvider seriesProvider) {
+    public Numbering(NumberingProvider numberingProvider, SeriesProvider seriesProvider) {
         this.seriesProvider = seriesProvider;
-        this.em = em;
+        this.numberingProvider = numberingProvider;
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
     public long reserve(UUID companyId, String sunatEnv, String tipoComprobante, String serie) {
-        List<?> next = em.createNativeQuery("""
-                        UPDATE xhandler.series SET next_number = next_number + 1, updated_at = now()
-                        WHERE company_id = :company AND sunat_env = :env AND tipo_comprobante = :tipo AND serie = :serie AND active
-                        RETURNING next_number - 1""")
-                .setParameter("company", companyId)
-                .setParameter("env", sunatEnv)
-                .setParameter("tipo", tipoComprobante)
-                .setParameter("serie", serie)
-                .getResultList();
-        if (next.isEmpty()) {
-            throw ApiException.invalid("series_not_found", "La serie " + serie + " no existe o no está activa para este tipo de comprobante.",
-                    null);
-        }
-        return ((Number) next.get(0)).longValue();
+        return numberingProvider.nextSeriesNumber(companyId, sunatEnv, tipoComprobante, serie)
+                .orElseThrow(() -> ApiException.invalid("series_not_found",
+                        "La serie " + serie + " no existe o no está activa para este tipo de comprobante.", null));
     }
 
     /**
@@ -75,49 +65,28 @@ public class Numbering {
         if (family != null && !serie.startsWith(family) && !Character.isDigit(serie.charAt(0))) {
             throw ApiException.invalid("invalid_document", "La serie " + serie + " no corresponde al tipo de comprobante " + tipoComprobante + ".", null);
         }
-        @SuppressWarnings("unchecked")
-        List<Object[]> existing = em.createNativeQuery("""
-                        SELECT next_number, active FROM xhandler.series
-                        WHERE company_id = :c AND sunat_env = :env AND tipo_comprobante = :tipo AND serie = :serie FOR UPDATE""")
-                .setParameter("c", companyId).setParameter("env", sunatEnv).setParameter("tipo", tipoComprobante).setParameter("serie", serie)
-                .getResultList();
-        if (!existing.isEmpty()) {
-            if (!Boolean.TRUE.equals(existing.get(0)[1])) {
+        Optional<NumberingProvider.SeriesCounter> existing =
+                numberingProvider.getSeriesCounterForUpdate(companyId, sunatEnv, tipoComprobante, serie);
+        if (existing.isPresent()) {
+            if (!existing.get().active()) {
                 throw ApiException.invalid("series_not_found", "La serie " + serie + " está desactivada.", null);
             }
-            long next = ((Number) existing.get(0)[0]).longValue();
+            long next = existing.get().nextNumber();
             if (numero > next + MAX_JUMP) {
                 // One typo would otherwise move the counter for good (up to 99999999)
                 throw ApiException.invalid("invalid_document", "El número " + numero + " salta más de " + MAX_JUMP
                         + " números desde el siguiente de la serie (" + next + ").", null);
             }
         }
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.series (id, tenant_id, company_id, sunat_env, tipo_comprobante, serie, next_number)
-                        VALUES (:id, :t, :c, :env, :tipo, :serie, :next)
-                        ON CONFLICT (company_id, sunat_env, tipo_comprobante, serie)
-                        DO UPDATE SET next_number = greatest(series.next_number, excluded.next_number), updated_at = now()""")
-                .setParameter("id", io.github.projectopenubl.xhandler.utils.Ids.newId()).setParameter("t", tenantId)
-                .setParameter("c", companyId).setParameter("env", sunatEnv).setParameter("tipo", tipoComprobante)
-                .setParameter("serie", serie).setParameter("next", numero + 1).executeUpdate();
+        numberingProvider.upsertSeriesCounter(io.github.projectopenubl.xhandler.utils.Ids.newId(), tenantId, companyId, sunatEnv,
+                tipoComprobante, serie, numero + 1);
         return numero;
     }
 
     /** RC/RA/RR numbers: {@code RC-YYYYMMDD-n}, per company, environment and Lima day (§8). */
     @Transactional(Transactional.TxType.MANDATORY)
     public int reserveDaily(UUID tenantId, UUID companyId, String sunatEnv, String kind, LocalDate day) {
-        Object next = em.createNativeQuery("""
-                        INSERT INTO xhandler.daily_counter (tenant_id, company_id, sunat_env, kind, day, next_number)
-                        VALUES (:tenant, :company, :env, :kind, :day, 2)
-                        ON CONFLICT (company_id, sunat_env, kind, day) DO UPDATE SET next_number = daily_counter.next_number + 1
-                        RETURNING next_number - 1""")
-                .setParameter("tenant", tenantId)
-                .setParameter("company", companyId)
-                .setParameter("env", sunatEnv)
-                .setParameter("kind", kind)
-                .setParameter("day", day)
-                .getSingleResult();
-        return ((Number) next).intValue();
+        return numberingProvider.nextDailyNumber(tenantId, companyId, sunatEnv, kind, day);
     }
 
     /**

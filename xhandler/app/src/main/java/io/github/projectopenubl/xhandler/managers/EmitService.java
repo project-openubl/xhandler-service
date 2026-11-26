@@ -33,7 +33,7 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.NumberingProvider;
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -92,7 +92,7 @@ public class EmitService {
     private final AccessLinks links;
     private final Idempotency idempotency;
     private final Auditor auditor;
-    private final EntityManager em;
+    private final NumberingProvider numberingProvider;
     private final ObjectMapper json;
     private final Instance<EmitQuota> quota;
     private final io.github.projectopenubl.xhandler.managers.ExchangeRates rates;
@@ -111,7 +111,7 @@ public class EmitService {
             AccessLinks links,
             Idempotency idempotency,
             Auditor auditor,
-            EntityManager em,
+            NumberingProvider numberingProvider,
             ObjectMapper json,
             Instance<EmitQuota> quota,
             io.github.projectopenubl.xhandler.managers.ExchangeRates rates,
@@ -133,7 +133,7 @@ public class EmitService {
         this.links = links;
         this.idempotency = idempotency;
         this.auditor = auditor;
-        this.em = em;
+        this.numberingProvider = numberingProvider;
         this.json = json;
         this.quota = quota;
         this.rates = rates;
@@ -248,7 +248,7 @@ public class EmitService {
 
     /** Inside an emit transaction, before locking the company: waits on the series row are bounded. */
     public void boundLockWaits() {
-        em.createNativeQuery("SELECT set_config('lock_timeout', :timeout, true)").setParameter("timeout", lockTimeout).getSingleResult();
+        numberingProvider.setLockTimeout(lockTimeout);
     }
 
     /** The company may emit this document type now: active, and authorized when it emits as PSE (§3.2). */
@@ -391,7 +391,7 @@ public class EmitService {
             draft.issued().accept(doc);
         }
         String token = links.create(doc);
-        em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
+        documentProvider.notifyReconcile();
 
         String qr = Qr.of(company.getRuc(), doc, built.enrichedJson());
         JsonNode body = json.valueToTree(DocumentView.of(doc, links.url(token), qr));
@@ -450,8 +450,7 @@ public class EmitService {
     }
 
     private boolean pseAuthorized(CompanyModel company) {
-        return !em.createNativeQuery("SELECT 1 FROM xhandler.pse_authorization WHERE company_id = :c AND revoked_at IS NULL AND approved_at IS NOT NULL")
-                .setParameter("c", company.getId()).getResultList().isEmpty();
+        return companyProvider.isPseAuthorized(company.getId());
     }
 
     /** D defaults to today in Lima; SUNAT refuses more than 2 days ahead (2329) and late documents lose their validity. */

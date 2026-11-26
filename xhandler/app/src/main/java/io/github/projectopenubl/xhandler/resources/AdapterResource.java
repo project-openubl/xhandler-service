@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
-import io.github.projectopenubl.xhandler.utils.Times;
+import io.github.projectopenubl.xhandler.models.AdapterTokenProvider;
 import io.github.projectopenubl.xhandler.managers.UblUploadService;
 import io.github.projectopenubl.xhandler.utils.SfsAdapter;
 
@@ -17,7 +17,6 @@ import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -57,17 +56,17 @@ public class AdapterResource {
     private final TenantAccess access;
     private final UblUploadService ubl;
     private final EmitService emit;
-    private final EntityManager em;
+    private final AdapterTokenProvider adapterTokens;
     private final Auditor auditor;
     private final com.fasterxml.jackson.databind.ObjectMapper json;
 
-    public AdapterResource(TenantAccess access, UblUploadService ubl, EmitService emit, EntityManager em, Auditor auditor,
+    public AdapterResource(TenantAccess access, UblUploadService ubl, EmitService emit, AdapterTokenProvider adapterTokens, Auditor auditor,
             com.fasterxml.jackson.databind.ObjectMapper json, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.access = access;
         this.ubl = ubl;
         this.emit = emit;
-        this.em = em;
+        this.adapterTokens = adapterTokens;
         this.auditor = auditor;
         this.json = json;
     }
@@ -129,11 +128,7 @@ public class AdapterResource {
         RANDOM.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
         UUID id = Ids.newId();
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.adapter_token (id, tenant_id, company_id, kind, token_hash, label, created_by)
-                        VALUES (:id, :t, :c, 'nubefact', :h, :l, :by)""")
-                .setParameter("id", id).setParameter("t", tenantId).setParameter("c", company.getId()).setParameter("h", hash(token))
-                .setParameter("l", request.label()).setParameter("by", scope.actor().auditName()).executeUpdate();
+        adapterTokens.addNubefactToken(id, tenantId, company.getId(), hash(token), request.label(), scope.actor().auditName());
         auditor.record(scope, "adapter_token.created", "company", companyId, Map.of("kind", "nubefact", "label", request.label()));
         return Response.status(201).entity(new NubefactToken(id, token, "/api/v1/public/nubefact/" + company.getId())).build();
     }
@@ -146,13 +141,8 @@ public class AdapterResource {
     public java.util.List<AdapterTokenView> listTokens(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.ADMIN);
         companyManager.getCompany(companyId);
-        @SuppressWarnings("unchecked")
-        java.util.List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, kind, label, created_by, created_at, revoked_at FROM xhandler.adapter_token WHERE company_id = :c ORDER BY created_at DESC""")
-                .setParameter("c", companyId).getResultList();
-        return rows.stream().map(r -> new AdapterTokenView((UUID) r[0], (String) r[1], (String) r[2], (String) r[3],
-                Times.toInstant(r[4]),
-                Times.toInstant(r[5]))).toList();
+        return adapterTokens.getAdapterTokens(companyId).stream()
+                .map(t -> new AdapterTokenView(t.id(), t.kind(), t.label(), t.createdBy(), t.createdAt(), t.revokedAt())).toList();
     }
 
     /** An adapter token as listed: never the token itself. */
@@ -167,9 +157,7 @@ public class AdapterResource {
     public Response revokeToken(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @PathParam("tokenId") UUID tokenId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        int revoked = em.createNativeQuery("UPDATE xhandler.adapter_token SET revoked_at = now() WHERE id = :id AND company_id = :c AND revoked_at IS NULL")
-                .setParameter("id", tokenId).setParameter("c", companyId).executeUpdate();
-        if (revoked == 0) {
+        if (!adapterTokens.revokeAdapterToken(tokenId, companyId)) {
             throw ApiException.notFound();
         }
         auditor.record(scope, "adapter_token.revoked", "company", companyId, Map.of("token_id", tokenId.toString()));

@@ -4,7 +4,7 @@ import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.ExchangeRateProvider;
 import jakarta.transaction.Transactional;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -15,7 +15,6 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -37,26 +36,20 @@ public class ExchangeRates implements JobHandler {
     /** An older rate means the import is broken: better no rate than a stale one. */
     static final int MAX_AGE_DAYS = 10;
 
-    private final EntityManager em;
+    private final ExchangeRateProvider rates;
     private final String url;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-    public ExchangeRates(EntityManager em,
+    public ExchangeRates(ExchangeRateProvider rates,
             @ConfigProperty(name = "xhandler.exchange-rates.url", defaultValue = "https://www.sunat.gob.pe/a/txt/tipoCambio.txt") String url) {
-        this.em = em;
+        this.rates = rates;
         this.url = url;
     }
 
     /** The rate for a day, or the latest earlier one. */
     @Transactional(Transactional.TxType.MANDATORY)
     public Optional<Rate> on(LocalDate day) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery(
-                        "SELECT day, compra, venta, source FROM xhandler.exchange_rate WHERE day <= :day AND day > :oldest ORDER BY day DESC LIMIT 1")
-                .setParameter("oldest", day.minusDays(MAX_AGE_DAYS))
-                .setParameter("day", day)
-                .getResultList();
-        return rows.stream().findFirst().map(r -> new Rate(toDate(r[0]), (BigDecimal) r[1], (BigDecimal) r[2], (String) r[3]));
+        return rates.getLatestRate(day, day.minusDays(MAX_AGE_DAYS)).map(r -> new Rate(r.day(), r.compra(), r.venta(), r.source()));
     }
 
     @Override
@@ -72,15 +65,7 @@ public class ExchangeRates implements JobHandler {
             throw new IOException("exchange rate source answered HTTP " + response.statusCode());
         }
         Rate rate = parse(response.body().strip(), url);
-        QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery("""
-                        INSERT INTO xhandler.exchange_rate (day, compra, venta, source) VALUES (:day, :compra, :venta, :source)
-                        ON CONFLICT (day) DO UPDATE SET compra = excluded.compra, venta = excluded.venta, source = excluded.source,
-                            fetched_at = now()""")
-                .setParameter("day", rate.day())
-                .setParameter("compra", rate.compra())
-                .setParameter("venta", rate.venta())
-                .setParameter("source", rate.source())
-                .executeUpdate());
+        QuarkusTransaction.requiringNew().run(() -> rates.putRate(rate.day(), rate.compra(), rate.venta(), rate.source()));
         return Map.of("day", rate.day().toString(), "compra", rate.compra().toPlainString(), "venta", rate.venta().toPlainString());
     }
 
@@ -98,9 +83,5 @@ public class ExchangeRates implements JobHandler {
             throw new IllegalArgumentException("implausible exchange rate: " + line);
         }
         return rate;
-    }
-
-    static LocalDate toDate(Object value) {
-        return value instanceof LocalDate d ? d : ((java.sql.Date) value).toLocalDate();
     }
 }

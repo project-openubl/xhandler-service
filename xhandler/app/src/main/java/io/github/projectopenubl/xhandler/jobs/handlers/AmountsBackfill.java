@@ -10,7 +10,7 @@ import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -29,13 +29,13 @@ public class AmountsBackfill implements JobHandler {
     private static final Logger LOG = Logger.getLogger(AmountsBackfill.class);
     private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
 
-    private final EntityManager em;
+    private final DocumentProvider documentProvider;
     private final TenantAccess access;
     private final Engine engine;
     private final FileStore files;
 
-    public AmountsBackfill(EntityManager em, TenantAccess access, Engine engine, FileStore files) {
-        this.em = em;
+    public AmountsBackfill(DocumentProvider documentProvider, TenantAccess access, Engine engine, FileStore files) {
+        this.documentProvider = documentProvider;
         this.access = access;
         this.engine = engine;
         this.files = files;
@@ -50,13 +50,10 @@ public class AmountsBackfill implements JobHandler {
     public Map<String, Object> run(JobContext context) {
         record Item(UUID tenant, UUID id, boolean reception) {}
         List<Item> items = QuarkusTransaction.requiringNew().call(() -> {
-            @SuppressWarnings("unchecked")
-            List<Object[]> docs = em.createNativeQuery("SELECT tenant_id, document_id FROM xhandler.documents_without_amounts(200)").getResultList();
-            @SuppressWarnings("unchecked")
-            List<Object[]> receptions = em.createNativeQuery("SELECT tenant_id, reception_id FROM xhandler.receptions_without_amounts(200)")
-                    .getResultList();
-            return java.util.stream.Stream.concat(docs.stream().map(r -> new Item((UUID) r[0], (UUID) r[1], false)),
-                    receptions.stream().map(r -> new Item((UUID) r[0], (UUID) r[1], true))).toList();
+            List<DocumentProvider.TenantRow> docs = documentProvider.getDocumentsWithoutAmounts();
+            List<DocumentProvider.TenantRow> receptions = documentProvider.getReceptionsWithoutAmounts();
+            return java.util.stream.Stream.concat(docs.stream().map(r -> new Item(r.tenantId(), r.id(), false)),
+                    receptions.stream().map(r -> new Item(r.tenantId(), r.id(), true))).toList();
         });
         int done = 0;
         for (Item item : items) {
@@ -76,20 +73,14 @@ public class AmountsBackfill implements JobHandler {
     private void markUnavailable(UUID tenantId, UUID id, boolean reception) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            em.createNativeQuery("UPDATE xhandler." + (reception ? "reception" : "document")
-                            + " SET amounts = cast('{\"_error\": \"unreadable\"}' AS jsonb) WHERE id = :id AND amounts IS NULL")
-                    .setParameter("id", id).executeUpdate();
+            documentProvider.markAmountsUnreadable(id, reception);
         });
     }
 
     private boolean fill(UUID tenantId, UUID id, boolean reception) {
         String key = QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            List<?> ref = reception
-                    ? em.createNativeQuery("SELECT xml_ref FROM xhandler.reception WHERE id = :id").setParameter("id", id).getResultList()
-                    : em.createNativeQuery("SELECT storage_key FROM xhandler.document_file WHERE document_id = :id AND kind = 'xml_signed'")
-                            .setParameter("id", id).getResultList();
-            return ref.isEmpty() ? null : (String) ref.get(0);
+            return (reception ? documentProvider.getReceptionXmlRef(id) : documentProvider.getSignedXmlStorageKey(id)).orElse(null);
         });
         if (key == null) {
             throw new IllegalStateException("no stored XML");
@@ -105,15 +96,9 @@ public class AmountsBackfill implements JobHandler {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
             if (reception) {
-                em.createNativeQuery("UPDATE xhandler.reception SET amounts = cast(:a AS jsonb) WHERE id = :id AND amounts IS NULL")
-                        .setParameter("a", json).setParameter("id", id).executeUpdate();
+                documentProvider.setReceptionAmounts(id, json);
             } else {
-                em.createNativeQuery("""
-                                UPDATE xhandler.document SET amounts = cast(:a AS jsonb),
-                                    payment_terms = CASE WHEN tipo_comprobante = '01' AND payment_terms IS NULL THEN :terms ELSE payment_terms END
-                                WHERE id = :id AND amounts IS NULL""")
-                        .setParameter("a", json).setParameter("terms", identity.paymentTerms() == null ? "contado" : identity.paymentTerms())
-                        .setParameter("id", id).executeUpdate();
+                documentProvider.setDocumentAmounts(id, json, identity.paymentTerms() == null ? "contado" : identity.paymentTerms());
             }
         });
         return true;

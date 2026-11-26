@@ -13,7 +13,7 @@ import io.github.projectopenubl.xhandler.utils.Qr;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.models.TenantModel;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.DocumentPdfProvider;
 import jakarta.transaction.Transactional;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -53,9 +53,9 @@ public class DocumentPdf {
     private final FileStore files;
     private final PdfRenderer renderer;
     private final ObjectMapper json;
-    private final EntityManager em;
+    private final DocumentPdfProvider documentPdfProvider;
 
-    public DocumentPdf(FileStore files, PdfRenderer renderer, ObjectMapper json, EntityManager em, CompanyProvider companyProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, TenantProvider tenantProvider) {
+    public DocumentPdf(FileStore files, PdfRenderer renderer, ObjectMapper json, DocumentPdfProvider documentPdfProvider, CompanyProvider companyProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
@@ -63,7 +63,7 @@ public class DocumentPdf {
         this.files = files;
         this.renderer = renderer;
         this.json = json;
-        this.em = em;
+        this.documentPdfProvider = documentPdfProvider;
     }
 
     /** PDF bytes; {@code accessUrl} (the buyer link) is printed when given. */
@@ -147,12 +147,10 @@ public class DocumentPdf {
         Map<String, Object> brand = new HashMap<>(Map.of("color", "#1f4e79", "footer", ""));
         TenantModel tenant = tenantProvider.getTenant(company.getTenantId()).orElse(null);
         if (tenant != null && tenant.getPartnerId() != null) {
-            Object raw = em.createNativeQuery("SELECT CAST(branding AS text) FROM xhandler.partner WHERE id = :id")
-                    .setParameter("id", tenant.getPartnerId())
-                    .getResultStream().findFirst().orElse(null);
+            String raw = documentPdfProvider.getPartnerBranding(tenant.getPartnerId()).orElse(null);
             if (raw != null) {
                 try {
-                    JsonNode node = json.readTree(raw.toString());
+                    JsonNode node = json.readTree(raw);
                     if (node.hasNonNull("color") && node.get("color").asText().matches("#[0-9a-fA-F]{6}")) {
                         brand.put("color", node.get("color").asText());
                     }
@@ -176,10 +174,7 @@ public class DocumentPdf {
         if (ref == null) {
             TenantModel tenant = tenantProvider.getTenant(company.getTenantId()).orElse(null);
             if (tenant != null && tenant.getPartnerId() != null) {
-                List<?> partnerLogo = em.createNativeQuery("SELECT logo_ref FROM xhandler.partner WHERE id = :id")
-                        .setParameter("id", tenant.getPartnerId())
-                        .getResultList();
-                ref = partnerLogo.isEmpty() ? null : (String) partnerLogo.get(0);
+                ref = documentPdfProvider.getPartnerLogoRef(tenant.getPartnerId()).orElse(null);
             }
         }
         if (ref == null) {

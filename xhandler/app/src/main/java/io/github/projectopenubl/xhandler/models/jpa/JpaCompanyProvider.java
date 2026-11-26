@@ -106,6 +106,13 @@ public class JpaCompanyProvider implements CompanyProvider {
         return ((Number) failures).intValue();
     }
 
+    @Override
+    public boolean isPseAuthorized(UUID companyId) {
+        return !repository.getEntityManager()
+                .createNativeQuery("SELECT 1 FROM xhandler.pse_authorization WHERE company_id = :c AND revoked_at IS NULL AND approved_at IS NOT NULL")
+                .setParameter("c", companyId).getResultList().isEmpty();
+    }
+
     private static List<CompanyModel> wrap(List<CompanyEntity> entities) {
         return entities.stream().map(e -> (CompanyModel) new CompanyAdapter(e)).toList();
     }

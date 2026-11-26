@@ -9,11 +9,11 @@ import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.IdempotencyProvider;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.core.Response;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -40,12 +40,12 @@ public class Idempotency {
     /** The outcome of {@link #begin}: a claim to go ahead with, or a stored response to replay. */
     public record Begun(UUID claim, Stored replay) {}
 
-    private final EntityManager em;
+    private final IdempotencyProvider keys;
     private final TenantAccess access;
     private final ObjectMapper json;
 
-    public Idempotency(EntityManager em, TenantAccess access, ObjectMapper json) {
-        this.em = em;
+    public Idempotency(IdempotencyProvider keys, TenantAccess access, ObjectMapper json) {
+        this.keys = keys;
         this.access = access;
         this.json = json;
     }
@@ -98,46 +98,28 @@ public class Idempotency {
         UUID claim = UUID.randomUUID();
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            int inserted = em.createNativeQuery("""
-                            INSERT INTO xhandler.idempotency_key (tenant_id, key, request_hash, claim) VALUES (:tenant, :key, :hash, :claim)
-                            ON CONFLICT (tenant_id, key) DO NOTHING""")
-                    .setParameter("tenant", tenantId)
-                    .setParameter("key", key)
-                    .setParameter("hash", requestHash)
-                    .setParameter("claim", claim)
-                    .executeUpdate();
-            if (inserted == 1) {
+            if (keys.insertKey(tenantId, key, requestHash, claim)) {
                 return new Begun(claim, null);
             }
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = em.createNativeQuery("""
-                            SELECT request_hash, status_code, CAST(response AS text), created_at < now() - interval '2 minutes'
-                            FROM xhandler.idempotency_key WHERE tenant_id = :tenant AND key = :key FOR UPDATE""")
-                    .setParameter("tenant", tenantId)
-                    .setParameter("key", key)
-                    .getResultList();
+            Optional<IdempotencyProvider.IdempotencyKey> rows = keys.getKeyForUpdate(tenantId, key);
             if (rows.isEmpty()) {
                 // Removed by a failing first request in the meantime
                 throw ApiException.conflict("idempotency_in_progress", "Una solicitud con la misma Idempotency-Key está en proceso.");
             }
-            Object[] row = rows.get(0);
-            if (!requestHash.equals(row[0])) {
+            IdempotencyProvider.IdempotencyKey row = rows.get();
+            if (!requestHash.equals(row.requestHash())) {
                 throw new ApiException(422, "idempotency_key_reused",
                         "La Idempotency-Key ya se usó con una solicitud diferente.");
             }
-            if (row[1] == null) {
-                if (Boolean.TRUE.equals(row[3])) {
+            if (row.statusCode() == null) {
+                if (row.stale()) {
                     // Abandoned by a crashed process: take it over with a new claim
-                    em.createNativeQuery("UPDATE xhandler.idempotency_key SET created_at = now(), claim = :claim WHERE tenant_id = :tenant AND key = :key")
-                            .setParameter("claim", claim)
-                            .setParameter("tenant", tenantId)
-                            .setParameter("key", key)
-                            .executeUpdate();
+                    keys.takeOverKey(tenantId, key, claim);
                     return new Begun(claim, null);
                 }
                 throw ApiException.conflict("idempotency_in_progress", "Una solicitud con la misma Idempotency-Key está en proceso.");
             }
-            return new Begun(null, new Stored(((Number) row[1]).intValue(), json.readTree((String) row[2])));
+            return new Begun(null, new Stored(row.statusCode(), json.readTree(row.response())));
         });
     }
 
@@ -147,15 +129,7 @@ public class Idempotency {
      */
     @Transactional(Transactional.TxType.MANDATORY)
     public void complete(UUID tenantId, String key, UUID claim, int status, Object body) {
-        int updated = em.createNativeQuery("""
-                        UPDATE xhandler.idempotency_key SET status_code = :status, response = CAST(:body AS jsonb), completed_at = now()
-                        WHERE tenant_id = :tenant AND key = :key AND claim = :claim AND status_code IS NULL""")
-                .setParameter("status", status)
-                .setParameter("body", write(body))
-                .setParameter("tenant", tenantId)
-                .setParameter("key", key)
-                .setParameter("claim", claim)
-                .executeUpdate();
+        int updated = keys.completeKey(tenantId, key, claim, status, write(body));
         if (updated != 1) {
             throw ApiException.conflict("idempotency_in_progress", "Una solicitud con la misma Idempotency-Key está en proceso.");
         }
@@ -165,12 +139,7 @@ public class Idempotency {
     public void abandon(UUID tenantId, String key, UUID claim) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            em.createNativeQuery(
-                            "DELETE FROM xhandler.idempotency_key WHERE tenant_id = :tenant AND key = :key AND claim = :claim AND status_code IS NULL")
-                    .setParameter("tenant", tenantId)
-                    .setParameter("key", key)
-                    .setParameter("claim", claim)
-                    .executeUpdate();
+            keys.deleteKey(tenantId, key, claim);
         });
     }
 
