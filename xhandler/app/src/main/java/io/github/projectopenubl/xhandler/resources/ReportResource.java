@@ -7,9 +7,9 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Job;
+import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
 import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.files.FileStore;
@@ -74,16 +74,16 @@ public class ReportResource {
     @Transactional
     public Response create(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid ReportRequest request) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        Company company = CompanyResource.find(companyId);
+        CompanyEntity company = CompanyResource.find(companyId);
         UUID id = Ids.newId();
         em.createNativeQuery("""
                         INSERT INTO xhandler.report (id, tenant_id, company_id, sunat_env, register, format, period, requested_by)
                         VALUES (:id, :t, :c, :env, :register, :format, :period, :by)""")
-                .setParameter("id", id).setParameter("t", tenantId).setParameter("c", company.id).setParameter("env", company.sunatEnv)
+                .setParameter("id", id).setParameter("t", tenantId).setParameter("c", company.getId()).setParameter("env", company.getSunatEnv())
                 .setParameter("register", request.register()).setParameter("format", request.format()).setParameter("period", request.period())
                 .setParameter("by", scope.actor().auditName()).executeUpdate();
-        Job job = jobs.enqueue(scope, ReportJob.NAME, 4, Map.of("report_id", id.toString()), List.of(), null);
-        em.createNativeQuery("UPDATE xhandler.report SET job_id = :job WHERE id = :id").setParameter("job", job.id).setParameter("id", id)
+        JobEntity job = jobs.enqueue(scope, ReportJob.NAME, 4, Map.of("report_id", id.toString()), List.of(), null);
+        em.createNativeQuery("UPDATE xhandler.report SET job_id = :job WHERE id = :id").setParameter("job", job.getId()).setParameter("id", id)
                 .executeUpdate();
         auditor.record(scope, "report.requested", "company", companyId,
                 Map.of("register", request.register(), "format", request.format(), "period", request.period()));

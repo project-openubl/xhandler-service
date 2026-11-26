@@ -2,12 +2,12 @@ package io.github.projectopenubl.xhandler.pdf;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFile;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
 import io.github.projectopenubl.xhandler.utils.Qr;
 import io.github.projectopenubl.xhandler.files.FileStore;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Tenant;
+import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -53,14 +53,14 @@ public class DocumentPdf {
     /** PDF bytes; {@code accessUrl} (the buyer link) is printed when given. */
     @Transactional(Transactional.TxType.MANDATORY)
     public byte[] render(UUID documentId, String accessUrl) {
-        Document doc = Document.findById(documentId);
-        Company company = Company.findById(doc.companyId);
+        DocumentEntity doc = DocumentEntity.findById(documentId);
+        CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
         JsonNode spec = enriched(doc).path("spec");
         Map<String, Object> d = new HashMap<>();
-        d.put("tipoNombre", TIPOS.getOrDefault(doc.tipoComprobante, "COMPROBANTE ELECTRÓNICO"));
+        d.put("tipoNombre", TIPOS.getOrDefault(doc.getTipoComprobante(), "COMPROBANTE ELECTRÓNICO"));
         d.put("serieNumero", doc.serieNumero());
-        d.put("fechaEmision", doc.fechaEmision.toString());
-        d.put("moneda", doc.moneda == null ? spec.path("moneda").asText("PEN") : doc.moneda);
+        d.put("fechaEmision", doc.getFechaEmision().toString());
+        d.put("moneda", doc.getMoneda() == null ? spec.path("moneda").asText("PEN") : doc.getMoneda());
         JsonNode cliente = spec.has("cliente") ? spec.path("cliente") : spec.path("destinatario");
         d.put("clienteNombre", text(cliente.path("nombre")));
         d.put("clienteNumero", text(cliente.path("numero_documento_identidad")));
@@ -86,22 +86,22 @@ public class DocumentPdf {
         d.put("exonerado", nonZero(totals.path("exonerado_base_imponible")));
         d.put("inafecto", nonZero(totals.path("inafecto_base_imponible")));
         d.put("igv", nonZero(totals.path("gravado_importe")));
-        d.put("total", doc.total != null ? money(doc.total) : money(decimal(spec.path("total_importe").path("importe"))));
+        d.put("total", doc.getTotal() != null ? money(doc.getTotal()) : money(decimal(spec.path("total_importe").path("importe"))));
         d.put("leyenda", text(spec.path("leyendas").path("1000")));
-        d.put("digest", doc.digestValue);
-        d.put("estado", "production".equals(doc.sunatEnv) ? estado(doc.status) : "documento de prueba, sin valor legal");
+        d.put("digest", doc.getDigestValue());
+        d.put("estado", "production".equals(doc.getSunatEnv()) ? estado(doc.getStatus()) : "documento de prueba, sin valor legal");
 
         Map<String, Object> data = new HashMap<>();
         data.put("d", d);
-        data.put("c", Map.of("ruc", company.ruc, "razonSocial", company.razonSocial,
-                "nombreComercial", company.nombreComercial == null ? "" : company.nombreComercial,
-                "direccion", company.direccion == null ? "" : company.direccion, "email", company.email == null ? "" : company.email));
+        data.put("c", Map.of("ruc", company.getRuc(), "razonSocial", company.getRazonSocial(),
+                "nombreComercial", company.getNombreComercial() == null ? "" : company.getNombreComercial(),
+                "direccion", company.getDireccion() == null ? "" : company.getDireccion(), "email", company.getEmail() == null ? "" : company.getEmail()));
         data.put("brand", branding(company));
         data.put("logo", logo(company));
-        data.put("qr", PdfRenderer.qrDataUri(Qr.of(company.ruc, doc, enriched(doc))));
+        data.put("qr", PdfRenderer.qrDataUri(Qr.of(company.getRuc(), doc, enriched(doc))));
         data.put("accessUrl", accessUrl);
-        data.put("banner", "production".equals(doc.sunatEnv) ? banner(doc.status) : "SIN VALOR LEGAL - DOCUMENTO DE PRUEBA");
-        return renderer.render(company.pdfFormat == null ? "a4" : company.pdfFormat, data);
+        data.put("banner", "production".equals(doc.getSunatEnv()) ? banner(doc.getStatus()) : "SIN VALOR LEGAL - DOCUMENTO DE PRUEBA");
+        return renderer.render(company.getPdfFormat() == null ? "a4" : company.getPdfFormat(), data);
     }
 
     /** Until SUNAT's definitive answer the PDF says so (§11.6). */
@@ -127,12 +127,12 @@ public class DocumentPdf {
     }
 
     /** Partner branding (white-label): color, footer, name. */
-    private Map<String, Object> branding(Company company) {
+    private Map<String, Object> branding(CompanyEntity company) {
         Map<String, Object> brand = new HashMap<>(Map.of("color", "#1f4e79", "footer", ""));
-        Tenant tenant = Tenant.findById(company.tenantId);
-        if (tenant != null && tenant.partnerId != null) {
+        TenantEntity tenant = TenantEntity.findById(company.getTenantId());
+        if (tenant != null && tenant.getPartnerId() != null) {
             Object raw = em.createNativeQuery("SELECT CAST(branding AS text) FROM xhandler.partner WHERE id = :id")
-                    .setParameter("id", tenant.partnerId)
+                    .setParameter("id", tenant.getPartnerId())
                     .getResultStream().findFirst().orElse(null);
             if (raw != null) {
                 try {
@@ -148,20 +148,20 @@ public class DocumentPdf {
                 }
             }
         }
-        if (company.pdfOptions != null && company.pdfOptions.get("color") instanceof String color && color.matches("#[0-9a-fA-F]{6}")) {
+        if (company.getPdfOptions() != null && company.getPdfOptions().get("color") instanceof String color && color.matches("#[0-9a-fA-F]{6}")) {
             brand.put("color", color);
         }
         return brand;
     }
 
     /** The company's logo, else its partner's (white-label), else none. */
-    private String logo(Company company) {
-        String ref = company.logoRef;
+    private String logo(CompanyEntity company) {
+        String ref = company.getLogoRef();
         if (ref == null) {
-            Tenant tenant = Tenant.findById(company.tenantId);
-            if (tenant != null && tenant.partnerId != null) {
+            TenantEntity tenant = TenantEntity.findById(company.getTenantId());
+            if (tenant != null && tenant.getPartnerId() != null) {
                 List<?> partnerLogo = em.createNativeQuery("SELECT logo_ref FROM xhandler.partner WHERE id = :id")
-                        .setParameter("id", tenant.partnerId)
+                        .setParameter("id", tenant.getPartnerId())
                         .getResultList();
                 ref = partnerLogo.isEmpty() ? null : (String) partnerLogo.get(0);
             }
@@ -174,10 +174,10 @@ public class DocumentPdf {
         return "data:" + type + ";base64," + Base64.getEncoder().encodeToString(bytes);
     }
 
-    private JsonNode enriched(Document doc) {
-        return DocumentFile.of(doc.id, "enriched").map(f -> {
+    private JsonNode enriched(DocumentEntity doc) {
+        return DocumentFileEntity.of(doc.getId(), "enriched").map(f -> {
             try {
-                return json.readTree(files.get(f.storageKey));
+                return json.readTree(files.get(f.getStorageKey()));
             } catch (IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }

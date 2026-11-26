@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
@@ -78,15 +78,15 @@ public class ReceptionValidity implements JobHandler {
             Object[] r = (Object[]) em.createNativeQuery("""
                             SELECT company_id, supplier_ruc, tipo_comprobante, serie, numero, fecha_emision, total FROM xhandler.reception WHERE id = :id""")
                     .setParameter("id", receptionId).getSingleResult();
-            Company company = Company.findById(r[0]);
+            CompanyEntity company = CompanyEntity.findById(r[0]);
             if (r[5] == null || r[6] == null) {
                 return null;
             }
             // The validity service is production SUNAT (the fake stands in for it in development): a
             // company's SOL user only works where it is real; beta companies use the platform's credential
-            EngineModels.Environment environment = "fake".equals(company.sunatEnv) ? EngineModels.Environment.FAKE
+            EngineModels.Environment environment = "fake".equals(company.getSunatEnv()) ? EngineModels.Environment.FAKE
                     : EngineModels.Environment.PRODUCTION;
-            Optional<EngineModels.Credentials> sol = !"beta".equals(company.sunatEnv)
+            Optional<EngineModels.Credentials> sol = !"beta".equals(company.getSunatEnv())
                     ? credentials.read(scope, company, "sol", "reception-validity:" + receptionId)
                             .map(f -> new EngineModels.Credentials(f.get("username"), f.get("password"), null, null))
                     : Optional.empty();
@@ -98,7 +98,7 @@ public class ReceptionValidity implements JobHandler {
                 return null;
             }
             return new Request(new EngineModels.ValidityRequest(environment, creds,
-                    new EngineModels.DocumentKey((String) r[1], (String) r[2], (String) r[3], ((Number) r[4]).longValue()), "6", company.ruc,
+                    new EngineModels.DocumentKey((String) r[1], (String) r[2], (String) r[3], ((Number) r[4]).longValue()), "6", company.getRuc(),
                     (r[5] instanceof java.time.LocalDate d ? d : ((java.sql.Date) r[5]).toLocalDate()).toString(), ((BigDecimal) r[6]).toPlainString()));
         });
         if (request == null) {

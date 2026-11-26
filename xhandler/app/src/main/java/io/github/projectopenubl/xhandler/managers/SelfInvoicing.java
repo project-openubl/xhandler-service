@@ -11,7 +11,7 @@ import io.github.projectopenubl.xhandler.jobs.JobStore;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.Role;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Tenant;
+import io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -174,18 +174,18 @@ public final class SelfInvoicing {
             record Buyer(String ruc, String name, String email) {}
             Buyer buyer = QuarkusTransaction.requiringNew().call(() -> {
                 access.enterAsPlatform(customer);
-                Tenant tenant = Tenant.findById(customer);
+                TenantEntity tenant = TenantEntity.findById(customer);
                 if (tenant == null) {
                     throw new IllegalStateException("tenant " + customer + " of Lago invoice " + lagoId + " doesn't exist");
                 }
-                return new Buyer(tenant.billingRuc, tenant.billingName != null ? tenant.billingName : tenant.name, tenant.billingEmail);
+                return new Buyer(tenant.getBillingRuc(), tenant.getBillingName() != null ? tenant.getBillingName() : tenant.getName(), tenant.getBillingEmail());
             });
             // Already issued (a retry after the idempotency window): link it, never issue twice
             Optional<UUID> existing = QuarkusTransaction.requiringNew().call(() -> {
                 access.enterAsPlatform(issuer.tenant());
-                return io.github.projectopenubl.xhandler.models.jpa.entities.Document.<io.github.projectopenubl.xhandler.models.jpa.entities.Document>find(
+                return io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity.<io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity>find(
                                 "companyId = ?1 and function('jsonb_extract_path_text', labels, 'lago_invoice') = ?2", issuer.company(), lagoId)
-                        .firstResultOptional().map(d -> d.id);
+                        .firstResultOptional().map(d -> d.getId());
             });
             if (existing.isPresent()) {
                 QuarkusTransaction.requiringNew().run(() -> em.createNativeQuery(

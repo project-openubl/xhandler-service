@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.events;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -26,10 +26,10 @@ public class UsageEvents {
     }
 
     void onStatusChanged(@Observes DocumentStatusChanged change) {
-        Document d = change.document();
-        if (Document.ACCEPTED.contains(d.status) && !Document.ACCEPTED.contains(change.previousStatus()) && !d.isSummary()) {
-            record(d.tenantId, "document.accepted", Map.of("tipo_comprobante", d.tipoComprobante, "company_id", d.companyId.toString(),
-                    "sunat_env", d.sunatEnv));
+        DocumentEntity d = change.document();
+        if (DocumentEntity.ACCEPTED.contains(d.getStatus()) && !DocumentEntity.ACCEPTED.contains(change.previousStatus()) && !d.isSummary()) {
+            record(d.getTenantId(), "document.accepted", Map.of("tipo_comprobante", d.getTipoComprobante(), "company_id", d.getCompanyId().toString(),
+                    "sunat_env", d.getSunatEnv()));
         }
     }
 

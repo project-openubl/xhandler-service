@@ -15,7 +15,7 @@ import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
@@ -69,7 +69,7 @@ class TenancyTest {
         createCompany("alice", tenant, randomRuc());
 
         // Row-level security fails closed: no tenant set, no rows, even though companies exist
-        long visible = QuarkusTransaction.requiringNew().call(() -> Company.count());
+        long visible = QuarkusTransaction.requiringNew().call(() -> CompanyEntity.count());
         assertEquals(0, visible);
     }
 
@@ -87,17 +87,17 @@ class TenancyTest {
 
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(alices);
-            org.junit.jupiter.api.Assertions.assertNull(Company.findById(bobsCompany));
+            org.junit.jupiter.api.Assertions.assertNull(CompanyEntity.findById(bobsCompany));
         });
         // Writing a row for another tenant violates the policy's WITH CHECK
         RuntimeException e = org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, () ->
                 QuarkusTransaction.requiringNew().run(() -> {
                     access.enterAsPlatform(alices);
-                    Company c = new Company();
-                    c.id = io.github.projectopenubl.xhandler.utils.Ids.newId();
-                    c.tenantId = bobs;
-                    c.ruc = randomRuc();
-                    c.razonSocial = "Intrusa";
+                    CompanyEntity c = new CompanyEntity();
+                    c.setId(io.github.projectopenubl.xhandler.utils.Ids.newId());
+                    c.setTenantId(bobs);
+                    c.setRuc(randomRuc());
+                    c.setRazonSocial("Intrusa");
                     c.persistAndFlush();
                 }));
         assertTrue(rootMessage(e).contains("row-level security"), rootMessage(e));

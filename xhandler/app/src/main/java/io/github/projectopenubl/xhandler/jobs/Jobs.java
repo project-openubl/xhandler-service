@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Job;
+import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -26,19 +26,19 @@ public class Jobs {
 
     /** Enqueues a job in the open tenant; it runs after this transaction commits. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Job enqueue(TenantScope scope, String name, int priorityClass, Map<String, Object> args, List<String> resources,
+    public JobEntity enqueue(TenantScope scope, String name, int priorityClass, Map<String, Object> args, List<String> resources,
             String correlationId) {
-        Job job = new Job();
-        job.id = Ids.newId();
-        job.tenantId = scope.tenantId();
-        job.name = name;
-        job.priorityClass = (short) priorityClass;
-        job.args = args;
-        job.reservedResources = resources.toArray(String[]::new);
-        job.correlationId = correlationId;
-        job.runAt = Instant.now();
-        job.createdAt = job.runAt;
-        job.updatedAt = job.runAt;
+        JobEntity job = new JobEntity();
+        job.setId(Ids.newId());
+        job.setTenantId(scope.tenantId());
+        job.setName(name);
+        job.setPriorityClass((short) priorityClass);
+        job.setArgs(args);
+        job.setReservedResources(resources.toArray(String[]::new));
+        job.setCorrelationId(correlationId);
+        job.setRunAt(Instant.now());
+        job.setCreatedAt(job.getRunAt());
+        job.setUpdatedAt(job.getRunAt());
         job.persist();
         store.notifyWakeup();
         return job;
@@ -50,7 +50,7 @@ public class Jobs {
      */
     @Transactional(Transactional.TxType.MANDATORY)
     public String cancel(UUID jobId) {
-        Object state = Job.getEntityManager().createNativeQuery("SELECT xhandler.cancel_tenant_job(:id)")
+        Object state = JobEntity.getEntityManager().createNativeQuery("SELECT xhandler.cancel_tenant_job(:id)")
                 .setParameter("id", jobId)
                 .getSingleResult();
         return state == null ? null : state.toString();

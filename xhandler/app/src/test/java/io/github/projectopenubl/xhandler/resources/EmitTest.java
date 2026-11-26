@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.Idempotency;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import static io.github.projectopenubl.xhandler.Api.as;
@@ -317,7 +317,7 @@ class EmitTest {
         // A's key looks abandoned (A is stuck); B takes it over
         io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            io.github.projectopenubl.xhandler.models.jpa.entities.Document.getEntityManager().createNativeQuery(
+            io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity.getEntityManager().createNativeQuery(
                             "UPDATE xhandler.idempotency_key SET created_at = now() - interval '5 minutes' WHERE key = :key")
                     .setParameter("key", key).executeUpdate();
         });

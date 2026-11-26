@@ -1,9 +1,9 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.DocumentControl;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEvent;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFile;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
 
 import static io.github.projectopenubl.xhandler.Api.tenantOf;
 import static io.github.projectopenubl.xhandler.xml.EngineStub.Reply;
@@ -72,8 +72,8 @@ class AttemptTest {
         return body -> body.contains(marker) ? reply.get() : Reply.ok(sendAnswer("accepted", 0, null, null));
     }
 
-    Document awaitStatus(TestDocuments.Created doc, String status) {
-        await().atMost(WAIT).until(() -> status.equals(docs.get(tenant, doc.id()).status));
+    DocumentEntity awaitStatus(TestDocuments.Created doc, String status) {
+        await().atMost(WAIT).until(() -> status.equals(docs.get(tenant, doc.id()).getStatus()));
         return docs.get(tenant, doc.id());
     }
 
@@ -85,15 +85,15 @@ class AttemptTest {
     void accepted_document_stores_the_cdr_and_stops() {
         TestDocuments.Created doc = docs.pending(tenant, company, endpoint, null);
 
-        Document accepted = awaitStatus(doc, "accepted");
-        assertNull(accepted.nextAttemptAt);
-        assertNotNull(accepted.cdrReceivedAt);
-        assertNotNull(accepted.firstSentAt);
-        assertEquals(1, accepted.attempts);
+        DocumentEntity accepted = awaitStatus(doc, "accepted");
+        assertNull(accepted.getNextAttemptAt());
+        assertNotNull(accepted.getCdrReceivedAt());
+        assertNotNull(accepted.getFirstSentAt());
+        assertEquals(1, accepted.getAttempts());
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            assertTrue(DocumentFile.of(doc.id(), "cdr_zip").isPresent());
-            assertTrue(DocumentEvent.count("documentId", doc.id()) >= 1);
+            assertTrue(DocumentFileEntity.of(doc.id(), "cdr_zip").isPresent());
+            assertTrue(DocumentEventEntity.count("documentId", doc.id()) >= 1);
         });
     }
 
@@ -108,7 +108,7 @@ class AttemptTest {
         docs.dueNow(tenant, doc.id());
         Thread.sleep(1500);
         assertEquals(1, sends(doc));
-        assertEquals("rejected", docs.get(tenant, doc.id()).status);
+        assertEquals("rejected", docs.get(tenant, doc.id()).getStatus());
     }
 
     @Inject
@@ -117,16 +117,16 @@ class AttemptTest {
     @Test
     void an_attempt_on_a_definitive_document_does_nothing() {
         TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> {
-            d.status = "accepted";
-            d.nextAttemptAt = null;
+            d.setStatus("accepted");
+            d.setNextAttemptAt(null);
         });
         // An attempt job that got through anyway (stale lease, operator mistake)
         UUID job = QuarkusTransaction.requiringNew().call(() -> jobs.enqueue(access.enterAsPlatform(tenant), "document.attempt", 2,
-                java.util.Map.of("document_id", doc.id().toString()), java.util.List.of("document:" + doc.id()), null).id);
+                java.util.Map.of("document_id", doc.id().toString()), java.util.List.of("document:" + doc.id()), null).getId());
         await().atMost(WAIT).until(() -> QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenant);
-            io.github.projectopenubl.xhandler.models.jpa.entities.Job j = io.github.projectopenubl.xhandler.models.jpa.entities.Job.findById(job);
-            return "completed".equals(j.state) && "definitive".equals(j.result.get("skipped"));
+            io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity j = io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity.findById(job);
+            return "completed".equals(j.getState()) && "definitive".equals(j.getResult().get("skipped"));
         }));
         assertEquals(0, sends(doc));
     }
@@ -137,11 +137,11 @@ class AttemptTest {
         TestDocuments.Created doc = docs.pending(tenant, company, endpoint, null);
         EngineStub.on("/v1/send", only(doc.marker(), () -> Reply.ok(sendAnswer("exception", 109, "transient_system", null))));
 
-        await().atMost(WAIT).until(() -> sends(doc) >= 1 && docs.get(tenant, doc.id()).lastOutcome != null);
-        Document waiting = docs.get(tenant, doc.id());
-        assertEquals("pending_send", waiting.status);
+        await().atMost(WAIT).until(() -> sends(doc) >= 1 && docs.get(tenant, doc.id()).getLastOutcome() != null);
+        DocumentEntity waiting = docs.get(tenant, doc.id());
+        assertEquals("pending_send", waiting.getStatus());
         // First backoff step: 1 minute ±20%
-        assertTrue(waiting.nextAttemptAt.isAfter(Instant.now().plusSeconds(40)), "next attempt " + waiting.nextAttemptAt);
+        assertTrue(waiting.getNextAttemptAt().isAfter(Instant.now().plusSeconds(40)), "next attempt " + waiting.getNextAttemptAt());
 
         EngineStub.on("/v1/send", only(doc.marker(), () -> Reply.ok(sendAnswer("accepted", 0, null, null))));
         docs.dueNow(tenant, doc.id());
@@ -151,13 +151,13 @@ class AttemptTest {
 
     @Test
     void permanent_errors_stop_until_a_manual_retry_with_the_same_bytes() {
-        TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> d.nextAttemptAt = null);
+        TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> d.setNextAttemptAt(null));
         EngineStub.on("/v1/send", only(doc.marker(), () -> Reply.ok(sendAnswer("exception", 1034, "permanent_content", null))));
         docs.dueNow(tenant, doc.id());
 
-        Document failed = awaitStatus(doc, "exception");
-        assertNull(failed.nextAttemptAt);
-        assertEquals("permanent_content", failed.codeClass);
+        DocumentEntity failed = awaitStatus(doc, "exception");
+        assertNull(failed.getNextAttemptAt());
+        assertEquals("permanent_content", failed.getCodeClass());
 
         EngineStub.on("/v1/send", only(doc.marker(), () -> Reply.ok(sendAnswer("accepted", 0, null, null))));
         QuarkusTransaction.requiringNew().run(() -> {
@@ -176,26 +176,26 @@ class AttemptTest {
 
     @Test
     void an_ambiguous_send_is_resolved_before_anything_else() {
-        TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> d.nextAttemptAt = null);
+        TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> d.setNextAttemptAt(null));
         // The answer is lost after SUNAT may have received the document
         EngineStub.on("/v1/send", only(doc.marker(), () -> Reply.ok(sendAnswer("unknown", null, null, null))));
         docs.dueNow(tenant, doc.id());
         awaitStatus(doc, "unknown");
 
         // Resolution asks SUNAT's consult service first (the fake has it): SUNAT has it, accepted
-        EngineStub.on("/v1/status-cdr", body -> body.contains("\"numero\":" + docs.get(tenant, doc.id()).numero)
+        EngineStub.on("/v1/status-cdr", body -> body.contains("\"numero\":" + docs.get(tenant, doc.id()).getNumero())
                 ? Reply.ok("{\"status\":\"accepted\",\"code\":\"0001\",\"description\":\"aceptado\",\"cdr_zip\":\"UEsDBA==\"}")
                 : Reply.ok("{\"status\":\"not_found\",\"code\":\"0011\",\"description\":\"no existe\",\"cdr_zip\":null}"));
         docs.dueNow(tenant, doc.id());
-        Document accepted = awaitStatus(doc, "accepted");
+        DocumentEntity accepted = awaitStatus(doc, "accepted");
         assertEquals(1, sends(doc), "resolved without resending");
-        assertNotNull(accepted.cdrReceivedAt);
+        assertNotNull(accepted.getCdrReceivedAt());
     }
 
     @Test
     void sunat_registered_with_the_same_bytes_is_accepted_and_with_other_bytes_is_a_collision() {
-        TestDocuments.Created same = docs.pending(tenant, company, endpoint, d -> d.nextAttemptAt = null);
-        TestDocuments.Created other = docs.pending(tenant, company, endpoint, d -> d.nextAttemptAt = null);
+        TestDocuments.Created same = docs.pending(tenant, company, endpoint, d -> d.setNextAttemptAt(null));
+        TestDocuments.Created other = docs.pending(tenant, company, endpoint, d -> d.setNextAttemptAt(null));
         EngineStub.on("/v1/send", body -> body.contains(same.marker()) || body.contains(other.marker())
                 ? Reply.ok(sendAnswer("exception", 1033, "already_registered", null))
                 : Reply.ok(sendAnswer("accepted", 0, null, null)));
@@ -206,18 +206,18 @@ class AttemptTest {
         docs.dueNow(tenant, other.id());
 
         awaitStatus(same, "accepted");
-        Document collided = awaitStatus(other, "exception");
-        assertTrue(collided.sunatDescription.startsWith("Colisión de numeración"), collided.sunatDescription);
+        DocumentEntity collided = awaitStatus(other, "exception");
+        assertTrue(collided.getSunatDescription().startsWith("Colisión de numeración"), collided.getSunatDescription());
     }
 
     @Test
     void tickets_are_checked_until_sunat_answers() {
-        TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> d.nextAttemptAt = null);
+        TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> d.setNextAttemptAt(null));
         EngineStub.on("/v1/send", only(doc.marker(), () -> Reply.ok(sendAnswer("in_progress", null, null, "1712345678901"))));
         EngineStub.on("/v1/verify-ticket", body -> Reply.ok(sendAnswer("accepted", 0, null, null)));
         docs.dueNow(tenant, doc.id());
-        Document checking = awaitStatus(doc, "in_progress");
-        assertEquals("1712345678901", checking.ticket);
+        DocumentEntity checking = awaitStatus(doc, "in_progress");
+        assertEquals("1712345678901", checking.getTicket());
 
         docs.dueNow(tenant, doc.id());
         awaitStatus(doc, "accepted");
@@ -227,7 +227,7 @@ class AttemptTest {
 
     @Test
     void a_stale_attempt_writes_nothing() throws Exception {
-        TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> d.nextAttemptAt = null);
+        TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> d.setNextAttemptAt(null));
         CountDownLatch inside = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         EngineStub.on("/v1/send", only(doc.marker(), () -> {
@@ -243,35 +243,35 @@ class AttemptTest {
         assertTrue(inside.await(20, TimeUnit.SECONDS));
 
         // Meanwhile a newer attempt started (e.g. after recovery): attempts moved on
-        docs.update(tenant, doc.id(), d -> d.attempts = d.attempts + 1);
+        docs.update(tenant, doc.id(), d -> d.setAttempts(d.getAttempts() + 1));
         release.countDown();
 
         await().atMost(WAIT).until(() -> EngineStub.requests("/v1/send", doc.marker()).size() == 1);
         Thread.sleep(1000);
-        Document after = docs.get(tenant, doc.id());
-        assertEquals("pending_send", after.status, "the stale attempt's rejection was not written");
+        DocumentEntity after = docs.get(tenant, doc.id());
+        assertEquals("pending_send", after.getStatus(), "the stale attempt's rejection was not written");
     }
 
     @Test
     void identical_failures_flag_needs_attention_but_keep_retrying() {
         TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> {
-            d.nextAttemptAt = null;
-            d.lastOutcome = "NOT_DELIVERED:-";
-            d.sameOutcomeCount = 9;
+            d.setNextAttemptAt(null);
+            d.setLastOutcome("NOT_DELIVERED:-");
+            d.setSameOutcomeCount(9);
         });
         EngineStub.on("/v1/send", only(doc.marker(), () -> Reply.ok(sendAnswer("not_delivered", null, null, null))));
         docs.dueNow(tenant, doc.id());
 
-        await().atMost(WAIT).until(() -> "needs_attention".equals(docs.get(tenant, doc.id()).holdReason));
-        Document flagged = docs.get(tenant, doc.id());
-        assertEquals("pending_send", flagged.status);
-        assertTrue(flagged.nextAttemptAt.isAfter(Instant.now().plus(Duration.ofHours(5))), "retried every 6 hours");
+        await().atMost(WAIT).until(() -> "needs_attention".equals(docs.get(tenant, doc.id()).getHoldReason()));
+        DocumentEntity flagged = docs.get(tenant, doc.id());
+        assertEquals("pending_send", flagged.getStatus());
+        assertTrue(flagged.getNextAttemptAt().isAfter(Instant.now().plus(Duration.ofHours(5))), "retried every 6 hours");
     }
 
     @Test
     void held_documents_are_not_attempted_until_released() throws Exception {
         TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> {
-            d.holdReason = "operator";
+            d.setHoldReason("operator");
         });
         Thread.sleep(1500);
         assertEquals(0, sends(doc));

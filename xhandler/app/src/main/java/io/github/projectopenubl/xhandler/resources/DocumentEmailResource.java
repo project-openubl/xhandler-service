@@ -4,10 +4,10 @@ import io.github.projectopenubl.xhandler.jobs.handlers.DocumentEmailJob;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Job;
+import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -64,12 +64,12 @@ public class DocumentEmailResource {
     @Transactional
     public Response send(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId, @Valid EmailRequest request) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-        Document doc = Document.findById(documentId);
+        DocumentEntity doc = DocumentEntity.findById(documentId);
         if (doc == null) {
             throw ApiException.notFound();
         }
-        Company company = Company.findById(doc.companyId);
-        if (!"production".equals(doc.sunatEnv) && company.rucVerifiedAt == null) {
+        CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
+        if (!"production".equals(doc.getSunatEnv()) && company.getRucVerifiedAt() == null) {
             // Test documents from an unverified company (any RUC) must not reach third parties
             throw ApiException.conflict("ruc_not_verified", "Verifique el RUC de la empresa para enviar documentos de prueba por correo.");
         }
@@ -89,10 +89,10 @@ public class DocumentEmailResource {
         if (suppressed.size() == request.to().size()) {
             throw ApiException.invalid("email_suppressed", "Los destinatarios rebotaron antes y no se les envía correo.", String.join(", ", suppressed));
         }
-        Job job = jobs.enqueue(scope, DocumentEmailJob.NAME, 3, Map.of("document_id", documentId.toString(), "to", request.to(), "cc", cc,
+        JobEntity job = jobs.enqueue(scope, DocumentEmailJob.NAME, 3, Map.of("document_id", documentId.toString(), "to", request.to(), "cc", cc,
                 "include_cdr", Boolean.TRUE.equals(request.includeCdr())), List.of(), null);
         auditor.record(scope, "document.email_requested", "document", documentId, Map.of("to", String.join(",", request.to())));
-        return Response.status(202).entity(new Queued(job.id, "xh:job:" + job.id)).build();
+        return Response.status(202).entity(new Queued(job.getId(), "xh:job:" + job.getId())).build();
     }
 
     /**
@@ -101,17 +101,17 @@ public class DocumentEmailResource {
      * so it does no I/O (§10.8).
      */
     void onAccepted(@Observes DocumentStatusChanged change) {
-        Document doc = change.document();
-        if (!Document.ACCEPTED.contains(doc.status) || Document.ACCEPTED.contains(change.previousStatus()) || doc.isSummary()
-                || !"production".equals(doc.sunatEnv)) {
+        DocumentEntity doc = change.document();
+        if (!DocumentEntity.ACCEPTED.contains(doc.getStatus()) || DocumentEntity.ACCEPTED.contains(change.previousStatus()) || doc.isSummary()
+                || !"production".equals(doc.getSunatEnv())) {
             return;
         }
-        Company company = Company.findById(doc.companyId);
-        if (company == null || !company.emailOnAccept) {
+        CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
+        if (company == null || !company.isEmailOnAccept()) {
             return;
         }
-        jobs.enqueue(new TenantScope(doc.tenantId, Actor.PLATFORM, Role.PLATFORM), DocumentEmailJob.NAME, 3,
-                Map.of("document_id", doc.id.toString(), "to_customer", true, "to", List.of(), "cc", List.of(), "include_cdr", false),
+        jobs.enqueue(new TenantScope(doc.getTenantId(), Actor.PLATFORM, Role.PLATFORM), DocumentEmailJob.NAME, 3,
+                Map.of("document_id", doc.getId().toString(), "to_customer", true, "to", List.of(), "cc", List.of(), "include_cdr", false),
                 List.of(), change.correlationId());
     }
 

@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.AuditLog;
+import io.github.projectopenubl.xhandler.models.jpa.entities.AuditLogEntity;
 
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -36,9 +36,9 @@ public class AuditResource {
         access.enter(tenantId, Role.ADMIN);
         int size = Page.limit(limit);
         int from = Page.offset(offset);
-        List<AuditLog> entries = AuditLog.find("order by at desc, id desc").range(from, from + size - 1).list();
+        List<AuditLogEntity> entries = AuditLogEntity.find("order by at desc, id desc").range(from, from + size - 1).list();
         return new Page<>(entries.stream()
-                .map(e -> new AuditEntry(e.at, e.actor, e.action, e.objectType, e.objectId, e.details))
+                .map(e -> new AuditEntry(e.getAt(), e.getActor(), e.getAction(), e.getObjectType(), e.getObjectId(), e.getDetails()))
                 .toList(), size, from);
     }
 }

@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.representations.idm;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.math.BigDecimal;
@@ -53,16 +53,16 @@ public record DocumentView(
 
     public record Customer(String tipo, String numero, String nombre) {}
 
-    public static DocumentView of(Document d) {
+    public static DocumentView of(DocumentEntity d) {
         return of(d, null, null);
     }
 
-    public static DocumentView of(Document d, String accessUrl, String qr) {
-        return new DocumentView(d.id, "xh:document:" + d.id, d.companyId, d.sunatEnv, d.kind, d.tipoComprobante, d.serie, d.numero,
-                d.serieNumero(), d.fechaEmision, d.deadlineAt, d.status, d.holdReason, d.sunatCode, d.sunatDescription, d.sunatNotes,
-                d.codeClass, d.digestValue, d.moneda, d.total,
-                d.customerNumero == null ? null : new Customer(d.customerTipo, d.customerNumero, d.customerNombre), d.labels,
-                d.deliveredAt, d.deliveredSource, d.attempts, d.nextAttemptAt, d.firstSentAt, d.cdrReceivedAt, d.affectedDocumentId,
-                d.summaryDocumentId, d.voidedByDocumentId, d.createdAt, accessUrl, qr);
+    public static DocumentView of(DocumentEntity d, String accessUrl, String qr) {
+        return new DocumentView(d.getId(), "xh:document:" + d.getId(), d.getCompanyId(), d.getSunatEnv(), d.getKind(), d.getTipoComprobante(), d.getSerie(), d.getNumero(),
+                d.serieNumero(), d.getFechaEmision(), d.getDeadlineAt(), d.getStatus(), d.getHoldReason(), d.getSunatCode(), d.getSunatDescription(), d.getSunatNotes(),
+                d.getCodeClass(), d.getDigestValue(), d.getMoneda(), d.getTotal(),
+                d.getCustomerNumero() == null ? null : new Customer(d.getCustomerTipo(), d.getCustomerNumero(), d.getCustomerNombre()), d.getLabels(),
+                d.getDeliveredAt(), d.getDeliveredSource(), d.getAttempts(), d.getNextAttemptAt(), d.getFirstSentAt(), d.getCdrReceivedAt(), d.getAffectedDocumentId(),
+                d.getSummaryDocumentId(), d.getVoidedByDocumentId(), d.getCreatedAt(), accessUrl, qr);
     }
 }

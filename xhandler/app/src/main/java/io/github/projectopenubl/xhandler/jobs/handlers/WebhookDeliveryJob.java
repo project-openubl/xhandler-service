@@ -1,8 +1,8 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.clients.Egress;
-import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookDelivery;
-import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookSubscription;
+import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookDeliveryEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookSubscriptionEntity;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
@@ -107,18 +107,18 @@ public class WebhookDeliveryJob implements JobHandler {
         record Request(String url, byte[] body, byte[] secret, String eventId, String type) {}
         Request request = QuarkusTransaction.requiringNew().call(() -> {
             io.github.projectopenubl.xhandler.security.TenantScope scope = access.enterAsPlatform(tenantId);
-            WebhookDelivery delivery = WebhookDelivery.findById(id);
-            WebhookSubscription subscription = WebhookSubscription.findById(delivery.subscriptionId);
-            if (subscription == null || subscription.deletedAt != null || !subscription.active) {
-                delivery.status = "failed";
-                delivery.lastError = "subscription removed or disabled";
-                delivery.nextAttemptAt = null;
+            WebhookDeliveryEntity delivery = WebhookDeliveryEntity.findById(id);
+            WebhookSubscriptionEntity subscription = WebhookSubscriptionEntity.findById(delivery.getSubscriptionId());
+            if (subscription == null || subscription.getDeletedAt() != null || !subscription.isActive()) {
+                delivery.setStatus("failed");
+                delivery.setLastError("subscription removed or disabled");
+                delivery.setNextAttemptAt(null);
                 return null;
             }
             // Reads of secrets are audited (AGENTS.md)
-            auditor.record(scope, "webhook.secret_used", "webhook", subscription.id, Map.of("delivery_id", id.toString()));
-            return new Request(subscription.url, json.writeValueAsBytes(delivery.payload), box.open(subscription.sealed(),
-                    subscription.context()), delivery.eventId.toString(), delivery.eventType);
+            auditor.record(scope, "webhook.secret_used", "webhook", subscription.getId(), Map.of("delivery_id", id.toString()));
+            return new Request(subscription.getUrl(), json.writeValueAsBytes(delivery.getPayload()), box.open(subscription.sealed(),
+                    subscription.context()), delivery.getEventId().toString(), delivery.getEventType());
         });
         if (request == null) {
             return false;
@@ -161,24 +161,24 @@ public class WebhookDeliveryJob implements JobHandler {
         String finalError = error;
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            WebhookDelivery delivery = WebhookDelivery.findById(id, LockModeType.PESSIMISTIC_WRITE);
-            if (delivery == null || delivery.attempts != attempts || !"pending".equals(delivery.status)) {
+            WebhookDeliveryEntity delivery = WebhookDeliveryEntity.findById(id, LockModeType.PESSIMISTIC_WRITE);
+            if (delivery == null || delivery.getAttempts() != attempts || !"pending".equals(delivery.getStatus())) {
                 return;
             }
             Instant now = Instant.now();
-            delivery.attempts++;
-            delivery.lastStatusCode = finalStatus;
-            delivery.lastError = finalError == null ? null : truncate(finalError);
-            delivery.updatedAt = now;
+            delivery.setAttempts(delivery.getAttempts() + 1);
+            delivery.setLastStatusCode(finalStatus);
+            delivery.setLastError(finalError == null ? null : truncate(finalError));
+            delivery.setUpdatedAt(now);
             if (finalError == null) {
-                delivery.status = "delivered";
-                delivery.deliveredAt = now;
-                delivery.nextAttemptAt = null;
-            } else if (delivery.attempts >= MAX_ATTEMPTS) {
-                delivery.status = "failed";
-                delivery.nextAttemptAt = null;
+                delivery.setStatus("delivered");
+                delivery.setDeliveredAt(now);
+                delivery.setNextAttemptAt(null);
+            } else if (delivery.getAttempts() >= MAX_ATTEMPTS) {
+                delivery.setStatus("failed");
+                delivery.setNextAttemptAt(null);
             } else {
-                delivery.nextAttemptAt = now.plus(BACKOFF.get(Math.min(delivery.attempts - 1, BACKOFF.size() - 1)));
+                delivery.setNextAttemptAt(now.plus(BACKOFF.get(Math.min(delivery.getAttempts() - 1, BACKOFF.size() - 1))));
             }
         });
         if (error != null) {

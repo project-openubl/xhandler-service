@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.utils.Times;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -86,8 +86,8 @@ public class PseResource {
     public AuthorizationView authorize(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @Valid Authorization request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.findForUpdate(companyId);
-        if (company.rucVerifiedAt == null) {
+        CompanyEntity company = CompanyResource.findForUpdate(companyId);
+        if (company.getRucVerifiedAt() == null) {
             throw ApiException.conflict("ruc_not_verified", "Verifique el RUC de la empresa antes de registrar la autorización de PSE.");
         }
         if (request.authorizedAt().isAfter(io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima())) {
@@ -113,7 +113,7 @@ public class PseResource {
         if (!pdf && !png && !jpeg) {
             throw ApiException.invalid("invalid_request", "La evidencia debe ser un PDF, PNG o JPEG.", null);
         }
-        String evidence = files.put(company.tenantId, bytes).key();
+        String evidence = files.put(company.getTenantId(), bytes).key();
         UUID id = Ids.newId();
         em.createNativeQuery("""
                         INSERT INTO xhandler.pse_authorization (id, tenant_id, company_id, authorized_at, evidence_ref, registered_by)
@@ -134,7 +134,7 @@ public class PseResource {
     @Transactional
     public RevokedView revoke(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.findForUpdate(companyId);
+        CompanyEntity company = CompanyResource.findForUpdate(companyId);
         long pending = ((Number) em.createNativeQuery("""
                         SELECT count(*) FROM xhandler.document WHERE company_id = :c AND emission_mode = 'pse'
                           AND status IN ('pending_send', 'in_progress', 'unknown', 'voiding')""").setParameter("c", companyId).getSingleResult())
@@ -150,12 +150,12 @@ public class PseResource {
         if (revoked == 0) {
             throw ApiException.notFound();
         }
-        company.emissionMode = "software";
+        company.setEmissionMode("software");
         auditor.record(scope, "pse.authorization_revoked", "company", companyId);
-        notifications.publish(tenantId, Notifications.PSE_AUTHORIZATION, "Autorización de PSE revocada: " + company.ruc,
-                "La empresa " + company.razonSocial + " dejó de autorizar a la plataforma como PSE. Sus documentos se firmarán con su propio "
+        notifications.publish(tenantId, Notifications.PSE_AUTHORIZATION, "Autorización de PSE revocada: " + company.getRuc(),
+                "La empresa " + company.getRazonSocial() + " dejó de autorizar a la plataforma como PSE. Sus documentos se firmarán con su propio "
                         + "certificado y se enviarán con su usuario SOL.", null);
-        return new RevokedView(companyId, company.emissionMode);
+        return new RevokedView(companyId, company.getEmissionMode());
     }
 
     @Operation(operationId = "setEmissionMode")
@@ -165,21 +165,21 @@ public class PseResource {
     public CompanyResource.CompanyView mode(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @Valid EmissionMode request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        Company company = CompanyResource.findForUpdate(companyId);
+        CompanyEntity company = CompanyResource.findForUpdate(companyId);
         if ("pse".equals(request.emissionMode())) {
             if (em.createNativeQuery("SELECT 1 FROM xhandler.pse_authorization WHERE company_id = :c AND revoked_at IS NULL AND approved_at IS NOT NULL")
                     .setParameter("c", companyId).getResultList().isEmpty()) {
                 throw ApiException.conflict("pse_not_authorized", "La autorización a la plataforma como PSE no está registrada o aún no fue aprobada.");
             }
-            if (company.oseObligated || "ose".equals(company.submissionRoute)) {
+            if (company.isOseObligated() || "ose".equals(company.getSubmissionRoute())) {
                 // A company that sends through an OSE can't also send directly as PSE (RS 117-2017 art. 12.2)
                 throw ApiException.conflict("pse_not_allowed", "La empresa emite a través de un OSE: no puede usar a la plataforma como PSE.");
             }
-            if ("production".equals(company.sunatEnv) && platformKeys.active("pse").isEmpty()) {
+            if ("production".equals(company.getSunatEnv()) && platformKeys.active("pse").isEmpty()) {
                 throw ApiException.conflict("pse_unavailable", "La plataforma aún no opera como PSE en producción.");
             }
         }
-        company.emissionMode = request.emissionMode();
+        company.setEmissionMode(request.emissionMode());
         auditor.record(scope, "company.emission_mode_changed", "company", companyId, Map.of("mode", request.emissionMode()));
         return CompanyResource.view(company);
     }

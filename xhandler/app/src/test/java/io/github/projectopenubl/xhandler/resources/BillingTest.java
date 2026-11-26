@@ -121,9 +121,9 @@ class BillingTest {
                 .body("usage.plan.code", equalTo("free")).body("usage.plan.production_per_month", equalTo(100));
         for (int i = 0; i < 99; i++) {
             docs.pending(tenant, company, "t-" + UUID.randomUUID() + ":invoice", d -> {
-                d.sunatEnv = "production";
-                d.status = "accepted";
-                d.nextAttemptAt = null;
+                d.setSunatEnv("production");
+                d.setStatus("accepted");
+                d.setNextAttemptAt(null);
             });
         }
         String path = "/api/v1/tenants/" + tenant + "/companies/" + company + "/documents";
@@ -154,7 +154,7 @@ class BillingTest {
         EngineStub.LAGO_PLAN.set("business");
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            io.github.projectopenubl.xhandler.models.jpa.entities.Document.getEntityManager().createNativeQuery(
+            io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity.getEntityManager().createNativeQuery(
                     "UPDATE xhandler.entitlement SET source = 'lago', synced_at = now() - interval '30 days' WHERE tenant_id = :t")
                     .setParameter("t", tenant).executeUpdate();
         });

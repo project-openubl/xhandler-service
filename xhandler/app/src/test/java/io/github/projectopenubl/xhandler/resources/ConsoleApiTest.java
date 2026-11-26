@@ -287,14 +287,14 @@ class ConsoleApiTest {
         UUID company = companies.verified(tenant, "fake");
         String dni = String.valueOf(10_000_000 + ThreadLocalRandom.current().nextInt(89_999_999));
         String mine = docs.pending(tenant, company, "fake:invoice", d -> {
-            d.customerTipo = "1";
-            d.customerNumero = dni;
-            d.customerNombre = "Juana 100% Pérez";
+            d.setCustomerTipo("1");
+            d.setCustomerNumero(dni);
+            d.setCustomerNombre("Juana 100% Pérez");
         }).id().toString();
         String other = docs.pending(tenant, company, "fake:invoice", d -> {
-            d.customerTipo = "6";
-            d.customerNumero = "20100000001";
-            d.customerNombre = "Juanito SAC";
+            d.setCustomerTipo("6");
+            d.setCustomerNumero("20100000001");
+            d.setCustomerNombre("Juanito SAC");
         }).id().toString();
         String base = "/api/v1/tenants/" + tenant + "/documents";
 

@@ -1,14 +1,14 @@
 package io.github.projectopenubl.xhandler.managers;
 
 import io.github.projectopenubl.xhandler.keys.SecretBox;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Credential;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CredentialEntity;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
@@ -31,31 +31,31 @@ public class CredentialService {
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
-    public Credential store(TenantScope scope, Company company, String kind, Map<String, String> fields, String label) {
-        Credential credential = Credential.<Credential>find("companyId = ?1 and kind = ?2", company.id, kind)
+    public CredentialEntity store(TenantScope scope, CompanyEntity company, String kind, Map<String, String> fields, String label) {
+        CredentialEntity credential = CredentialEntity.<CredentialEntity>find("companyId = ?1 and kind = ?2", company.getId(), kind)
                 .firstResultOptional()
                 .orElseGet(() -> {
-                    Credential c = new Credential();
-                    c.id = Ids.newId();
-                    c.tenantId = company.tenantId;
-                    c.companyId = company.id;
-                    c.kind = kind;
+                    CredentialEntity c = new CredentialEntity();
+                    c.setId(Ids.newId());
+                    c.setTenantId(company.getTenantId());
+                    c.setCompanyId(company.getId());
+                    c.setKind(kind);
                     return c;
                 });
-        credential.label = label;
+        credential.setLabel(label);
         credential.seal(box.seal(toJson(fields), credential.context()));
         credential.persist();
-        auditor.record(scope, "credential.stored", "credential", credential.id, Map.of("kind", kind, "company_id", company.id.toString()));
+        auditor.record(scope, "credential.stored", "credential", credential.getId(), Map.of("kind", kind, "company_id", company.getId().toString()));
         return credential;
     }
 
     /** The decrypted fields of a secret, for sending to SUNAT etc. Audited. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Optional<Map<String, String>> read(TenantScope scope, Company company, String kind, String purpose) {
-        return Credential.<Credential>find("companyId = ?1 and kind = ?2", company.id, kind)
+    public Optional<Map<String, String>> read(TenantScope scope, CompanyEntity company, String kind, String purpose) {
+        return CredentialEntity.<CredentialEntity>find("companyId = ?1 and kind = ?2", company.getId(), kind)
                 .firstResultOptional()
                 .map(credential -> {
-                    auditor.record(scope, "credential.read", "credential", credential.id, Map.of("kind", kind, "purpose", purpose));
+                    auditor.record(scope, "credential.read", "credential", credential.getId(), Map.of("kind", kind, "purpose", purpose));
                     return fromJson(box.open(credential.sealed(), credential.context()));
                 });
     }

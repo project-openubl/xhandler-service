@@ -3,7 +3,7 @@ package io.github.projectopenubl.xhandler.jobs.handlers;
 import io.github.projectopenubl.xhandler.managers.RegisterRows;
 import io.github.projectopenubl.xhandler.utils.RegisterFormats;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.files.FileStore;
@@ -60,12 +60,12 @@ public class ReportJob implements JobHandler {
             access.enterAsPlatform(context.tenantId());
             Object[] r = (Object[]) em.createNativeQuery("SELECT company_id, sunat_env, register, format, period FROM xhandler.report WHERE id = :id")
                     .setParameter("id", reportId).getSingleResult();
-            Company company = Company.findById(r[0]);
+            CompanyEntity company = CompanyEntity.findById(r[0]);
             String register = (String) r[2];
             List<RegisterRows.Row> rows = "sales".equals(register)
-                    ? registers.sales(company.id, (String) r[1], (String) r[4])
-                    : registers.purchases(company.id, (String) r[4]);
-            return new Input(register, (String) r[3], (String) r[4], company.ruc, company.razonSocial, rows);
+                    ? registers.sales(company.getId(), (String) r[1], (String) r[4])
+                    : registers.purchases(company.getId(), (String) r[4]);
+            return new Input(register, (String) r[3], (String) r[4], company.getRuc(), company.getRazonSocial(), rows);
         });
         long missing = input.rows().stream().filter(RegisterRows.Row::amountsMissing).count();
         if (missing > 0) {

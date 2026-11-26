@@ -1,12 +1,12 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
-import io.github.projectopenubl.xhandler.models.jpa.entities.OseEndpoint;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.OseEndpointEntity;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Credential;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CredentialEntity;
 import io.github.projectopenubl.xhandler.managers.CredentialService;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -60,29 +60,29 @@ public class Routes {
      * SUNAT's public user. Refuses routes the company may not use.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Assignment assign(Company company, String sunatEnv, String tipoComprobante) {
+    public Assignment assign(CompanyEntity company, String sunatEnv, String tipoComprobante) {
         String service = service(tipoComprobante);
-        if ("pse".equals(company.emissionMode) && "production".equals(sunatEnv) && !"despatch".equals(service)) {
+        if ("pse".equals(company.getEmissionMode()) && "production".equals(sunatEnv) && !"despatch".equals(service)) {
             // As PSE the platform sends with its own SOL users, spread over the pool (§10.2)
             UUID member = platformCredentials.pick("pse_sol").orElseThrow(() ->
                     ApiException.invalid("no_credentials", "La plataforma no tiene usuarios SOL de PSE activos.", null));
             return new Assignment(endpoint(sunatEnv, tipoComprobante), member);
         }
         // Test environments never reach a real OSE: only production documents go through it
-        boolean viaOse = "ose".equals(company.submissionRoute) && !"despatch".equals(service) && "production".equals(sunatEnv);
-        if (!viaOse && company.oseObligated && "production".equals(sunatEnv) && !"despatch".equals(service)) {
+        boolean viaOse = "ose".equals(company.getSubmissionRoute()) && !"despatch".equals(service) && "production".equals(sunatEnv);
+        if (!viaOse && company.isOseObligated() && "production".equals(sunatEnv) && !"despatch".equals(service)) {
             throw ApiException.invalid("invalid_route",
                     "La empresa está obligada a emitir a través de un OSE: configure su OSE antes de emitir.", null);
         }
         if (viaOse) {
-            OseEndpoint ose = OseEndpoint.of(company.id).orElseThrow(() ->
+            OseEndpointEntity ose = OseEndpointEntity.of(company.getId()).orElseThrow(() ->
                     ApiException.invalid("invalid_route", "La empresa usa un OSE pero no tiene uno configurado.", null));
-            if ("perception".equals(service) && ose.perceptionUrl == null) {
+            if ("perception".equals(service) && ose.getPerceptionUrl() == null) {
                 throw ApiException.invalid("invalid_route", "El OSE de la empresa no tiene un servicio para percepciones y retenciones.", null);
             }
             UUID credential = credentialId(company, "ose").orElseThrow(() ->
                     ApiException.invalid("no_credentials", "Registre las credenciales del OSE de la empresa.", null));
-            return new Assignment("ose:" + ose.id + ":" + service, credential);
+            return new Assignment("ose:" + ose.getId() + ":" + service, credential);
         }
         // A company's real SOL/GRE credentials go to SUNAT production only, never to beta or the fake
         Optional<UUID> credential = "production".equals(sunatEnv)
@@ -101,11 +101,11 @@ public class Routes {
      * original — an RA for a factura sent directly goes directly, whatever the company's route now.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Assignment assignLike(Company company, String sunatEnv, String tipoComprobante, Document original) {
-        if (original.endpoint.startsWith("ose:")) {
+    public Assignment assignLike(CompanyEntity company, String sunatEnv, String tipoComprobante, DocumentEntity original) {
+        if (original.getEndpoint().startsWith("ose:")) {
             return assign(company, sunatEnv, tipoComprobante);
         }
-        if ("pse".equals(original.emissionMode) && "production".equals(sunatEnv)) {
+        if ("pse".equals(original.getEmissionMode()) && "production".equals(sunatEnv)) {
             // A PSE document is voided by the PSE too: the platform's pool
             UUID member = platformCredentials.pick("pse_sol").orElseThrow(() ->
                     ApiException.invalid("no_credentials", "La plataforma no tiene usuarios SOL de PSE activos.", null));
@@ -119,35 +119,35 @@ public class Routes {
         return new Assignment(sunatEnv + ":" + service, credential.orElse(null));
     }
 
-    private static Optional<UUID> credentialId(Company company, String kind) {
-        return Credential.<Credential>find("companyId = ?1 and kind = ?2", company.id, kind).firstResultOptional().map(c -> c.id);
+    private static Optional<UUID> credentialId(CompanyEntity company, String kind) {
+        return CredentialEntity.<CredentialEntity>find("companyId = ?1 and kind = ?2", company.getId(), kind).firstResultOptional().map(c -> c.getId());
     }
 
     /** Reads the secret (audited) and builds the target. Runs with the company's tenant open. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Target target(TenantScope scope, Company company, Document document) {
-        EngineModels.Environment environment = EngineModels.Environment.of(document.sunatEnv);
+    public Target target(TenantScope scope, CompanyEntity company, DocumentEntity document) {
+        EngineModels.Environment environment = EngineModels.Environment.of(document.getSunatEnv());
         EngineModels.Urls urls = null;
         String kind = document.isGuia() ? "gre" : "sol";
-        if (document.endpoint.startsWith("ose:")) {
+        if (document.getEndpoint().startsWith("ose:")) {
             kind = "ose";
-            UUID oseId = UUID.fromString(document.endpoint.split(":")[1]);
-            OseEndpoint ose = OseEndpoint.findById(oseId);
+            UUID oseId = UUID.fromString(document.getEndpoint().split(":")[1]);
+            OseEndpointEntity ose = OseEndpointEntity.findById(oseId);
             if (ose == null) {
                 throw new MissingCredentials("ose");
             }
-            urls = new EngineModels.Urls(ose.invoiceUrl, ose.perceptionUrl, null);
+            urls = new EngineModels.Urls(ose.getInvoiceUrl(), ose.getPerceptionUrl(), null);
         }
         EngineModels.Credentials secret = null;
-        if ("pse".equals(document.emissionMode) && "production".equals(document.sunatEnv) && !document.isGuia()) {
-            Map<String, String> fields = platformCredentials.read(document.credentialId, "pse_sol", "send:" + document.id);
-            auditor.record(scope, "platform_credential.used", "document", document.id, Map.of("purpose", "pse_sol"));
+        if ("pse".equals(document.getEmissionMode()) && "production".equals(document.getSunatEnv()) && !document.isGuia()) {
+            Map<String, String> fields = platformCredentials.read(document.getCredentialId(), "pse_sol", "send:" + document.getId());
+            auditor.record(scope, "platform_credential.used", "document", document.getId(), Map.of("purpose", "pse_sol"));
             return new Target(environment, new EngineModels.Credentials(fields.get("username"), fields.get("password"), null, null), null);
         }
-        if (document.credentialId != null) {
-            String purpose = "send:" + document.id;
+        if (document.getCredentialId() != null) {
+            String purpose = "send:" + document.getId();
             Map<String, String> fields = credentials.read(scope, company, kind, purpose).orElseThrow(() -> new MissingCredentials(
-                    document.endpoint.startsWith("ose:") ? "ose" : document.isGuia() ? "gre" : "sol"));
+                    document.getEndpoint().startsWith("ose:") ? "ose" : document.isGuia() ? "gre" : "sol"));
             secret = new EngineModels.Credentials(fields.get("username"), fields.get("password"), fields.get("client_id"),
                     fields.get("client_secret"));
         } else if (environment == EngineModels.Environment.PRODUCTION) {

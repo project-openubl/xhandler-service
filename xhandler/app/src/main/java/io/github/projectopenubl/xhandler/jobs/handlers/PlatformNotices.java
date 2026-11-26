@@ -55,11 +55,11 @@ public final class PlatformNotices {
                 for (Expiring e : expiring) {
                     QuarkusTransaction.requiringNew().run(() -> {
                         access.enterAsPlatform(e.tenantId());
-                        var company = io.github.projectopenubl.xhandler.models.jpa.entities.Company.<io.github.projectopenubl.xhandler.models.jpa.entities.Company>findById(e.companyId());
+                        var company = io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity.<io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity>findById(e.companyId());
                         long left = Math.max(0, ChronoUnit.DAYS.between(Instant.now(), e.validUntil()));
                         notifications.publish(e.tenantId(), Notifications.CERTIFICATE_EXPIRING,
-                                "Certificado digital por vencer: " + company.ruc,
-                                "El certificado digital de " + company.razonSocial + " vence en " + left + " día(s) (" + e.validUntil()
+                                "Certificado digital por vencer: " + company.getRuc(),
+                                "El certificado digital de " + company.getRazonSocial() + " vence en " + left + " día(s) (" + e.validUntil()
                                         + "). Suba uno nuevo para seguir firmando.", null);
                         em.createNativeQuery("UPDATE xhandler.signing_key SET expiry_notified_days = :d WHERE id = :id")
                                 .setParameter("d", days).setParameter("id", e.keyId()).executeUpdate();

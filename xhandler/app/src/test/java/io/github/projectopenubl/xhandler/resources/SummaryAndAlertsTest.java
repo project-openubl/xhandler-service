@@ -2,7 +2,7 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.jobs.handlers.BoletaSummaryFallback;
 import io.github.projectopenubl.xhandler.jobs.handlers.DeadlineAlerts;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import static io.github.projectopenubl.xhandler.Api.as;
@@ -109,13 +109,13 @@ class SummaryAndAlertsTest {
             as("alice").body(Map.of("url", receiver.url(), "events", List.of("document.delayed")))
                     .post("/api/v1/tenants/" + tenant + "/webhooks").then().statusCode(201);
             TestDocuments.Created doc = docs.pending(tenant, company, "t-" + UUID.randomUUID() + ":invoice", d -> {
-                d.holdReason = "operator";
-                d.deadlineAt = Instant.now().plus(Duration.ofHours(2));
+                d.setHoldReason("operator");
+                d.setDeadlineAt(Instant.now().plus(Duration.ofHours(2)));
             });
             alerts.run(context("documents.deadline-alerts"));
             alerts.run(context("documents.deadline-alerts"));
-            Document alerted = docs.get(tenant, doc.id());
-            assertNotNull(alerted.deadlineAlertedAt);
+            DocumentEntity alerted = docs.get(tenant, doc.id());
+            assertNotNull(alerted.getDeadlineAlertedAt());
             await().atMost(WAIT).until(() -> receiver.types().contains("document.delayed"));
             Thread.sleep(500);
             assertEquals(1, receiver.received().stream().filter(r -> r.body().contains(doc.id().toString())).count(), "alerted once");

@@ -119,7 +119,7 @@ public class CatalogResource {
         access.enter(tenantId, Role.OPERATOR);
         check(kind);
         var company = CompanyResource.find(companyId);
-        return Response.status(201).entity(upsert(company.tenantId, companyId, kind, data, null)).build();
+        return Response.status(201).entity(upsert(company.getTenantId(), companyId, kind, data, null)).build();
     }
 
     @Operation(operationId = "updateCatalogEntry")

@@ -3,7 +3,7 @@ package io.github.projectopenubl.xhandler.resources;
 import io.github.projectopenubl.xhandler.keys.SecretBox;
 import io.github.projectopenubl.xhandler.managers.CredentialService;
 import io.github.projectopenubl.xhandler.managers.KeyRotation;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Credential;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CredentialEntity;
 
 import static io.github.projectopenubl.xhandler.Api.as;
 import static io.github.projectopenubl.xhandler.Api.createCompany;
@@ -17,8 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.models.jpa.entities.AuditLog;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.AuditLogEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.github.projectopenubl.xhandler.keys.TestVaults;
 import io.github.projectopenubl.xhandler.security.Actor;
@@ -63,15 +63,15 @@ class CredentialTest {
 
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            Credential stored = Credential.find("companyId = ?1 and kind = 'sol'", company).firstResult();
-            String raw = new String(stored.ciphertext, StandardCharsets.ISO_8859_1);
+            CredentialEntity stored = CredentialEntity.find("companyId = ?1 and kind = 'sol'", company).firstResult();
+            String raw = new String(stored.getCiphertext(), StandardCharsets.ISO_8859_1);
             assertFalse(raw.contains("s3cr3t-clave"));
-            assertEquals("test-2", stored.masterKeyId);
+            assertEquals("test-2", stored.getMasterKeyId());
 
-            Map<String, String> read = credentials.read(platform(tenant), Company.findById(company), "sol", "test").orElseThrow();
+            Map<String, String> read = credentials.read(platform(tenant), CompanyEntity.findById(company), "sol", "test").orElseThrow();
             assertEquals("s3cr3t-clave", read.get("password"));
-            assertTrue(AuditLog.count("action = 'credential.read' and objectId = ?1", stored.id.toString()) >= 1);
-            assertTrue(AuditLog.count("action = 'credential.stored' and objectId = ?1", stored.id.toString()) >= 1);
+            assertTrue(AuditLogEntity.count("action = 'credential.read' and objectId = ?1", stored.getId().toString()) >= 1);
+            assertTrue(AuditLogEntity.count("action = 'credential.stored' and objectId = ?1", stored.getId().toString()) >= 1);
         });
     }
 
@@ -93,15 +93,15 @@ class CredentialTest {
         SecretBox oldBox = new SecretBox(TestVaults.software("test-1"));
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenant);
-            Credential c = new Credential();
-            c.id = Ids.newId();
-            c.tenantId = tenant;
-            c.companyId = company;
-            c.kind = "smtp";
-            c.label = "smtp";
+            CredentialEntity c = new CredentialEntity();
+            c.setId(Ids.newId());
+            c.setTenantId(tenant);
+            c.setCompanyId(company);
+            c.setKind("smtp");
+            c.setLabel("smtp");
             c.seal(oldBox.seal("{\"password\":\"vieja\"}".getBytes(StandardCharsets.UTF_8), c.context()));
             c.persist();
-            return c.id;
+            return c.getId();
         });
 
         KeyRotation.Result result = rotation.rewrapAll();
@@ -109,9 +109,9 @@ class CredentialTest {
 
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
-            Credential c = Credential.findById(id);
-            assertEquals("test-2", c.masterKeyId);
-            Map<String, String> read = credentials.read(platform(tenant), Company.findById(company), "smtp", "test").orElseThrow();
+            CredentialEntity c = CredentialEntity.findById(id);
+            assertEquals("test-2", c.getMasterKeyId());
+            Map<String, String> read = credentials.read(platform(tenant), CompanyEntity.findById(company), "smtp", "test").orElseThrow();
             assertEquals("vieja", read.get("password"));
         });
     }

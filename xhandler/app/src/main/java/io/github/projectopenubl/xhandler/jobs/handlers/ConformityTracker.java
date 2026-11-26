@@ -2,8 +2,8 @@ package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
@@ -60,24 +60,24 @@ public class ConformityTracker implements JobHandler {
 
     /** Inside the transaction that recorded SUNAT's acceptance: no I/O, one insert. SIRE has no beta. */
     void onAccepted(@Observes DocumentStatusChanged change) {
-        Document d = change.document();
-        if ("voided".equals(d.status) && "01".equals(d.tipoComprobante)) {
+        DocumentEntity d = change.document();
+        if ("voided".equals(d.getStatus()) && "01".equals(d.getTipoComprobante())) {
             // A voided factura is no longer negotiable: stop following it
             em.createNativeQuery("UPDATE xhandler.conformity SET state = 'closed', resolved_at = now() WHERE document_id = :d AND state = 'pending'")
-                    .setParameter("d", d.id).executeUpdate();
+                    .setParameter("d", d.getId()).executeUpdate();
             return;
         }
         // Facturas negociables are between companies: the buyer is identified by RUC
-        if (!"01".equals(d.tipoComprobante) || !"credito".equals(d.paymentTerms) || !Document.ACCEPTED.contains(d.status)
-                || Document.ACCEPTED.contains(change.previousStatus()) || "beta".equals(d.sunatEnv) || !"6".equals(d.customerTipo)) {
+        if (!"01".equals(d.getTipoComprobante()) || !"credito".equals(d.getPaymentTerms()) || !DocumentEntity.ACCEPTED.contains(d.getStatus())
+                || DocumentEntity.ACCEPTED.contains(change.previousStatus()) || "beta".equals(d.getSunatEnv()) || !"6".equals(d.getCustomerTipo())) {
             return;
         }
         Instant now = Instant.now();
         em.createNativeQuery("""
                         INSERT INTO xhandler.conformity (id, tenant_id, company_id, document_id, buyer_ruc, accepted_at, window_ends_at)
                         VALUES (:id, :t, :c, :d, :buyer, :at, :ends) ON CONFLICT (document_id) DO NOTHING""")
-                .setParameter("id", Ids.newId()).setParameter("t", d.tenantId).setParameter("c", d.companyId).setParameter("d", d.id)
-                .setParameter("buyer", d.customerNumero).setParameter("at", now).setParameter("ends", now.plus(WINDOW)).executeUpdate();
+                .setParameter("id", Ids.newId()).setParameter("t", d.getTenantId()).setParameter("c", d.getCompanyId()).setParameter("d", d.getId())
+                .setParameter("buyer", d.getCustomerNumero()).setParameter("at", now).setParameter("ends", now.plus(WINDOW)).executeUpdate();
     }
 
     @Override
@@ -114,16 +114,16 @@ public class ConformityTracker implements JobHandler {
             TenantScope scope = access.enterAsPlatform(tenantId);
             Object[] c = (Object[]) em.createNativeQuery("SELECT document_id, window_ends_at, reminded_at FROM xhandler.conformity WHERE id = :id")
                     .setParameter("id", conformityId).getSingleResult();
-            Document doc = Document.findById(c[0]);
-            Company company = Company.findById(doc.companyId);
-            EngineModels.ConformityRequest request = credentials.read(scope, company, "sire", "conformity:" + doc.id)
-                    .map(f -> new EngineModels.ConformityRequest("fake".equals(doc.sunatEnv) ? EngineModels.Environment.FAKE
+            DocumentEntity doc = DocumentEntity.findById(c[0]);
+            CompanyEntity company = CompanyEntity.findById(doc.getCompanyId());
+            EngineModels.ConformityRequest request = credentials.read(scope, company, "sire", "conformity:" + doc.getId())
+                    .map(f -> new EngineModels.ConformityRequest("fake".equals(doc.getSunatEnv()) ? EngineModels.Environment.FAKE
                             : EngineModels.Environment.PRODUCTION,
                             new EngineModels.ApiCredentials(f.get("client_id"), f.get("client_secret"), f.get("username"), f.get("password")),
-                            company.ruc, doc.tipoComprobante, doc.serie, doc.numero))
+                            company.getRuc(), doc.getTipoComprobante(), doc.getSerie(), doc.getNumero()))
                     .orElse(null);
-            return new Call(doc.id, Times.toInstant(c[1]),
-                    Times.toInstant(c[2]), doc.sunatEnv, request);
+            return new Call(doc.getId(), Times.toInstant(c[1]),
+                    Times.toInstant(c[2]), doc.getSunatEnv(), request);
         });
         if (call.request() == null) {
             remindIfClosing(tenantId, conformityId, call.documentId(), call.windowEnds(), call.remindedAt());
@@ -169,7 +169,7 @@ public class ConformityTracker implements JobHandler {
             if (changed == 0) {
                 return;
             }
-            Document doc = Document.findById(documentId);
+            DocumentEntity doc = DocumentEntity.findById(documentId);
             Map<String, Object> data = new LinkedHashMap<>(WebhookEvents.documentData(doc));
             data.put("conformity", state);
             webhooks.publish(tenantId, "document.conformity_" + state, "xh:document:" + documentId, WebhookEvents.DOCUMENT_SCHEMA, data);
@@ -195,7 +195,7 @@ public class ConformityTracker implements JobHandler {
             if (changed == 0) {
                 return;
             }
-            Document doc = Document.findById(documentId);
+            DocumentEntity doc = DocumentEntity.findById(documentId);
             Map<String, Object> data = new LinkedHashMap<>(WebhookEvents.documentData(doc));
             data.put("window_ends_at", windowEnds.toString());
             webhooks.publish(tenantId, "document.conformity_reminder", "xh:document:" + documentId, WebhookEvents.DOCUMENT_SCHEMA, data);

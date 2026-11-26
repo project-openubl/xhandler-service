@@ -1,8 +1,8 @@
 package io.github.projectopenubl.xhandler.managers;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEvent;
-import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFile;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 import io.github.projectopenubl.xhandler.utils.DocumentTypes;
@@ -15,7 +15,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.keys.SignatureLog;
@@ -64,7 +64,7 @@ public class EmitService {
      * issue reserves no number and signs nothing. {@code issued} runs after the document insert and
      * marks the draft issued. Throwing from either rolls the emit back.
      */
-    public record DraftIssue(String key, Runnable guard, java.util.function.Consumer<Document> issued) {}
+    public record DraftIssue(String key, Runnable guard, java.util.function.Consumer<DocumentEntity> issued) {}
 
     private final TenantAccess access;
     private final Numbering numbering;
@@ -194,12 +194,12 @@ public class EmitService {
                 } else {
                     access.enter(tenantId, Role.OPERATOR);
                 }
-                Company company = Company.findById(companyId);
-                if (company == null || company.deletedAt != null) {
+                CompanyEntity company = CompanyEntity.findById(companyId);
+                if (company == null || company.getDeletedAt() != null) {
                     throw ApiException.notFound();
                 }
                 for (EmitQuota q : quota) {
-                    q.checkEmit(tenantId, company.sunatEnv);
+                    q.checkEmit(tenantId, company.getSunatEnv());
                 }
             });
         }
@@ -231,16 +231,16 @@ public class EmitService {
     }
 
     /** The company may emit this document type now: active, and authorized when it emits as PSE (§3.2). */
-    public void checkCompany(Company company, String tipo) {
-        io.github.projectopenubl.xhandler.models.jpa.entities.Tenant tenant = io.github.projectopenubl.xhandler.models.jpa.entities.Tenant.findById(company.tenantId);
-        if (tenant != null && "exited".equals(tenant.status)) {
+    public void checkCompany(CompanyEntity company, String tipo) {
+        io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity tenant = io.github.projectopenubl.xhandler.models.jpa.entities.TenantEntity.findById(company.getTenantId());
+        if (tenant != null && "exited".equals(tenant.getStatus())) {
             // Readable until its data is deleted, but it left: no new documents (§13)
             throw ApiException.conflict("tenant_exited", "La organización dejó la plataforma: no puede emitir comprobantes.");
         }
-        if (!company.active) {
+        if (!company.isActive()) {
             throw ApiException.conflict("company_inactive", "La empresa está desactivada.");
         }
-        if ("pse".equals(company.emissionMode) && "production".equals(company.sunatEnv) && !"09".equals(tipo) && !"31".equals(tipo)
+        if ("pse".equals(company.getEmissionMode()) && "production".equals(company.getSunatEnv()) && !"09".equals(tipo) && !"31".equals(tipo)
                 && !pseAuthorized(company)) {
             throw ApiException.conflict("pse_not_authorized",
                     "La empresa no tiene registrada su autorización a la plataforma como PSE en SUNAT Operaciones en Línea.");
@@ -271,8 +271,8 @@ public class EmitService {
         boundLockWaits();
         // Lock order: company → draft → series → documents (§10.8 rule 4). FOR SHARE: an environment
         // switch (FOR UPDATE) waits for running emits and blocks new ones.
-        Company company = Company.findById(companyId, LockModeType.PESSIMISTIC_READ);
-        if (company == null || company.deletedAt != null) {
+        CompanyEntity company = CompanyEntity.findById(companyId, LockModeType.PESSIMISTIC_READ);
+        if (company == null || company.getDeletedAt() != null) {
             throw ApiException.notFound();
         }
         if (draft != null) {
@@ -283,7 +283,7 @@ public class EmitService {
         String kind = document.get("kind").asText();
         ObjectNode spec = (ObjectNode) document.get("spec");
         String tipo = DocumentTypes.tipoComprobante(kind, spec);
-        String sunatEnv = company.sunatEnv;
+        String sunatEnv = company.getSunatEnv();
 
         checkCompany(company, tipo);
         Routes.Assignment route = routes.assign(company, sunatEnv, tipo);
@@ -293,8 +293,8 @@ public class EmitService {
         spec.put("fecha_emision", fecha.toString());
         String serie = chooseSerie(request, spec, company, tipo);
         long numero = numeroDado != null
-                ? numbering.claim(tenantId, company.id, sunatEnv, tipo, serie, numeroDado)
-                : numbering.reserve(company.id, sunatEnv, tipo, serie);
+                ? numbering.claim(tenantId, company.getId(), sunatEnv, tipo, serie, numeroDado)
+                : numbering.reserve(company.getId(), sunatEnv, tipo, serie);
         spec.put("serie_numero", serie + "-" + numero);
 
         EngineModels.BuildResponse built = engine.build(document);
@@ -316,43 +316,43 @@ public class EmitService {
         FileStore.Stored enriched = files.put(tenantId, bytes(built.enrichedJson()));
 
         Instant now = Instant.now();
-        Document doc = new Document();
-        doc.id = documentId;
-        doc.tenantId = tenantId;
-        doc.companyId = company.id;
-        doc.sunatEnv = sunatEnv;
-        doc.kind = kind;
-        doc.origin = origin;
-        doc.tipoComprobante = tipo;
-        doc.serie = serie;
-        doc.numero = numero;
-        doc.fechaEmision = fecha;
-        doc.issueYear = (short) fecha.getYear();
-        doc.deadlineAt = Deadlines.sendDeadline(tipo, serie, fecha);
-        doc.customerTipo = identity.customerTipo();
-        doc.customerNumero = identity.customerNumero();
-        doc.customerNombre = DocumentTypes.customerName(spec);
-        doc.moneda = identity.moneda();
-        doc.total = identity.total() == null ? null : new BigDecimal(identity.total());
-        doc.amounts = Document.amountsOf(identity.amounts());
-        doc.paymentTerms = paymentTerms(tipo, spec);
-        doc.status = "pending_send";
-        doc.digestValue = signed.digestValue();
-        doc.endpoint = route.endpoint();
-        doc.credentialId = route.credentialId();
+        DocumentEntity doc = new DocumentEntity();
+        doc.setId(documentId);
+        doc.setTenantId(tenantId);
+        doc.setCompanyId(company.getId());
+        doc.setSunatEnv(sunatEnv);
+        doc.setKind(kind);
+        doc.setOrigin(origin);
+        doc.setTipoComprobante(tipo);
+        doc.setSerie(serie);
+        doc.setNumero(numero);
+        doc.setFechaEmision(fecha);
+        doc.setIssueYear((short) fecha.getYear());
+        doc.setDeadlineAt(Deadlines.sendDeadline(tipo, serie, fecha));
+        doc.setCustomerTipo(identity.customerTipo());
+        doc.setCustomerNumero(identity.customerNumero());
+        doc.setCustomerNombre(DocumentTypes.customerName(spec));
+        doc.setMoneda(identity.moneda());
+        doc.setTotal(identity.total() == null ? null : new BigDecimal(identity.total()));
+        doc.setAmounts(DocumentEntity.amountsOf(identity.amounts()));
+        doc.setPaymentTerms(paymentTerms(tipo, spec));
+        doc.setStatus("pending_send");
+        doc.setDigestValue(signed.digestValue());
+        doc.setEndpoint(route.endpoint());
+        doc.setCredentialId(route.credentialId());
         // GRE is always signed and sent by the issuer itself, never by the PSE
-        doc.emissionMode = doc.isGuia() ? "software" : company.emissionMode;
-        doc.affectedDocumentId = affectedDocument(company.id, sunatEnv, spec);
-        doc.nextAttemptAt = now;
-        doc.progressAt = now;
-        boolean delivered = request.delivered() != null ? request.delivered() : company.deliveredOnEmitDefault;
+        doc.setEmissionMode(doc.isGuia() ? "software" : company.getEmissionMode());
+        doc.setAffectedDocumentId(affectedDocument(company.getId(), sunatEnv, spec));
+        doc.setNextAttemptAt(now);
+        doc.setProgressAt(now);
+        boolean delivered = request.delivered() != null ? request.delivered() : company.isDeliveredOnEmitDefault();
         if (delivered) {
-            doc.deliveredAt = now;
-            doc.deliveredSource = "client";
+            doc.setDeliveredAt(now);
+            doc.setDeliveredSource("client");
         }
-        doc.labels = request.labels() == null ? Map.of() : Map.copyOf(request.labels());
-        doc.createdAt = now;
-        doc.updatedAt = now;
+        doc.setLabels(request.labels() == null ? Map.of() : Map.copyOf(request.labels()));
+        doc.setCreatedAt(now);
+        doc.setUpdatedAt(now);
         try {
             doc.persistAndFlush();
         } catch (jakarta.persistence.PersistenceException e) {
@@ -361,18 +361,18 @@ public class EmitService {
             }
             throw e;
         }
-        DocumentFile.record(doc, "xml_signed", xmlFile);
-        DocumentFile.record(doc, "input", input);
-        DocumentFile.record(doc, "enriched", enriched);
-        DocumentEvent.record(doc, null, "emitted", scope.actor().auditName(), correlationId);
-        auditor.record(scope, "document.emitted", "document", doc.id, Map.of("serie_numero", doc.serieNumero()));
+        DocumentFileEntity.record(doc, "xml_signed", xmlFile);
+        DocumentFileEntity.record(doc, "input", input);
+        DocumentFileEntity.record(doc, "enriched", enriched);
+        DocumentEventEntity.record(doc, null, "emitted", scope.actor().auditName(), correlationId);
+        auditor.record(scope, "document.emitted", "document", doc.getId(), Map.of("serie_numero", doc.serieNumero()));
         if (draft != null) {
             draft.issued().accept(doc);
         }
         String token = links.create(doc);
         em.createNativeQuery("SELECT pg_notify('xhandler_reconcile', '')").getSingleResult();
 
-        String qr = Qr.of(company.ruc, doc, built.enrichedJson());
+        String qr = Qr.of(company.getRuc(), doc, built.enrichedJson());
         JsonNode body = json.valueToTree(DocumentView.of(doc, links.url(token), qr));
         if (idempotencyKey != null) {
             // Stored without the buyer link: its token is never stored in clear (§12); a replay
@@ -428,9 +428,9 @@ public class EmitService {
         return credito ? "credito" : "contado";
     }
 
-    private boolean pseAuthorized(Company company) {
+    private boolean pseAuthorized(CompanyEntity company) {
         return !em.createNativeQuery("SELECT 1 FROM xhandler.pse_authorization WHERE company_id = :c AND revoked_at IS NULL AND approved_at IS NOT NULL")
-                .setParameter("c", company.id).getResultList().isEmpty();
+                .setParameter("c", company.getId()).getResultList().isEmpty();
     }
 
     /** D defaults to today in Lima; SUNAT refuses more than 2 days ahead (2329) and late documents lose their validity. */
@@ -458,7 +458,7 @@ public class EmitService {
         return fecha;
     }
 
-    private String chooseSerie(EmitRequest request, ObjectNode spec, Company company, String tipo) {
+    private String chooseSerie(EmitRequest request, ObjectNode spec, CompanyEntity company, String tipo) {
         if (request.serie() != null) {
             return request.serie();
         }
@@ -476,19 +476,19 @@ public class EmitService {
         } else if ("03".equals(tipo)) {
             prefix = "B";
         }
-        return numbering.defaultSerie(company.id, company.sunatEnv, tipo, prefix);
+        return numbering.defaultSerie(company.getId(), company.getSunatEnv(), tipo, prefix);
     }
 
-    private static void fillProveedor(ObjectNode spec, Company company) {
+    private static void fillProveedor(ObjectNode spec, CompanyEntity company) {
         ObjectNode proveedor = spec.hasNonNull("proveedor") && spec.get("proveedor").isObject()
                 ? (ObjectNode) spec.get("proveedor")
                 : spec.putObject("proveedor");
-        if (proveedor.hasNonNull("ruc") && !company.ruc.equals(proveedor.get("ruc").asText())) {
+        if (proveedor.hasNonNull("ruc") && !company.getRuc().equals(proveedor.get("ruc").asText())) {
             throw ApiException.invalid("invalid_document", "El RUC del proveedor no coincide con el de la empresa.", null);
         }
-        proveedor.put("ruc", company.ruc);
+        proveedor.put("ruc", company.getRuc());
         if (!proveedor.hasNonNull("razon_social")) {
-            proveedor.put("razon_social", company.razonSocial);
+            proveedor.put("razon_social", company.getRazonSocial());
         }
     }
 
@@ -506,11 +506,11 @@ public class EmitService {
         } catch (NumberFormatException e) {
             return null;
         }
-        return Document.<Document>find(
+        return DocumentEntity.<DocumentEntity>find(
                         "companyId = ?1 and sunatEnv = ?2 and tipoComprobante = ?3 and serie = ?4 and numero = ?5 and origin <> 'ose_inbound'",
                         companyId, sunatEnv, tipoAfectado, serie, numero)
                 .firstResultOptional()
-                .map(d -> d.id)
+                .map(d -> d.getId())
                 .orElse(null);
     }
 

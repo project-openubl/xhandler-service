@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.resources.CatalogResource;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Company;
+import io.github.projectopenubl.xhandler.models.jpa.entities.CompanyEntity;
 import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.managers.CredentialService;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -87,7 +87,7 @@ public class IdentityLookup {
         record Provider(String url, String token, boolean tenantSupplied) {}
         Object cachedOrProvider = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.OPERATOR);
-            Company company = CompanyResource.find(companyId);
+            CompanyEntity company = CompanyResource.find(companyId);
             // Personal data: every lookup is audited, and limited per tenant (no free DNI → name oracle)
             auditor.record(scope, "lookup.identity", "company", companyId, Map.of("tipo", tipo, "numero", numero));
             int hits = ((Number) em.createNativeQuery("""

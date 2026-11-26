@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 
 import static io.github.projectopenubl.xhandler.Api.as;
 import static io.github.projectopenubl.xhandler.Api.tenantOf;
@@ -239,14 +239,14 @@ class DeliveryTest {
         UUID production = companies.verified(tenant, "production");
         String ruc = as("alice").get(base + "/companies/" + production).then().extract().path("ruc");
         TestDocuments.Created doc = docs.pending(tenant, production, "t-" + UUID.randomUUID() + ":invoice", d -> {
-            d.sunatEnv = "production";
-            d.status = "accepted";
-            d.nextAttemptAt = null;
-            d.total = new BigDecimal("118.00");
+            d.setSunatEnv("production");
+            d.setStatus("accepted");
+            d.setNextAttemptAt(null);
+            d.setTotal(new BigDecimal("118.00"));
         });
-        Document stored = docs.get(tenant, doc.id());
-        Map<String, Object> request = new HashMap<>(Map.of("ruc", ruc, "tipo_comprobante", "01", "serie", "F001", "numero", stored.numero,
-                "fecha_emision", stored.fechaEmision.toString(), "total", "118.00", "captcha", "wrong"));
+        DocumentEntity stored = docs.get(tenant, doc.id());
+        Map<String, Object> request = new HashMap<>(Map.of("ruc", ruc, "tipo_comprobante", "01", "serie", "F001", "numero", stored.getNumero(),
+                "fecha_emision", stored.getFechaEmision().toString(), "total", "118.00", "captcha", "wrong"));
         given().contentType("application/json").body(request).post("/api/v1/public/lookup").then().statusCode(403);
         request.put("captcha", "test-pass");
         given().contentType("application/json").body(request).post("/api/v1/public/lookup").then().statusCode(200)

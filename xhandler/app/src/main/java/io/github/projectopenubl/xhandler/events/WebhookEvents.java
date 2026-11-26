@@ -1,10 +1,10 @@
 package io.github.projectopenubl.xhandler.events;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookDelivery;
-import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookSubscription;
+import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookDeliveryEntity;
+import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookSubscriptionEntity;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -28,8 +28,8 @@ public class WebhookEvents {
 
     /** Status changes become document.* events. */
     void onStatusChanged(@Observes DocumentStatusChanged change) {
-        Document d = change.document();
-        String type = switch (d.status) {
+        DocumentEntity d = change.document();
+        String type = switch (d.getStatus()) {
             case "accepted", "accepted_with_observations" -> "document.accepted";
             case "rejected" -> "document.rejected";
             case "exception" -> "document.exception";
@@ -39,17 +39,17 @@ public class WebhookEvents {
         if (type == null) {
             return;
         }
-        publish(d.tenantId, type, "xh:document:" + d.id, DOCUMENT_SCHEMA, documentData(d));
-        if ("rejected".equals(d.status) && d.deliveredAt != null) {
+        publish(d.getTenantId(), type, "xh:document:" + d.getId(), DOCUMENT_SCHEMA, documentData(d));
+        if ("rejected".equals(d.getStatus()) && d.getDeliveredAt() != null) {
             // A document the buyer already has was rejected: warn (§9.3)
-            publish(d.tenantId, "document.rejected_after_delivery", "xh:document:" + d.id, DOCUMENT_SCHEMA, documentData(d));
+            publish(d.getTenantId(), "document.rejected_after_delivery", "xh:document:" + d.getId(), DOCUMENT_SCHEMA, documentData(d));
         }
     }
 
     /** Queues an event for every active subscription of the tenant that wants it. */
     @Transactional(Transactional.TxType.MANDATORY)
     public int publish(UUID tenantId, String type, String subject, String dataSchema, Map<String, Object> data) {
-        List<WebhookSubscription> subscriptions = WebhookSubscription.list("tenantId = ?1 and active and deletedAt is null", tenantId);
+        List<WebhookSubscriptionEntity> subscriptions = WebhookSubscriptionEntity.list("tenantId = ?1 and active and deletedAt is null", tenantId);
         UUID eventId = Ids.newId();
         Instant now = Instant.now();
         Map<String, Object> event = new LinkedHashMap<>();
@@ -63,40 +63,40 @@ public class WebhookEvents {
         event.put("dataschema", dataSchema);
         event.put("data", data);
         int queued = 0;
-        for (WebhookSubscription subscription : subscriptions) {
+        for (WebhookSubscriptionEntity subscription : subscriptions) {
             if (!subscription.wants(type)) {
                 continue;
             }
-            WebhookDelivery delivery = new WebhookDelivery();
-            delivery.id = Ids.newId();
-            delivery.tenantId = tenantId;
-            delivery.subscriptionId = subscription.id;
-            delivery.eventId = eventId;
-            delivery.eventType = type;
-            delivery.payload = event;
-            delivery.nextAttemptAt = now;
-            delivery.createdAt = now;
-            delivery.updatedAt = now;
+            WebhookDeliveryEntity delivery = new WebhookDeliveryEntity();
+            delivery.setId(Ids.newId());
+            delivery.setTenantId(tenantId);
+            delivery.setSubscriptionId(subscription.getId());
+            delivery.setEventId(eventId);
+            delivery.setEventType(type);
+            delivery.setPayload(event);
+            delivery.setNextAttemptAt(now);
+            delivery.setCreatedAt(now);
+            delivery.setUpdatedAt(now);
             delivery.persist();
             queued++;
         }
         return queued;
     }
 
-    public static Map<String, Object> documentData(Document d) {
+    public static Map<String, Object> documentData(DocumentEntity d) {
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("id", d.id.toString());
-        data.put("prn", "xh:document:" + d.id);
-        data.put("company_id", d.companyId.toString());
-        data.put("sunat_env", d.sunatEnv);
-        data.put("tipo_comprobante", d.tipoComprobante);
+        data.put("id", d.getId().toString());
+        data.put("prn", "xh:document:" + d.getId());
+        data.put("company_id", d.getCompanyId().toString());
+        data.put("sunat_env", d.getSunatEnv());
+        data.put("tipo_comprobante", d.getTipoComprobante());
         data.put("serie_numero", d.serieNumero());
-        data.put("fecha_emision", d.fechaEmision.toString());
-        data.put("status", d.status);
-        data.put("sunat_code", d.sunatCode);
-        data.put("sunat_description", d.sunatDescription);
-        data.put("delivered", d.deliveredAt != null);
-        data.put("labels", d.labels);
+        data.put("fecha_emision", d.getFechaEmision().toString());
+        data.put("status", d.getStatus());
+        data.put("sunat_code", d.getSunatCode());
+        data.put("sunat_description", d.getSunatDescription());
+        data.put("delivered", d.getDeliveredAt() != null);
+        data.put("labels", d.getLabels());
         return data;
     }
 }

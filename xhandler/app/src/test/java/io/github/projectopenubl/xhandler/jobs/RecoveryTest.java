@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs;
 
-import io.github.projectopenubl.xhandler.models.jpa.entities.Job;
+import io.github.projectopenubl.xhandler.models.jpa.entities.JobEntity;
 
 import static io.github.projectopenubl.xhandler.Api.tenantOf;
 import static io.github.projectopenubl.xhandler.xml.EngineStub.Reply;
@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.projectopenubl.xhandler.resources.TestCompanies;
-import io.github.projectopenubl.xhandler.models.jpa.entities.Document;
+import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEntity;
 import io.github.projectopenubl.xhandler.resources.TestDocuments;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -80,10 +80,10 @@ class RecoveryTest {
         // The document's send started on a worker that then died
         UUID job = UUID.randomUUID();
         TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> {
-            d.nextAttemptAt = Instant.now().plusSeconds(5);
-            d.sendStartedAt = Instant.now().minusSeconds(60);
-            d.attempts = 1;
-            d.attemptJobId = job;
+            d.setNextAttemptAt(Instant.now().plusSeconds(5));
+            d.setSendStartedAt(Instant.now().minusSeconds(60));
+            d.setAttempts(1);
+            d.setAttemptJobId(job);
         });
         startGhostJob(doc.id(), "ghost-" + UUID.randomUUID(), job);
 
@@ -92,13 +92,13 @@ class RecoveryTest {
         EngineStub.on("/v1/status-cdr", body ->
                 Reply.ok("{\"status\":\"accepted\",\"code\":\"0001\",\"description\":\"aceptado\",\"cdr_zip\":\"UEsDBA==\"}"));
         await().atMost(WAIT).until(() -> "failed".equals(jobState(job)));
-        await().atMost(WAIT).until(() -> "accepted".equals(docs.get(tenant, doc.id()).status));
+        await().atMost(WAIT).until(() -> "accepted".equals(docs.get(tenant, doc.id()).getStatus()));
         assertEquals(0, EngineStub.requests("/v1/send", doc.marker()).size(), "never resent blindly");
     }
 
     @Test
     void a_paused_worker_keeps_its_job_and_no_second_attempt_runs() throws Exception {
-        TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> d.nextAttemptAt = Instant.now().plusSeconds(2));
+        TestDocuments.Created doc = docs.pending(tenant, company, endpoint, d -> d.setNextAttemptAt(Instant.now().plusSeconds(2)));
         // The paused worker's lock connection is still alive: it holds the job lock (taken before
         // the job is visible, so recovery never sees it unlocked)
         try (Connection paused = connections.open("paused-worker")) {
@@ -119,7 +119,7 @@ class RecoveryTest {
             // The connection is gone: recovery fails the job and the waiting attempt runs
             await().atMost(WAIT).until(() -> "failed".equals(jobState(job)));
         }
-        await().atMost(WAIT).until(() -> Document.ACCEPTED.contains(docs.get(tenant, doc.id()).status));
+        await().atMost(WAIT).until(() -> DocumentEntity.ACCEPTED.contains(docs.get(tenant, doc.id()).getStatus()));
         assertEquals(1, EngineStub.requests("/v1/send", doc.marker()).size());
     }
 
@@ -130,10 +130,10 @@ class RecoveryTest {
         await().atMost(WAIT).until(() -> !worker.running());
 
         TestDocuments.Created doc = docs.pending(tenant, company, endpoint, null);
-        assertEquals("pending_send", docs.get(tenant, doc.id()).status);
+        assertEquals("pending_send", docs.get(tenant, doc.id()).getStatus());
 
         worker.start();
-        await().atMost(WAIT).until(() -> "accepted".equals(docs.get(tenant, doc.id()).status));
+        await().atMost(WAIT).until(() -> "accepted".equals(docs.get(tenant, doc.id()).getStatus()));
     }
 
     @Test
@@ -147,7 +147,7 @@ class RecoveryTest {
         for (int i = 0; i < 8; i++) {
             int hours = (i * 5) % 8; // deadlines out of creation order
             TestDocuments.Created doc = docs.pending(tenant, company, endpoint,
-                    d -> d.deadlineAt = Instant.now().plus(Duration.ofHours(10 + hours)));
+                    d -> d.setDeadlineAt(Instant.now().plus(Duration.ofHours(10 + hours))));
             markers.add(doc.marker());
             created.add(doc);
         }
@@ -172,10 +172,10 @@ class RecoveryTest {
         // All due at once, so the reconciler sees the whole backlog in its first pass
         docs.dueNow(tenant, created.stream().map(TestDocuments.Created::id).toList());
         await().atMost(Duration.ofSeconds(90)).until(() -> created.stream()
-                .allMatch(d -> "accepted".equals(docs.get(tenant, d.id()).status)));
+                .allMatch(d -> "accepted".equals(docs.get(tenant, d.id()).getStatus())));
 
         List<String> byDeadline = created.stream()
-                .sorted(java.util.Comparator.comparing(d -> docs.get(tenant, d.id()).deadlineAt))
+                .sorted(java.util.Comparator.comparing(d -> docs.get(tenant, d.id()).getDeadlineAt()))
                 .map(TestDocuments.Created::marker)
                 .toList();
         assertEquals(byDeadline, order);
@@ -237,7 +237,7 @@ class RecoveryTest {
     long outstandingAttempts() {
         return QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenant);
-            return Job.count("endpoint = ?1 and state in ('waiting', 'running')", endpoint);
+            return JobEntity.count("endpoint = ?1 and state in ('waiting', 'running')", endpoint);
         });
     }
 
