@@ -114,7 +114,12 @@ public class IdentityLookup {
             return identity;
         }
         Provider provider = (Provider) cachedOrProvider;
-        String url = provider.url().replace("{tipo}", tipo).replace("{numero}", numero);
+        // Only validated values reach the provider URL: the type is a constant and the number is
+        // rebuilt from its digits, so no text from the request can change the host (CodeQL java/ssrf)
+        boolean ruc = "ruc".equals(tipo);
+        String urlTipo = ruc ? "ruc" : "dni";
+        String urlNumero = String.format(ruc ? "%011d" : "%08d", Long.parseLong(numero));
+        String url = provider.url().replace("{tipo}", urlTipo).replace("{numero}", urlNumero);
         if (provider.tenantSupplied()) {
             egress.check(url);
         }
