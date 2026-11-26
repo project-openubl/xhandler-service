@@ -70,6 +70,15 @@ describe("resolveApiProxyPath", () => {
     ).toBe("/api/whoami");
   });
 
+  it("reaches xhandler's admin API through the same proxy (ADR 0012)", () => {
+    expect(
+      resolveApiProxyPath(
+        "/api/xhandler/admin/v1/tenants?q=acme",
+        XHANDLER_API_ROUTE,
+      ),
+    ).toBe("/api/admin/v1/tenants?q=acme");
+  });
+
   it("allows searchpe's readiness check and nothing else outside /api/", () => {
     expect(resolveApiProxyPath(SEARCHPE_HEALTH_PATH, SEARCHPE_API_ROUTE)).toBe(
       "/q/health/ready",

@@ -9,6 +9,7 @@ import {
 import { client as searchpeClient } from "@app/client/searchpe/client.gen";
 import { createClient, createConfig } from "@app/client/xhandler/client";
 import { client as xhandlerClient } from "@app/client/xhandler/client.gen";
+import { client as xhandlerAdminClient } from "@app/client/xhandler-admin/client.gen";
 import { currentPageState, userManager } from "@app/oidc";
 
 // Repeat array params (`label=a&label=b`), as both Quarkus backends read them, and drop
@@ -129,6 +130,11 @@ export const initInterceptors = () => {
   addAuthInterceptors(xhandlerAxios, { onRenewalFailure: "login" });
   addAuthInterceptors(searchpeAxios, { onRenewalFailure: "reject" });
   xhandlerClient.setConfig({
+    axios: xhandlerAxios,
+    baseURL: XHANDLER_PROXY_PREFIX,
+  });
+  // The admin API is xhandler's too (`/api/admin/v1`): same proxy, same session (ADR 0012)
+  xhandlerAdminClient.setConfig({
     axios: xhandlerAxios,
     baseURL: XHANDLER_PROXY_PREFIX,
   });

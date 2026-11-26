@@ -37,6 +37,11 @@ export const patchXhandlerSpec = (spec: ISpec): void => {
   rebasePaths({ spec, keep: (path) => path.startsWith("/v1/") });
 };
 
+/** xhandler-service's admin document: keep `/api/admin/v1/*` (platform console, ADR 0012). */
+export const patchXhandlerAdminSpec = (spec: ISpec): void => {
+  rebasePaths({ spec, keep: (path) => path.startsWith("/admin/v1/") });
+};
+
 /** Endpoints of searchpe the UI never calls: basic-auth user management. */
 const SEARCHPE_DROPPED_PATHS = [/^\/admin\//, /^\/current-user\//];
 
