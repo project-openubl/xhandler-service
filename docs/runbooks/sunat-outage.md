@@ -6,7 +6,7 @@ first, when SUNAT is back (DESIGN.md §9, §24, §25: ~3 hours for a 4-hour outa
 ## Look
 
 ```bash
-xhandler-admin endpoint-status
+api GET /api/admin/v1/endpoints
 kubectl logs -l app.kubernetes.io/component=worker --since=15m | grep -i breaker
 ```
 
@@ -15,8 +15,8 @@ kubectl logs -l app.kubernetes.io/component=worker --since=15m | grep -i breaker
 - Breakers open and close by themselves (half-open probes). Don't release them by hand while
   SUNAT is still failing.
 - **Planned maintenance** announced by SUNAT: hold the affected endpoints beforehand
-  (`xhandler-admin hold endpoint <id>`) and release after; tenants see "pendiente".
+  (`api POST /api/admin/v1/endpoints/<id>/hold`) and release after; tenants see "pendiente".
 - **Throttling** (HTTP 429/503 bursts, IP blocks): lower the endpoint's cap
-  (`xhandler-admin endpoint-status --cap <id> <n>`), then raise it back step by step.
+  (`api PUT /api/admin/v1/endpoints/<id> '{"concurrency_cap": <n>}'`), then raise it back step by step.
 - **During the drain**: watch `xhandler_documents_past_deadline`; boletas past D+5 go by resumen.
 - Post-incident: record the outage window (evidence for tenants' late documents).

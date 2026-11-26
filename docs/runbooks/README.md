@@ -1,9 +1,22 @@
 # Runbooks
 
 Every alert in `deploy/monitoring/prometheusrule.yaml` links to one of these (DESIGN.md §18, §26.4).
-They assume `xhandler-admin` (the admin CLI, `admin-cli/`) configured for the environment, and
-`kubectl` access to the namespace. Platform operators never read tenant data outside an approved
-support session (§26.1); the admin API shows identifiers and states, not content.
+They assume `kubectl` access to the namespace and a token for the admin API (`/api/admin/v1`,
+realm role `platform-admin`; in the dev realm, the `xhandler-admin` service account). Platform
+operators never read tenant data outside an approved support session (§26.1); the admin API shows
+identifiers and states, not content.
+
+Set up the `api` helper the runbooks use:
+
+```bash
+export XHANDLER_URL=https://xhandler.example.com
+export TOKEN=$(curl -fsS "$OIDC_ISSUER/protocol/openid-connect/token" -d grant_type=client_credentials \
+  -d client_id=xhandler-admin -d client_secret="$CLIENT_SECRET" | jq -r .access_token)
+api() { # api METHOD PATH [JSON]
+  curl -fsS -X "$1" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    ${3:+-d "$3"} "$XHANDLER_URL$2" | jq .
+}
+```
 
 | Runbook | When |
 |---|---|

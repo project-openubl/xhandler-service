@@ -92,7 +92,7 @@
     },
     {
       "clientId": "xhandler-admin",
-      "description": "xhandler-admin CLI (platform administrators, client credentials)",
+      "description": "Platform administrators: the admin API with client credentials (docs/runbooks)",
       "enabled": true,
       "publicClient": false,
       "secret": "admin-secret",

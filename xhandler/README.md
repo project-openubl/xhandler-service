@@ -24,7 +24,6 @@ TOKEN=$(curl -s http://localhost:8180/realms/xhandler/protocol/openid-connect/to
 
 - Swagger UI: http://localhost:8080/q/swagger-ui · Health: http://localhost:8080/q/health ·
   Metrics: http://localhost:8080/q/metrics
-- Platform administration: `java -jar admin-cli/target/xhandler-admin.jar --help`
 - End-to-end check against SUNAT beta (packaged app, engine, trace): `../hack/xhandler-e2e.sh`
 
 ## License

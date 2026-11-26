@@ -18,7 +18,7 @@ import org.jboss.logging.Logger;
 /**
  * Re-wraps everything protected by an old master key with the current one, tenant by tenant, without
  * downtime: old master keys stay readable until nothing references them (DESIGN.md §6). Exposed
- * through xhandler-admin (P2).
+ * through the admin API (P2).
  */
 @ApplicationScoped
 public class KeyRotationManager {

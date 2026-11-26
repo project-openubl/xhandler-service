@@ -39,7 +39,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Platform administration, used by xhandler-admin (DESIGN.md §15, §24.1). Every call needs the
+ * Platform administration for operators (DESIGN.md §15, §24.1; docs/runbooks). Every call needs the
  * {@code platform-admin} role; actions on tenant data are written to that tenant's audit log.
  */
 @Path("/api/admin/v1")

@@ -8,7 +8,7 @@ CDR) are HSM objects (DESIGN.md §6).
   call. Confirm with a test emit in the staging tenant.
 - **PIN or module misconfigured** after a deploy: the pods log PKCS#11 errors at start; fix the
   `xhandler-hsm` secret / module volume in the overlay.
-- **Master key rotation**: `xhandler-admin rotate-keys` re-wraps every secret, tenant key,
+- **Master key rotation**: `api POST /api/admin/v1/keys/rotate` re-wraps every secret, tenant key,
   platform credential and platform key with the current master key. Run it after adding the new
   master key, before retiring the old one.
 - **Platform certificate expiring** (alert 30 days before): import the new PSE or OSE CDR

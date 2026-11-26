@@ -21,7 +21,7 @@ import java.util.UUID;
 
 /**
  * Manual control of SUNAT attempts (DESIGN.md §24.1 rule 8): hold, release and retry, per document
- * or in bulk. The same actions back the tenant API and xhandler-admin. Every method runs with the
+ * or in bulk. The same actions back the tenant API and the admin API. Every method runs with the
  * document's tenant open and changes rows under a row lock.
  */
 @ApplicationScoped
