@@ -8,16 +8,10 @@ import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.managers.AccessLinks;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
-import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
-import io.github.projectopenubl.xhandler.managers.Numbering;
-import io.github.projectopenubl.xhandler.managers.Routes;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.keys.SignatureLog;
@@ -28,7 +22,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -44,7 +37,7 @@ import java.util.stream.Collectors;
  * input: size-capped here, and the engine refuses DTDs and entities.
  */
 @ApplicationScoped
-public class UblUploadService {
+public class UblUploadManager {
 
     private final JobQueueProvider jobQueueProvider;
 
@@ -64,16 +57,16 @@ public class UblUploadService {
     private final SigningService signing;
     private final SignatureLog signatureLog;
     private final FileStore files;
-    private final Numbering numbering;
-    private final Routes routes;
-    private final AccessLinks links;
-    private final Auditor auditor;
+    private final NumberingManager numbering;
+    private final RouteManager routes;
+    private final AccessLinkManager links;
+    private final AuditManager auditor;
     private final ObjectMapper json;
-    private final io.github.projectopenubl.xhandler.managers.EmitService emit;
+    private final io.github.projectopenubl.xhandler.managers.EmitManager emit;
 
-    public UblUploadService(TenantAccess access, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
-            Numbering numbering, Routes routes, AccessLinks links, Auditor auditor, ObjectMapper json,
-            io.github.projectopenubl.xhandler.managers.EmitService emit, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+    public UblUploadManager(TenantAccess access, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
+            NumberingManager numbering, RouteManager routes, AccessLinkManager links, AuditManager auditor, ObjectMapper json,
+            io.github.projectopenubl.xhandler.managers.EmitManager emit, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
         this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
@@ -130,9 +123,9 @@ public class UblUploadService {
                 // As PSE the platform signs: it doesn't send what someone else signed in its name (§3.2)
                 throw ApiException.invalid("invalid_document", "La empresa emite con la plataforma como PSE: envíe el XML sin firmar.", null);
             }
-            LocalDate fecha = io.github.projectopenubl.xhandler.managers.EmitService.checkIssueDate(
+            LocalDate fecha = io.github.projectopenubl.xhandler.managers.EmitManager.checkIssueDate(
                     identity.fechaEmision() == null ? Deadlines.todayInLima() : LocalDate.parse(identity.fechaEmision()));
-            Routes.Assignment route = routes.assign(company, company.getSunatEnv(), tipo);
+            RouteManager.Assignment route = routes.assign(company, company.getSunatEnv(), tipo);
             long numero = numbering.claim(tenantId, company.getId(), company.getSunatEnv(), tipo, identity.serie(), identity.numero());
             String signedXml = xml;
             String digest = identity.digestValue();

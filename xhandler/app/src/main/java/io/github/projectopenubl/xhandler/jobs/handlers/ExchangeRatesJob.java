@@ -1,11 +1,11 @@
-package io.github.projectopenubl.xhandler.managers;
+package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
+import io.github.projectopenubl.xhandler.managers.ExchangeRateManager.Rate;
+import io.github.projectopenubl.xhandler.models.ExchangeRateProvider;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import io.github.projectopenubl.xhandler.models.ExchangeRateProvider;
-import jakarta.transaction.Transactional;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -16,40 +16,25 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.util.Optional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * The daily SUNAT/SBS exchange rate (DESIGN.md §26.7): imported by a job, used for the S/ 700
- * boleta check in foreign currency, PEN equivalents in reports, and the default tipo_cambio on
- * manual issuing. A day without a published rate (weekends, holidays) uses the latest earlier one.
- *
- * <p>The source is SUNAT's public file ({@code dd/MM/yyyy|compra|venta|}), configurable.
+ * Imports the day's SUNAT/SBS exchange rate (DESIGN.md §26.7, scheduled). The source is SUNAT's
+ * public file ({@code dd/MM/yyyy|compra|venta|}), configurable.
  */
 @ApplicationScoped
-public class ExchangeRates implements JobHandler {
-
-    /** A day's rate. */
-    public record Rate(LocalDate day, BigDecimal compra, BigDecimal venta, String source) {}
+public class ExchangeRatesJob implements JobHandler {
 
     static final DateTimeFormatter DMY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-    /** An older rate means the import is broken: better no rate than a stale one. */
-    static final int MAX_AGE_DAYS = 10;
 
     private final ExchangeRateProvider rates;
     private final String url;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-    public ExchangeRates(ExchangeRateProvider rates,
+    public ExchangeRatesJob(ExchangeRateProvider rates,
             @ConfigProperty(name = "xhandler.exchange-rates.url", defaultValue = "https://www.sunat.gob.pe/a/txt/tipoCambio.txt") String url) {
         this.rates = rates;
         this.url = url;
-    }
-
-    /** The rate for a day, or the latest earlier one. */
-    @Transactional(Transactional.TxType.MANDATORY)
-    public Optional<Rate> on(LocalDate day) {
-        return rates.getLatestRate(day, day.minusDays(MAX_AGE_DAYS)).map(r -> new Rate(r.day(), r.compra(), r.venta(), r.source()));
     }
 
     @Override

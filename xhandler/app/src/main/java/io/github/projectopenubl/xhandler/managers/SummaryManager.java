@@ -5,7 +5,6 @@ import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
@@ -39,7 +38,7 @@ import java.util.stream.Collectors;
  * daily counter locked, and it is the same documented exception to rule 3 of §10.8.
  */
 @ApplicationScoped
-public class Summaries {
+public class SummaryManager {
 
     private final JobQueueProvider jobQueueProvider;
 
@@ -54,16 +53,16 @@ public class Summaries {
 
     static final DateTimeFormatter BASIC = DateTimeFormatter.BASIC_ISO_DATE;
 
-    private final Numbering numbering;
+    private final NumberingManager numbering;
     private final Engine engine;
     private final SigningService signing;
     private final SignatureLog signatureLog;
     private final FileStore files;
-    private final Routes routes;
+    private final RouteManager routes;
     private final ObjectMapper json;
 
-    public Summaries(Numbering numbering, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
-            Routes routes, ObjectMapper json, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+    public SummaryManager(NumberingManager numbering, Engine engine, SigningService signing, SignatureLog signatureLog, FileStore files,
+            RouteManager routes, ObjectMapper json, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
         this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
@@ -203,7 +202,7 @@ public class Summaries {
         doc.setDeadlineAt(Deadlines.endOfDay(day.plusDays(7)));
         doc.setStatus("pending_send");
         doc.setDigestValue(signed.digestValue());
-        Routes.Assignment route = followsRouteOf == null
+        RouteManager.Assignment route = followsRouteOf == null
                 ? routes.assign(company, sunatEnv, tipo)
                 : routes.assignLike(company, sunatEnv, tipo, followsRouteOf);
         doc.setEndpoint(route.endpoint());

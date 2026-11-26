@@ -1,6 +1,5 @@
 package io.github.projectopenubl.xhandler.keys;
 
-import io.github.projectopenubl.xhandler.keys.KeyVault;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;

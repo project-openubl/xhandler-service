@@ -1,12 +1,9 @@
 package io.github.projectopenubl.xhandler.models.jpa;
 
-import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.models.ModelType;
 import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentFileEntity;
-import io.github.projectopenubl.xhandler.utils.Ids;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 public class DocumentFileAdapter implements DocumentFileModel, JpaModel<DocumentFileEntity> {

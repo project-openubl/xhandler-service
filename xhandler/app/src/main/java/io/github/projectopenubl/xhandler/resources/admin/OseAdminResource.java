@@ -6,8 +6,7 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.keys.PlatformKeys;
 import io.github.projectopenubl.xhandler.clients.OseClients;
-import io.github.projectopenubl.xhandler.managers.PlatformCredentials;
-import io.github.projectopenubl.xhandler.resources.StatusResource;
+import io.github.projectopenubl.xhandler.managers.PlatformCredentialManager;
 import io.github.projectopenubl.xhandler.models.OseProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
@@ -46,10 +45,10 @@ public class OseAdminResource {
     private final PlatformAdmin admin;
     private final OseProvider oseProvider;
     private final PlatformKeys keys;
-    private final PlatformCredentials credentials;
+    private final PlatformCredentialManager credentials;
     private final java.util.Optional<String> oseRuc;
 
-    public OseAdminResource(PlatformAdmin admin, OseProvider oseProvider, PlatformKeys keys, PlatformCredentials credentials,
+    public OseAdminResource(PlatformAdmin admin, OseProvider oseProvider, PlatformKeys keys, PlatformCredentialManager credentials,
             @org.eclipse.microprofile.config.inject.ConfigProperty(name = "xhandler.ose.ruc") java.util.Optional<String> oseRuc) {
         this.oseRuc = oseRuc;
         this.admin = admin;
@@ -204,17 +203,17 @@ public class OseAdminResource {
     @POST
     @Path("/sunat-credentials")
     @Transactional
-    public PlatformCredentials.Entry sunatCredentials(Map<String, String> body) {
+    public PlatformCredentialManager.Entry sunatCredentials(Map<String, String> body) {
         String who = admin.require();
         String username = body == null ? null : body.get("username");
         String password = body == null ? null : body.get("password");
         if (username == null || password == null) {
             throw ApiException.invalid("invalid_request", "Indique username y password.", null);
         }
-        for (PlatformCredentials.Entry existing : credentials.list("ose_sunat")) {
+        for (PlatformCredentialManager.Entry existing : credentials.list("ose_sunat")) {
             credentials.setActive(existing.id(), false);
         }
-        PlatformCredentials.Entry entry = credentials.add("ose_sunat", username, Map.of("username", username, "password", password));
+        PlatformCredentialManager.Entry entry = credentials.add("ose_sunat", username, Map.of("username", username, "password", password));
         AdminLog.PLATFORM_AUDIT.infof("admin %s set the OSE SUNAT user %s", who, username);
         return entry;
     }

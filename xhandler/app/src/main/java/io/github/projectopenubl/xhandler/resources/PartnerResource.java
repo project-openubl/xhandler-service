@@ -1,9 +1,9 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.LogoManager;
 import io.github.projectopenubl.xhandler.models.PartnerProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.resources.CompanyEnvironmentResource;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.CurrentActor;
@@ -146,7 +146,7 @@ public class PartnerResource {
     @Transactional
     public PartnerBrandingView uploadLogo(@PathParam("partnerId") UUID partnerId, byte[] image) {
         require(partnerId, "admin");
-        String ref = files.put(partnerId, CompanyEnvironmentResource.logoImage(image)).key();
+        String ref = files.put(partnerId, LogoManager.normalize(image)).key();
         partners.setPartnerLogo(partnerId, ref);
         return brandingView(partnerId);
     }

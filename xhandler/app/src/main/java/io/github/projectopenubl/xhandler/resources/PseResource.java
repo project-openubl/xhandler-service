@@ -5,9 +5,9 @@ import io.github.projectopenubl.xhandler.models.CompanyModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.keys.PlatformKeys;
-import io.github.projectopenubl.xhandler.managers.Notifications;
+import io.github.projectopenubl.xhandler.managers.NotificationManager;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -50,12 +50,12 @@ public class PseResource {
 
     private final TenantAccess access;
     private final PseProvider pseProvider;
-    private final Auditor auditor;
+    private final AuditManager auditor;
     private final FileStore files;
-    private final Notifications notifications;
+    private final NotificationManager notifications;
     private final PlatformKeys platformKeys;
 
-    public PseResource(TenantAccess access, PseProvider pseProvider, Auditor auditor, FileStore files, Notifications notifications,
+    public PseResource(TenantAccess access, PseProvider pseProvider, AuditManager auditor, FileStore files, NotificationManager notifications,
             PlatformKeys platformKeys, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.access = access;
@@ -140,7 +140,7 @@ public class PseResource {
         }
         company.setEmissionMode("software");
         auditor.record(scope, "pse.authorization_revoked", "company", companyId);
-        notifications.publish(tenantId, Notifications.PSE_AUTHORIZATION, "Autorización de PSE revocada: " + company.getRuc(),
+        notifications.publish(tenantId, NotificationManager.PSE_AUTHORIZATION, "Autorización de PSE revocada: " + company.getRuc(),
                 "La empresa " + company.getRazonSocial() + " dejó de autorizar a la plataforma como PSE. Sus documentos se firmarán con su propio "
                         + "certificado y se enviarán con su usuario SOL.", null);
         return new RevokedView(companyId, company.getEmissionMode());

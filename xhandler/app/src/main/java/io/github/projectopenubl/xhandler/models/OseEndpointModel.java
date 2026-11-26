@@ -1,7 +1,6 @@
 package io.github.projectopenubl.xhandler.models;
 
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 public interface OseEndpointModel extends Model {

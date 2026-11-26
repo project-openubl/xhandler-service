@@ -11,8 +11,8 @@ import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
-import io.github.projectopenubl.xhandler.managers.Notifications;
-import io.github.projectopenubl.xhandler.managers.CredentialService;
+import io.github.projectopenubl.xhandler.managers.NotificationManager;
+import io.github.projectopenubl.xhandler.managers.CredentialManager;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.github.projectopenubl.xhandler.events.WebhookEvents;
@@ -49,12 +49,12 @@ public class ConformityTracker implements JobHandler {
     private final ConformityProvider conformityProvider;
     private final TenantAccess access;
     private final Engine engine;
-    private final CredentialService credentials;
+    private final CredentialManager credentials;
     private final WebhookEvents webhooks;
-    private final Notifications notifications;
+    private final NotificationManager notifications;
 
-    public ConformityTracker(ConformityProvider conformityProvider, TenantAccess access, Engine engine, CredentialService credentials, WebhookEvents webhooks,
-            Notifications notifications, CompanyProvider companyProvider, DocumentProvider documentProvider) {
+    public ConformityTracker(ConformityProvider conformityProvider, TenantAccess access, Engine engine, CredentialManager credentials, WebhookEvents webhooks,
+            NotificationManager notifications, CompanyProvider companyProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.companyProvider = companyProvider;
         this.conformityProvider = conformityProvider;

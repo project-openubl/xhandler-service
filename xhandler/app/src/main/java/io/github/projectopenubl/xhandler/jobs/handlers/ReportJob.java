@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
-import io.github.projectopenubl.xhandler.managers.RegisterRows;
+import io.github.projectopenubl.xhandler.managers.RegisterManager;
 import io.github.projectopenubl.xhandler.utils.RegisterFormats;
 
 import io.github.projectopenubl.xhandler.models.CompanyModel;
@@ -28,11 +28,11 @@ public class ReportJob implements JobHandler {
     public static final String NAME = "report.generate";
 
     private final TenantAccess access;
-    private final RegisterRows registers;
+    private final RegisterManager registers;
     private final FileStore files;
     private final ReportProvider reportProvider;
 
-    public ReportJob(TenantAccess access, RegisterRows registers, FileStore files, ReportProvider reportProvider, CompanyProvider companyProvider) {
+    public ReportJob(TenantAccess access, RegisterManager registers, FileStore files, ReportProvider reportProvider, CompanyProvider companyProvider) {
         this.companyProvider = companyProvider;
         this.access = access;
         this.registers = registers;
@@ -59,18 +59,18 @@ public class ReportJob implements JobHandler {
     }
 
     private Map<String, Object> generate(JobContext context, UUID reportId) {
-        record Input(String register, String format, String period, String ruc, String razonSocial, List<RegisterRows.Row> rows) {}
+        record Input(String register, String format, String period, String ruc, String razonSocial, List<RegisterManager.Row> rows) {}
         Input input = QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(context.tenantId());
             ReportProvider.ReportRequestRow r = reportProvider.getReportRequest(reportId);
             CompanyModel company = companyProvider.getCompany(r.companyId()).orElse(null);
             String register = r.register();
-            List<RegisterRows.Row> rows = "sales".equals(register)
+            List<RegisterManager.Row> rows = "sales".equals(register)
                     ? registers.sales(company.getId(), r.sunatEnv(), r.period())
                     : registers.purchases(company.getId(), r.period());
             return new Input(register, r.format(), r.period(), company.getRuc(), company.getRazonSocial(), rows);
         });
-        long missing = input.rows().stream().filter(RegisterRows.Row::amountsMissing).count();
+        long missing = input.rows().stream().filter(RegisterManager.Row::amountsMissing).count();
         if (missing > 0) {
             // Never zeros instead of the real bases: the backfill job completes them (§11.9)
             finish(context.tenantId(), reportId, "failed", null, null, null,

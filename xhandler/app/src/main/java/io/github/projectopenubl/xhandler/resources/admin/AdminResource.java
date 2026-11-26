@@ -11,15 +11,15 @@ import io.github.projectopenubl.xhandler.security.PlatformAdmin;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.managers.DocumentControl;
+import io.github.projectopenubl.xhandler.managers.DocumentControlManager;
 import io.github.projectopenubl.xhandler.jobs.JobStore;
-import io.github.projectopenubl.xhandler.managers.KeyRotation;
+import io.github.projectopenubl.xhandler.managers.KeyRotationManager;
 import io.github.projectopenubl.xhandler.security.Actor;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import jakarta.transaction.Transactional;
 import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.GET;
@@ -69,15 +69,15 @@ public class AdminResource {
 
     private final PlatformAdmin admin;
     private final TenantAccess access;
-    private final DocumentControl control;
+    private final DocumentControlManager control;
     private final JobStore jobs;
-    private final KeyRotation rotation;
-    private final Auditor auditor;
+    private final KeyRotationManager rotation;
+    private final AuditManager auditor;
     private final PlatformProvider platform;
-    private final io.github.projectopenubl.xhandler.managers.Entitlements entitlements;
+    private final io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements;
 
-    public AdminResource(PlatformAdmin admin, TenantAccess access, DocumentControl control, JobStore jobs, KeyRotation rotation,
-            Auditor auditor, PlatformProvider platform, io.github.projectopenubl.xhandler.managers.Entitlements entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider, EmailProvider emailProvider, JobQueueProvider jobQueueProvider, MaintenanceProvider maintenanceProvider) {
+    public AdminResource(PlatformAdmin admin, TenantAccess access, DocumentControlManager control, JobStore jobs, KeyRotationManager rotation,
+            AuditManager auditor, PlatformProvider platform, io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider, EmailProvider emailProvider, JobQueueProvider jobQueueProvider, MaintenanceProvider maintenanceProvider) {
         this.maintenanceProvider = maintenanceProvider;
         this.jobQueueProvider = jobQueueProvider;
         this.emailProvider = emailProvider;
@@ -263,8 +263,8 @@ public class AdminResource {
             throw ApiException.notFound();
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s set the billing issuer to company %s of tenant %s", admin.require(), companyId, tenantId);
-        for (Map.Entry<String, String> e : Map.of(io.github.projectopenubl.xhandler.managers.SelfInvoicing.ISSUER_TENANT, tenant,
-                io.github.projectopenubl.xhandler.managers.SelfInvoicing.ISSUER_COMPANY, company).entrySet()) {
+        for (Map.Entry<String, String> e : Map.of(io.github.projectopenubl.xhandler.managers.SelfInvoicingManager.ISSUER_TENANT, tenant,
+                io.github.projectopenubl.xhandler.managers.SelfInvoicingManager.ISSUER_COMPANY, company).entrySet()) {
             platform.setPlatformSetting(e.getKey(), e.getValue());
         }
         return Map.of("tenant_id", tenant, "company_id", company);
@@ -346,7 +346,7 @@ public class AdminResource {
 
     @POST
     @Path("/keys/rotate")
-    public KeyRotation.Result rotateKeys() {
+    public KeyRotationManager.Result rotateKeys() {
         admin.require();
         return rotation.rewrapAll();
     }

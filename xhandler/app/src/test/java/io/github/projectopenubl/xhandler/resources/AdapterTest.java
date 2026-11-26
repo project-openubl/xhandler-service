@@ -7,7 +7,6 @@ import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 
-import io.github.projectopenubl.xhandler.resources.TestCompanies;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;

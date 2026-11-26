@@ -1,11 +1,9 @@
 package io.github.projectopenubl.xhandler.models.jpa;
 
-import io.github.projectopenubl.xhandler.keys.SecretBox;
 import io.github.projectopenubl.xhandler.models.ModelType;
 import io.github.projectopenubl.xhandler.models.WebhookSubscriptionModel;
 import io.github.projectopenubl.xhandler.models.jpa.entities.WebhookSubscriptionEntity;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 public class WebhookSubscriptionAdapter implements WebhookSubscriptionModel, JpaModel<WebhookSubscriptionEntity> {

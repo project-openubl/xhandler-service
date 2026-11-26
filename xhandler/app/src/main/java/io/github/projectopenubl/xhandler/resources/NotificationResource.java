@@ -3,8 +3,7 @@ package io.github.projectopenubl.xhandler.resources;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
-import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.resources.StatusResource;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -41,9 +40,9 @@ public class NotificationResource {
 
     private final TenantAccess access;
     private final NotificationProvider notificationProvider;
-    private final Auditor auditor;
+    private final AuditManager auditor;
 
-    public NotificationResource(TenantAccess access, NotificationProvider notificationProvider, Auditor auditor, TenantProvider tenantProvider) {
+    public NotificationResource(TenantAccess access, NotificationProvider notificationProvider, AuditManager auditor, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.access = access;
         this.notificationProvider = notificationProvider;

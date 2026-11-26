@@ -13,8 +13,6 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 
-import io.github.projectopenubl.xhandler.resources.TestCompanies;
-import io.github.projectopenubl.xhandler.resources.TestDocuments;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;

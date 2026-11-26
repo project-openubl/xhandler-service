@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.utils.Tokens;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
@@ -11,8 +12,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
-import io.github.projectopenubl.xhandler.managers.EmitService;
-import io.github.projectopenubl.xhandler.managers.VoidingService;
+import io.github.projectopenubl.xhandler.managers.EmitManager;
+import io.github.projectopenubl.xhandler.managers.VoidingManager;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.github.projectopenubl.xhandler.models.AdapterTokenProvider;
@@ -48,11 +49,11 @@ public class NubefactResource {
 
     private final AdapterTokenProvider adapterTokens;
     private final TenantAccess access;
-    private final EmitService emit;
-    private final VoidingService voiding;
+    private final EmitManager emit;
+    private final VoidingManager voiding;
     private final ObjectMapper json;
 
-    public NubefactResource(AdapterTokenProvider adapterTokens, TenantAccess access, EmitService emit, VoidingService voiding, ObjectMapper json, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
+    public NubefactResource(AdapterTokenProvider adapterTokens, TenantAccess access, EmitManager emit, VoidingManager voiding, ObjectMapper json, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentEventProvider = documentEventProvider;
         this.companyProvider = companyProvider;
@@ -100,8 +101,8 @@ public class NubefactResource {
         // Per company and environment: two companies (or beta and production) may share a number
         String key = "nubefact:" + client.companyId() + ":" + client.sunatEnv() + ":" + converted.tipo() + ":" + converted.serie() + ":"
                 + converted.numero();
-        EmitService.Emitted emitted = emit.emitNumbered(client.tenantId(), client.companyId(), key,
-                new EmitService.EmitRequest(converted.document(), converted.serie(), null, Map.of("adapter", "nubefact")),
+        EmitManager.Emitted emitted = emit.emitNumbered(client.tenantId(), client.companyId(), key,
+                new EmitManager.EmitRequest(converted.document(), converted.serie(), null, Map.of("adapter", "nubefact")),
                 converted.numero(), UUID.randomUUID().toString(), true);
         return Response.ok(NubefactAdapter.answer(emitted.body(), null, null, null)).build();
     }
@@ -114,7 +115,7 @@ public class NubefactResource {
         }
         String motivo = request.path("motivo").asText("Anulación");
         DocumentModel voidingDocument = voiding.voidDocumentAsPlatform(client.tenantId(), UUID.fromString(view.path("id").asText()),
-                new VoidingService.VoidRequest(motivo, true, null), UUID.randomUUID().toString());
+                new VoidingManager.VoidRequest(motivo, true, null), UUID.randomUUID().toString());
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(client.tenantId());
             documentEventProvider.addDocumentEvent(documentProvider.getDocument(UUID.fromString(view.path("id").asText())).orElse(null), null,
@@ -148,7 +149,7 @@ public class NubefactResource {
             token = token.substring(6);
         }
         token = token.replace("\"", "");
-        String hash = AdapterResource.hash(token);
+        String hash = Tokens.hash(token);
         return QuarkusTransaction.requiringNew().call(() -> {
             AdapterTokenProvider.TokenCompany row = adapterTokens.getNubefactTokenCompany(hash).orElse(null);
             if (row == null || !companyId.equals(row.companyId())) {

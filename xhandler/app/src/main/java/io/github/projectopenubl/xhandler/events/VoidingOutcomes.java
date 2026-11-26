@@ -3,13 +3,10 @@ package io.github.projectopenubl.xhandler.events;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 
-import io.github.projectopenubl.xhandler.events.WebhookEvents;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
 import jakarta.enterprise.event.Observes;
-import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.List;
 

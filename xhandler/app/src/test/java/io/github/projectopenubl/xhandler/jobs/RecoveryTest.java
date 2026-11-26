@@ -1,7 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs;
 
 import io.github.projectopenubl.xhandler.models.JobProvider;
-import io.github.projectopenubl.xhandler.models.JobModel;
 
 import static io.github.projectopenubl.xhandler.Api.tenantOf;
 import static io.github.projectopenubl.xhandler.xml.EngineStub.Reply;

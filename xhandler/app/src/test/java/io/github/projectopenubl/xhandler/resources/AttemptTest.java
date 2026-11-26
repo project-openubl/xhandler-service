@@ -4,10 +4,8 @@ import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.JobModel;
 import io.github.projectopenubl.xhandler.models.JobProvider;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
-import io.github.projectopenubl.xhandler.managers.DocumentControl;
+import io.github.projectopenubl.xhandler.managers.DocumentControlManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
-import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 
 import static io.github.projectopenubl.xhandler.Api.tenantOf;
 import static io.github.projectopenubl.xhandler.xml.EngineStub.Reply;
@@ -18,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.projectopenubl.xhandler.resources.TestCompanies;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -185,7 +182,7 @@ class AttemptTest {
     }
 
     @Inject
-    DocumentControl control;
+    DocumentControlManager control;
 
     @Test
     void an_ambiguous_send_is_resolved_before_anything_else() {

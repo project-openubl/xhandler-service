@@ -12,7 +12,7 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.MembershipProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
@@ -53,9 +53,9 @@ public class TenantResource {
     private final MembershipProvider membership;
     private final CurrentActor currentActor;
     private final TenantAccess access;
-    private final Auditor auditor;
+    private final AuditManager auditor;
 
-    public TenantResource(MembershipProvider membership, CurrentActor currentActor, TenantAccess access, Auditor auditor, TenantProvider tenantProvider, TenantMemberProvider tenantMemberProvider) {
+    public TenantResource(MembershipProvider membership, CurrentActor currentActor, TenantAccess access, AuditManager auditor, TenantProvider tenantProvider, TenantMemberProvider tenantMemberProvider) {
         this.tenantMemberProvider = tenantMemberProvider;
         this.tenantProvider = tenantProvider;
         this.membership = membership;

@@ -15,11 +15,11 @@ import java.util.Map;
  * transaction as the action.
  */
 @ApplicationScoped
-public class Auditor {
+public class AuditManager {
 
     private final AuditLogProvider auditLogProvider;
 
-    public Auditor(AuditLogProvider auditLogProvider) {
+    public AuditManager(AuditLogProvider auditLogProvider) {
         this.auditLogProvider = auditLogProvider;
     }
 

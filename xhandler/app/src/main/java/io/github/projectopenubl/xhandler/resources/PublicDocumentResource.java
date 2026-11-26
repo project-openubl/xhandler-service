@@ -1,13 +1,13 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.utils.PublicStatus;
+import io.github.projectopenubl.xhandler.utils.DocumentFiles;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
-import io.github.projectopenubl.xhandler.managers.AccessLinks;
+import io.github.projectopenubl.xhandler.managers.AccessLinkManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
-import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
@@ -15,7 +15,6 @@ import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -60,12 +59,12 @@ public class PublicDocumentResource {
             @org.eclipse.microprofile.openapi.annotations.media.Schema(description = "El Libro de Reclamaciones virtual del emisor, si lo configuró.")
             String libroReclamacionesUrl) {}
 
-    private final AccessLinks links;
+    private final AccessLinkManager links;
     private final TenantAccess access;
     private final FileStore files;
     private final io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf;
 
-    public PublicDocumentResource(AccessLinks links, TenantAccess access, FileStore files,
+    public PublicDocumentResource(AccessLinkManager links, TenantAccess access, FileStore files,
             io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
@@ -94,7 +93,7 @@ public class PublicDocumentResource {
         available.add("pdf");
         java.util.Collections.sort(available);
         // A test-environment document must never read as a real one
-        String status = "production".equals(doc.getSunatEnv()) ? publicStatus(doc.getStatus()) : "documento_de_prueba";
+        String status = "production".equals(doc.getSunatEnv()) ? PublicStatus.of(doc.getStatus()) : "documento_de_prueba";
         return new PublicDocument(company.getRuc(), company.getRazonSocial(), doc.getTipoComprobante(), doc.serieNumero(), doc.getFechaEmision(),
                 doc.getMoneda(), doc.getTotal(), status, available, company.getLibroReclamacionesUrl());
     }
@@ -121,16 +120,16 @@ public class PublicDocumentResource {
                     ? pdf.render(doc.getId(), links.url(token))
                     : files.get(documentFileProvider.getDocumentFile(doc.getId(), stored).orElseThrow(ApiException::notFound).getStorageKey());
             markDelivered(doc.getId());
-            return new Download(content, DocumentResource.fileName(null, doc, kind));
+            return new Download(content, DocumentFiles.fileName(null, doc, kind));
         });
         return Response.ok(download.content())
-                .type(DocumentResource.contentType(kind))
+                .type(DocumentFiles.contentType(kind))
                 .header("Content-Disposition", "attachment; filename=\"" + download.name() + "\"")
                 .build();
     }
 
     private DocumentModel open(String token) {
-        AccessLinks.Resolved resolved = links.resolve(token).orElseThrow(ApiException::notFound);
+        AccessLinkManager.Resolved resolved = links.resolve(token).orElseThrow(ApiException::notFound);
         access.enterAsPlatform(resolved.tenantId());
         DocumentModel doc = documentProvider.getDocument(resolved.documentId()).orElse(null);
         if (doc == null) {
@@ -151,14 +150,4 @@ public class PublicDocumentResource {
         }
     }
 
-    /** Buyers see the answer, not the internals: pending until SUNAT's definitive answer. */
-    static String publicStatus(String status) {
-        return switch (status) {
-            case "accepted", "accepted_with_observations" -> "aceptado";
-            case "rejected" -> "rechazado";
-            case "voided" -> "anulado";
-            case "voiding" -> "en_anulacion";
-            default -> "pendiente";
-        };
-    }
 }

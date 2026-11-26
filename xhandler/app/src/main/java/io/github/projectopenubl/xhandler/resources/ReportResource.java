@@ -6,12 +6,10 @@ import io.github.projectopenubl.xhandler.jobs.handlers.ReportJob;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.models.JobModel;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
-import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -59,9 +57,9 @@ public class ReportResource {
     private final Jobs jobs;
     private final ReportProvider reportProvider;
     private final FileStore files;
-    private final Auditor auditor;
+    private final AuditManager auditor;
 
-    public ReportResource(TenantAccess access, Jobs jobs, ReportProvider reportProvider, FileStore files, Auditor auditor, CompanyManager companyManager) {
+    public ReportResource(TenantAccess access, Jobs jobs, ReportProvider reportProvider, FileStore files, AuditManager auditor, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.access = access;
         this.jobs = jobs;

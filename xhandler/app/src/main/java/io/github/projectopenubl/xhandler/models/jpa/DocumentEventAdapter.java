@@ -3,7 +3,6 @@ package io.github.projectopenubl.xhandler.models.jpa;
 import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 import io.github.projectopenubl.xhandler.models.ModelType;
 import io.github.projectopenubl.xhandler.models.jpa.entities.DocumentEventEntity;
-import io.github.projectopenubl.xhandler.utils.Ids;
 import java.time.Instant;
 import java.util.UUID;
 

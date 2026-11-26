@@ -18,7 +18,7 @@ import java.util.UUID;
  * so emits on one series run one at a time (one series per POS terminal avoids contention).
  */
 @ApplicationScoped
-public class Numbering {
+public class NumberingManager {
 
     private final SeriesProvider seriesProvider;
 
@@ -30,7 +30,7 @@ public class Numbering {
 
     private final NumberingProvider numberingProvider;
 
-    public Numbering(NumberingProvider numberingProvider, SeriesProvider seriesProvider) {
+    public NumberingManager(NumberingProvider numberingProvider, SeriesProvider seriesProvider) {
         this.seriesProvider = seriesProvider;
         this.numberingProvider = numberingProvider;
     }

@@ -2,11 +2,10 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.models.CredentialProvider;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
-import io.github.projectopenubl.xhandler.managers.CredentialService;
+import io.github.projectopenubl.xhandler.managers.CredentialManager;
 import io.github.projectopenubl.xhandler.models.CredentialModel;
 
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -38,13 +37,13 @@ public class CredentialResource {
     public record SolCredentials(@NotBlank @Size(max = 100) String username, @NotBlank @Size(max = 200) String password) {}
 
     private final TenantAccess access;
-    private final CredentialService credentials;
+    private final CredentialManager credentials;
     private final io.github.projectopenubl.xhandler.clients.Egress egress;
-    private final io.github.projectopenubl.xhandler.managers.Entitlements entitlements;
-    private final io.github.projectopenubl.xhandler.managers.SireService sire;
+    private final io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements;
+    private final io.github.projectopenubl.xhandler.managers.SireManager sire;
 
-    public CredentialResource(TenantAccess access, CredentialService credentials, io.github.projectopenubl.xhandler.clients.Egress egress,
-            io.github.projectopenubl.xhandler.managers.Entitlements entitlements, io.github.projectopenubl.xhandler.managers.SireService sire, CompanyManager companyManager, CredentialProvider credentialProvider) {
+    public CredentialResource(TenantAccess access, CredentialManager credentials, io.github.projectopenubl.xhandler.clients.Egress egress,
+            io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, io.github.projectopenubl.xhandler.managers.SireManager sire, CompanyManager companyManager, CredentialProvider credentialProvider) {
         this.credentialProvider = credentialProvider;
         this.companyManager = companyManager;
         this.sire = sire;

@@ -2,7 +2,6 @@ package io.github.projectopenubl.xhandler.models;
 
 import io.github.projectopenubl.xhandler.keys.SecretBox;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 public interface WebhookSubscriptionModel extends Model {

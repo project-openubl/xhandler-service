@@ -3,8 +3,7 @@ package io.github.projectopenubl.xhandler.resources;
 import io.github.projectopenubl.xhandler.models.EmailProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.resources.StatusResource;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -49,9 +48,9 @@ public class SenderDomainResource {
 
     private final TenantAccess access;
     private final EmailProvider emailProvider;
-    private final Auditor auditor;
+    private final AuditManager auditor;
 
-    public SenderDomainResource(TenantAccess access, EmailProvider emailProvider, Auditor auditor) {
+    public SenderDomainResource(TenantAccess access, EmailProvider emailProvider, AuditManager auditor) {
         this.access = access;
         this.emailProvider = emailProvider;
         this.auditor = auditor;

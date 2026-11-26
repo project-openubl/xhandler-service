@@ -8,7 +8,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -19,15 +18,15 @@ import java.util.Optional;
 
 /** Stores and reads company secrets. Every read of a secret is audited. */
 @ApplicationScoped
-public class CredentialService {
+public class CredentialManager {
 
     private final CredentialProvider credentialProvider;
 
     private final SecretBox box;
-    private final Auditor auditor;
+    private final AuditManager auditor;
     private final ObjectMapper json;
 
-    public CredentialService(SecretBox box, Auditor auditor, ObjectMapper json, CredentialProvider credentialProvider) {
+    public CredentialManager(SecretBox box, AuditManager auditor, ObjectMapper json, CredentialProvider credentialProvider) {
         this.credentialProvider = credentialProvider;
         this.box = box;
         this.auditor = auditor;

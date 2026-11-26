@@ -32,7 +32,7 @@ import java.util.function.Supplier;
  * process is taken over after two minutes (longer than any emit).
  */
 @ApplicationScoped
-public class Idempotency {
+public class IdempotencyManager {
 
     /** A response stored for replay. */
     public record Stored(int status, JsonNode body) {}
@@ -44,7 +44,7 @@ public class Idempotency {
     private final TenantAccess access;
     private final ObjectMapper json;
 
-    public Idempotency(IdempotencyProvider keys, TenantAccess access, ObjectMapper json) {
+    public IdempotencyManager(IdempotencyProvider keys, TenantAccess access, ObjectMapper json) {
         this.keys = keys;
         this.access = access;
         this.json = json;
@@ -86,7 +86,7 @@ public class Idempotency {
     /** The request hash of a create: its kind, the ids of its path and its canonical body. */
     public String hash(String kind, Object path, Object body) {
         try {
-            JsonNode canonical = EmitService.canonical(json.valueToTree(body));
+            JsonNode canonical = EmitManager.canonical(json.valueToTree(body));
             return FileStore.sha256((kind + ":" + path + ":" + json.writeValueAsString(canonical)).getBytes(StandardCharsets.UTF_8));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);

@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.utils.PublicStatus;
 import io.github.projectopenubl.xhandler.models.PublicLookupProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -74,7 +75,7 @@ public class PublicLookupResource {
             }
             String status = lookups.getPublicDocumentStatus(request.ruc(), request.tipoComprobante(), request.serie(), request.numero(),
                     request.fechaEmision(), request.total());
-            return new LookupResult(status == null ? "no_encontrado" : PublicDocumentResource.publicStatus(status));
+            return new LookupResult(status == null ? "no_encontrado" : PublicStatus.of(status));
         });
     }
 

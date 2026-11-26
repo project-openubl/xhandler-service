@@ -4,16 +4,11 @@ import io.github.projectopenubl.xhandler.models.PrivacyProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
-import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.jobs.JobContext;
-import io.github.projectopenubl.xhandler.jobs.JobHandler;
-import io.github.projectopenubl.xhandler.managers.Notifications;
-import io.github.projectopenubl.xhandler.resources.StatusResource;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
+import io.github.projectopenubl.xhandler.managers.NotificationManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
-import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -80,10 +75,10 @@ public class DataSubjectRequests {
 
     private final TenantAccess access;
     private final PrivacyProvider privacy;
-    private final Auditor auditor;
-    private final Notifications notifications;
+    private final AuditManager auditor;
+    private final NotificationManager notifications;
 
-    public DataSubjectRequests(TenantAccess access, PrivacyProvider privacy, Auditor auditor, Notifications notifications) {
+    public DataSubjectRequests(TenantAccess access, PrivacyProvider privacy, AuditManager auditor, NotificationManager notifications) {
         this.access = access;
         this.privacy = privacy;
         this.auditor = auditor;
@@ -108,7 +103,7 @@ public class DataSubjectRequests {
         return id;
     }
 
-    static String lima(Instant at) {
+    public static String lima(Instant at) {
         return java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy").format(at.atZone(java.time.ZoneId.of("America/Lima")));
     }
 
@@ -187,49 +182,4 @@ public class DataSubjectRequests {
                 r.closedAt() == null ? null : String.valueOf(r.closedAt()));
     }
 
-    /** Reminds tenants 2 days before the term; overdue requests are logged for the platform (daily). */
-    @ApplicationScoped
-    public static class Deadlines implements JobHandler {
-        private final PrivacyProvider privacy;
-        private final TenantAccess access;
-        private final Notifications notifications;
-
-        public Deadlines(PrivacyProvider privacy, TenantAccess access, Notifications notifications) {
-            this.privacy = privacy;
-            this.access = access;
-            this.notifications = notifications;
-        }
-
-        @Override
-        public String name() {
-            return "privacy.deadlines";
-        }
-
-        @Override
-        public Map<String, Object> run(JobContext context) {
-            record Due(UUID tenant, UUID id, Instant dueAt) {}
-            List<Due> due = QuarkusTransaction.requiringNew().call(() -> privacy.getRequestsDue().stream()
-                    .map(r -> new Due(r.tenantId(), r.requestId(), r.responseDueAt())).toList());
-            int reminded = 0;
-            for (Due d : due) {
-                if (d.dueAt().isBefore(Instant.now())) {
-                    org.jboss.logging.Logger.getLogger("xhandler.audit.platform")
-                            .warnf("data-subject request %s of tenant %s is overdue since %s", d.id(), d.tenant(), d.dueAt());
-                }
-                boolean sent = QuarkusTransaction.requiringNew().call(() -> {
-                    access.enterAsPlatform(d.tenant());
-                    int first = privacy.markReminded(d.id());
-                    if (first == 1) {
-                        notifications.publish(d.tenant(), "privacy.deadline", "Solicitud de datos personales por vencer",
-                                "Una solicitud de derechos de datos personales vence el " + lima(d.dueAt()) + ".", null);
-                    }
-                    return first == 1;
-                });
-                if (sent) {
-                    reminded++;
-                }
-            }
-            return Map.of("due", due.size(), "reminded", reminded);
-        }
-    }
 }

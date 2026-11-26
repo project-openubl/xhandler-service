@@ -21,13 +21,13 @@ import org.jboss.logging.Logger;
  * through xhandler-admin (P2).
  */
 @ApplicationScoped
-public class KeyRotation {
+public class KeyRotationManager {
 
     private final SigningKeyProvider signingKeyProvider;
 
     private final CredentialProvider credentialProvider;
 
-    private static final Logger LOG = Logger.getLogger(KeyRotation.class);
+    private static final Logger LOG = Logger.getLogger(KeyRotationManager.class);
 
     public record Result(int tenants, int credentials, int signingKeys) {}
 
@@ -36,7 +36,7 @@ public class KeyRotation {
     private final SecretBox box;
     private final KeyVault vault;
 
-    public KeyRotation(PlatformSecretProvider platformSecretProvider, TenantAccess access, SecretBox box, KeyVault vault, CredentialProvider credentialProvider, SigningKeyProvider signingKeyProvider) {
+    public KeyRotationManager(PlatformSecretProvider platformSecretProvider, TenantAccess access, SecretBox box, KeyVault vault, CredentialProvider credentialProvider, SigningKeyProvider signingKeyProvider) {
         this.signingKeyProvider = signingKeyProvider;
         this.credentialProvider = credentialProvider;
         this.platformSecretProvider = platformSecretProvider;

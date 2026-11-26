@@ -1,10 +1,10 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
-import io.github.projectopenubl.xhandler.managers.SireService;
+import io.github.projectopenubl.xhandler.managers.SireManager;
 
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
-import io.github.projectopenubl.xhandler.managers.Notifications;
+import io.github.projectopenubl.xhandler.managers.NotificationManager;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -26,9 +26,9 @@ public final class SireJobs {
     @ApplicationScoped
     public static class Request implements JobHandler {
         public static final String NAME = "sire.request";
-        private final SireService sire;
+        private final SireManager sire;
 
-        public Request(SireService sire) {
+        public Request(SireManager sire) {
             this.sire = sire;
         }
 
@@ -48,9 +48,9 @@ public final class SireJobs {
     @ApplicationScoped
     public static class Replace implements JobHandler {
         public static final String NAME = "sire.replace";
-        private final SireService sire;
+        private final SireManager sire;
 
-        public Replace(SireService sire) {
+        public Replace(SireManager sire) {
             this.sire = sire;
         }
 
@@ -69,10 +69,10 @@ public final class SireJobs {
     /** Follows SUNAT's tickets of every tenant (scheduled). */
     @ApplicationScoped
     public static class Poll implements JobHandler {
-        private final SireService sire;
+        private final SireManager sire;
         private final SireProvider sireProvider;
 
-        public Poll(SireService sire, SireProvider sireProvider) {
+        public Poll(SireManager sire, SireProvider sireProvider) {
             this.sire = sire;
             this.sireProvider = sireProvider;
         }
@@ -107,9 +107,9 @@ public final class SireJobs {
     public static class Deadlines implements JobHandler {
         private final SireProvider sireProvider;
         private final TenantAccess access;
-        private final Notifications notifications;
+        private final NotificationManager notifications;
 
-        public Deadlines(SireProvider sireProvider, TenantAccess access, Notifications notifications) {
+        public Deadlines(SireProvider sireProvider, TenantAccess access, NotificationManager notifications) {
             this.sireProvider = sireProvider;
             this.access = access;
             this.notifications = notifications;

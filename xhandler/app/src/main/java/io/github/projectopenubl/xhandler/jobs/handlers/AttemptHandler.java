@@ -5,10 +5,9 @@ import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
-import io.github.projectopenubl.xhandler.managers.Routes;
+import io.github.projectopenubl.xhandler.managers.RouteManager;
 import io.github.projectopenubl.xhandler.models.Outcome;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.utils.OutcomePolicy;
 
@@ -25,7 +24,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
-import jakarta.persistence.LockModeType;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -77,7 +75,7 @@ public class AttemptHandler implements JobHandler {
             UUID tenantId,
             int attempt,
             Action action,
-            Routes.Target target,
+            RouteManager.Target target,
             String xmlKey,
             String ticket,
             EngineModels.DocumentKey key,
@@ -100,7 +98,7 @@ public class AttemptHandler implements JobHandler {
     static final Duration SUMMARY_PROCESSING = Duration.ofHours(6);
 
     private final TenantAccess access;
-    private final Routes routes;
+    private final RouteManager routes;
     private final Engine engine;
     private final FileStore files;
     private final Event<DocumentStatusChanged> statusChanged;
@@ -110,7 +108,7 @@ public class AttemptHandler implements JobHandler {
 
     public AttemptHandler(
             TenantAccess access,
-            Routes routes,
+            RouteManager routes,
             Engine engine,
             FileStore files,
             Event<DocumentStatusChanged> statusChanged,
@@ -240,10 +238,10 @@ public class AttemptHandler implements JobHandler {
             return "no_signed_xml";
         }
         CompanyModel company = companyProvider.getCompany(doc.getCompanyId()).orElse(null);
-        Routes.Target target;
+        RouteManager.Target target;
         try {
             target = routes.target(scope, company, doc);
-        } catch (Routes.MissingCredentials e) {
+        } catch (RouteManager.MissingCredentials e) {
             // The user must add credentials; the document waits in exception, resendable later
             applyAndRecord(doc, OutcomePolicy.decide(state(doc), Outcome.of(Outcome.Kind.PERMANENT, null, e.getMessage()),
                     now, 1.0, null), Outcome.of(Outcome.Kind.PERMANENT, null, e.getMessage()), context.correlationId());
@@ -273,7 +271,7 @@ public class AttemptHandler implements JobHandler {
     }
 
     /** The lines of a summary: documents it adds (RC estado 1) and documents it voids (RA, RR, RC estado 3). */
-    private List<Line> summaryLines(CompanyModel company, DocumentModel summary, Routes.Target target) {
+    private List<Line> summaryLines(CompanyModel company, DocumentModel summary, RouteManager.Target target) {
         List<Line> lines = new java.util.ArrayList<>();
         List<DocumentModel> added = documentProvider.getSummaryLines(summary.getId());
         List<DocumentModel> voided = documentProvider.getVoidedBy(summary.getId());
@@ -286,7 +284,7 @@ public class AttemptHandler implements JobHandler {
         return lines;
     }
 
-    private static EngineModels.ValidityRequest validityCheck(CompanyModel company, DocumentModel d, Routes.Target target) {
+    private static EngineModels.ValidityRequest validityCheck(CompanyModel company, DocumentModel d, RouteManager.Target target) {
         // Anonymous boletas have no buyer document: SUNAT's convention is type 0 / number "-"
         return new EngineModels.ValidityRequest(target.environment(), target.credentials(),
                 new EngineModels.DocumentKey(company.getRuc(), d.getTipoComprobante(), d.getSerie(), d.getNumero()),
@@ -296,7 +294,7 @@ public class AttemptHandler implements JobHandler {
 
     private Outcome execute(Plan plan, Map<UUID, String> lineStates) {
         String xml = new String(files.get(plan.xmlKey()), StandardCharsets.UTF_8);
-        Routes.Target t = plan.target();
+        RouteManager.Target t = plan.target();
         try {
             return switch (plan.action()) {
                 case SEND -> afterSend(plan, xml, engine.send(xml, t.environment(), t.credentials(), t.urls()));
@@ -318,7 +316,7 @@ public class AttemptHandler implements JobHandler {
      * then goes through the digest check).
      */
     private Outcome resolve(Plan plan, String xml, Map<UUID, String> lineStates) {
-        Routes.Target t = plan.target();
+        RouteManager.Target t = plan.target();
         if (plan.summary() && plan.ticket() != null) {
             return Outcome.ofSend(engine.verifyTicket(xml, plan.ticket(), t.environment(), t.credentials(), t.urls()));
         }
@@ -385,7 +383,7 @@ public class AttemptHandler implements JobHandler {
      * 1033 collides (someone used the number), a later one is taken as our earlier send.
      */
     private Outcome digestCheck(Plan plan, String xml, Outcome sunat) {
-        Routes.Target t = plan.target();
+        RouteManager.Target t = plan.target();
         if (!plan.canConsult()) {
             // Beta, or a third-party OSE: no consult service to ask with these credentials
             return plan.attempt() > 1
@@ -418,7 +416,7 @@ public class AttemptHandler implements JobHandler {
 
     /** 1032: already reported, voided or rejected. Production facturas can ask; otherwise it ends here. */
     private Outcome alreadyFinal(Plan plan, String xml, Outcome sunat) {
-        Routes.Target t = plan.target();
+        RouteManager.Target t = plan.target();
         if (plan.facturaFamily() && plan.canConsult()) {
             EngineModels.StatusCdrResponse status = engine.statusCdr(t.environment(), t.credentials(), plan.key());
             return switch (status.status()) {

@@ -4,8 +4,8 @@ import io.github.projectopenubl.xhandler.models.AuditLogProvider;
 import io.github.projectopenubl.xhandler.models.CredentialProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.keys.SecretBox;
-import io.github.projectopenubl.xhandler.managers.CredentialService;
-import io.github.projectopenubl.xhandler.managers.KeyRotation;
+import io.github.projectopenubl.xhandler.managers.CredentialManager;
+import io.github.projectopenubl.xhandler.managers.KeyRotationManager;
 import io.github.projectopenubl.xhandler.models.CredentialModel;
 
 import static io.github.projectopenubl.xhandler.Api.as;
@@ -20,8 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.models.AuditLogModel;
-import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.github.projectopenubl.xhandler.keys.TestVaults;
 import io.github.projectopenubl.xhandler.security.Actor;
@@ -54,10 +52,10 @@ class CredentialTest {
     TenantAccess access;
 
     @Inject
-    CredentialService credentials;
+    CredentialManager credentials;
 
     @Inject
-    KeyRotation rotation;
+    KeyRotationManager rotation;
 
     @Test
     void sol_credentials_are_encrypted_masked_and_audited() {
@@ -115,7 +113,7 @@ class CredentialTest {
             return c.getId();
         });
 
-        KeyRotation.Result result = rotation.rewrapAll();
+        KeyRotationManager.Result result = rotation.rewrapAll();
         assertTrue(result.credentials() >= 1);
 
         QuarkusTransaction.requiringNew().run(() -> {

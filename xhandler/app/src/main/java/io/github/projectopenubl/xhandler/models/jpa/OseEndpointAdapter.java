@@ -4,7 +4,6 @@ import io.github.projectopenubl.xhandler.models.ModelType;
 import io.github.projectopenubl.xhandler.models.OseEndpointModel;
 import io.github.projectopenubl.xhandler.models.jpa.entities.OseEndpointEntity;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 public class OseEndpointAdapter implements OseEndpointModel, JpaModel<OseEndpointEntity> {

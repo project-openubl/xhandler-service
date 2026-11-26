@@ -9,8 +9,6 @@ import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
-import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 import io.github.projectopenubl.xhandler.utils.DocumentTypes;
@@ -22,7 +20,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
@@ -36,7 +33,6 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import io.github.projectopenubl.xhandler.models.NumberingProvider;
-import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -58,7 +54,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  * emits one document at a time. Emits take a permit from a bounded semaphore first.
  */
 @ApplicationScoped
-public class EmitService {
+public class EmitManager {
 
     private final PseProvider pseProvider;
 
@@ -89,38 +85,38 @@ public class EmitService {
     public record DraftIssue(String key, Runnable guard, java.util.function.Consumer<DocumentModel> issued) {}
 
     private final TenantAccess access;
-    private final Numbering numbering;
+    private final NumberingManager numbering;
     private final Engine engine;
     private final SigningService signing;
     private final SignatureLog signatureLog;
     private final FileStore files;
-    private final Routes routes;
-    private final AccessLinks links;
-    private final Idempotency idempotency;
-    private final Auditor auditor;
+    private final RouteManager routes;
+    private final AccessLinkManager links;
+    private final IdempotencyManager idempotency;
+    private final AuditManager auditor;
     private final NumberingProvider numberingProvider;
     private final ObjectMapper json;
     private final Instance<EmitQuota> quota;
-    private final io.github.projectopenubl.xhandler.managers.ExchangeRates rates;
+    private final io.github.projectopenubl.xhandler.managers.ExchangeRateManager rates;
     private final Semaphore permits;
     private final long permitTimeoutMillis;
     private final String lockTimeout;
 
-    public EmitService(
+    public EmitManager(
             TenantAccess access,
-            Numbering numbering,
+            NumberingManager numbering,
             Engine engine,
             SigningService signing,
             SignatureLog signatureLog,
             FileStore files,
-            Routes routes,
-            AccessLinks links,
-            Idempotency idempotency,
-            Auditor auditor,
+            RouteManager routes,
+            AccessLinkManager links,
+            IdempotencyManager idempotency,
+            AuditManager auditor,
             NumberingProvider numberingProvider,
             ObjectMapper json,
             Instance<EmitQuota> quota,
-            io.github.projectopenubl.xhandler.managers.ExchangeRates rates,
+            io.github.projectopenubl.xhandler.managers.ExchangeRateManager rates,
             @ConfigProperty(name = "xhandler.emit.permits", defaultValue = "32") int permits,
             @ConfigProperty(name = "xhandler.emit.permit-timeout", defaultValue = "5s") Duration permitTimeout,
             @ConfigProperty(name = "xhandler.emit.lock-timeout", defaultValue = "10s") Duration lockTimeout, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, TenantProvider tenantProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider, PseProvider pseProvider) {
@@ -190,7 +186,7 @@ public class EmitService {
         });
         UUID claim = null;
         if (idempotencyKey != null) {
-            Idempotency.Begun begun = idempotency.begin(tenantId, idempotencyKey,
+            IdempotencyManager.Begun begun = idempotency.begin(tenantId, idempotencyKey,
                     hash((draft == null ? "" : draft.key() + ":") + companyId, request));
             if (begun.replay() != null) {
                 return new Emitted(begun.replay().status(), begun.replay().body());
@@ -315,7 +311,7 @@ public class EmitService {
         String sunatEnv = company.getSunatEnv();
 
         checkCompany(company, tipo);
-        Routes.Assignment route = routes.assign(company, sunatEnv, tipo);
+        RouteManager.Assignment route = routes.assign(company, sunatEnv, tipo);
 
         fillProveedor(spec, company);
         LocalDate fecha = issueDate(spec);
@@ -430,7 +426,7 @@ public class EmitService {
                 throw ApiException.invalid("invalid_document", "tipo_cambio debe ser mayor que cero.", null);
             }
         } else {
-            rate = rates.on(fecha).map(io.github.projectopenubl.xhandler.managers.ExchangeRates.Rate::venta).orElse(null);
+            rate = rates.on(fecha).map(io.github.projectopenubl.xhandler.managers.ExchangeRateManager.Rate::venta).orElse(null);
         }
         if (rate == null) {
             throw ApiException.invalid("invalid_document",

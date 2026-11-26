@@ -1,18 +1,17 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.utils.Tokens;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.AdapterTokenProvider;
-import io.github.projectopenubl.xhandler.managers.UblUploadService;
+import io.github.projectopenubl.xhandler.managers.UblUploadManager;
 import io.github.projectopenubl.xhandler.utils.SfsAdapter;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
-import io.github.projectopenubl.xhandler.managers.EmitService;
-import io.github.projectopenubl.xhandler.files.FileStore;
+import io.github.projectopenubl.xhandler.managers.EmitManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -28,7 +27,6 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.core.Response;
-import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Map;
@@ -54,13 +52,13 @@ public class AdapterResource {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final TenantAccess access;
-    private final UblUploadService ubl;
-    private final EmitService emit;
+    private final UblUploadManager ubl;
+    private final EmitManager emit;
     private final AdapterTokenProvider adapterTokens;
-    private final Auditor auditor;
+    private final AuditManager auditor;
     private final com.fasterxml.jackson.databind.ObjectMapper json;
 
-    public AdapterResource(TenantAccess access, UblUploadService ubl, EmitService emit, AdapterTokenProvider adapterTokens, Auditor auditor,
+    public AdapterResource(TenantAccess access, UblUploadManager ubl, EmitManager emit, AdapterTokenProvider adapterTokens, AuditManager auditor,
             com.fasterxml.jackson.databind.ObjectMapper json, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.access = access;
@@ -108,8 +106,8 @@ public class AdapterResource {
         if (!ruc.equals(converted.ruc())) {
             throw ApiException.invalid("invalid_document", "El RUC del archivo no es el de la empresa.", null);
         }
-        EmitService.Emitted emitted = emit.emitNumbered(tenantId, companyId, idempotencyKey,
-                new EmitService.EmitRequest(converted.document(), converted.serie(), null, Map.of("adapter", "sfs")), converted.numero(),
+        EmitManager.Emitted emitted = emit.emitNumbered(tenantId, companyId, idempotencyKey,
+                new EmitManager.EmitRequest(converted.document(), converted.serie(), null, Map.of("adapter", "sfs")), converted.numero(),
                 UUID.randomUUID().toString(), false);
         return Response.status(emitted.status()).entity(emitted.body()).build();
     }
@@ -128,7 +126,7 @@ public class AdapterResource {
         RANDOM.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
         UUID id = Ids.newId();
-        adapterTokens.addNubefactToken(id, tenantId, company.getId(), hash(token), request.label(), scope.actor().auditName());
+        adapterTokens.addNubefactToken(id, tenantId, company.getId(), Tokens.hash(token), request.label(), scope.actor().auditName());
         auditor.record(scope, "adapter_token.created", "company", companyId, Map.of("kind", "nubefact", "label", request.label()));
         return Response.status(201).entity(new NubefactToken(id, token, "/api/v1/public/nubefact/" + company.getId())).build();
     }
@@ -164,7 +162,4 @@ public class AdapterResource {
         return Response.noContent().build();
     }
 
-    static String hash(String token) {
-        return FileStore.sha256(token.getBytes(StandardCharsets.UTF_8));
-    }
 }

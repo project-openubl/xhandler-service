@@ -1,10 +1,10 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.managers.LogoManager;
 import io.github.projectopenubl.xhandler.models.CredentialProvider;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.SeriesProvider;
 import io.github.projectopenubl.xhandler.models.SigningKeyProvider;
-import io.github.projectopenubl.xhandler.models.CredentialModel;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.DefaultSeries;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
@@ -13,17 +13,16 @@ import io.github.projectopenubl.xhandler.models.SeriesModel;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Constraints;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.models.SigningKeyModel;
-import io.github.projectopenubl.xhandler.managers.CredentialService;
+import io.github.projectopenubl.xhandler.managers.CredentialManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
@@ -85,12 +84,12 @@ public class CompanyEnvironmentResource {
     static final Set<String> SOL_ERRORS = Set.of("0101", "0102", "0103", "0104", "0105", "0106", "0110", "0111", "0112", "0113", "0154");
 
     private final TenantAccess access;
-    private final Auditor auditor;
-    private final CredentialService credentials;
+    private final AuditManager auditor;
+    private final CredentialManager credentials;
     private final Engine engine;
     private final io.github.projectopenubl.xhandler.files.FileStore files;
 
-    public CompanyEnvironmentResource(TenantAccess access, Auditor auditor, CredentialService credentials, Engine engine,
+    public CompanyEnvironmentResource(TenantAccess access, AuditManager auditor, CredentialManager credentials, Engine engine,
             io.github.projectopenubl.xhandler.files.FileStore files, CompanyProvider companyProvider, SigningKeyProvider signingKeyProvider, SeriesProvider seriesProvider, CompanyManager companyManager, CredentialProvider credentialProvider) {
         this.credentialProvider = credentialProvider;
         this.companyManager = companyManager;
@@ -157,51 +156,12 @@ public class CompanyEnvironmentResource {
     public CompanyResource.CompanyView logo(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, byte[] image) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompanyForUpdate(companyId);
-        company.setLogoRef(files.put(company.getTenantId(), logoImage(image)).key());
+        company.setLogoRef(files.put(company.getTenantId(), LogoManager.normalize(image)).key());
         auditor.record(scope, "company.logo_changed", "company", companyId);
         return CompanyResource.view(company);
     }
 
-    /** A logo upload (company or partner): PNG or JPEG, up to 200 KB, re-encoded as PNG. */
-    public static byte[] logoImage(byte[] image) {
-        boolean png = image != null && image.length > 8 && (image[0] & 0xff) == 0x89 && image[1] == 'P' && image[2] == 'N' && image[3] == 'G';
-        boolean jpeg = image != null && image.length > 3 && (image[0] & 0xff) == 0xFF && (image[1] & 0xff) == 0xD8;
-        if (!png && !jpeg) {
-            throw ApiException.invalid("invalid_request", "El logo debe ser una imagen PNG o JPEG.", null);
-        }
-        if (image.length > 200 * 1024) {
-            throw ApiException.invalid("invalid_request", "El logo no debe pasar de 200 KB.", null);
-        }
-        return reencode(image);
-    }
 
-    /**
-     * Checks the declared size before decoding (a small file can declare a huge image) and re-encodes
-     * it as PNG, so every PDF render decodes a known-small image.
-     */
-    static byte[] reencode(byte[] image) {
-        try (var input = javax.imageio.ImageIO.createImageInputStream(new java.io.ByteArrayInputStream(image))) {
-            var readers = javax.imageio.ImageIO.getImageReaders(input);
-            if (!readers.hasNext()) {
-                throw ApiException.invalid("invalid_request", "No se pudo leer el logo.", null);
-            }
-            var reader = readers.next();
-            try {
-                reader.setInput(input, true, true);
-                if (reader.getWidth(0) > 2000 || reader.getHeight(0) > 2000) {
-                    throw ApiException.invalid("invalid_request", "El logo no debe pasar de 2000 × 2000 píxeles.", null);
-                }
-                java.awt.image.BufferedImage decoded = reader.read(0);
-                var out = new java.io.ByteArrayOutputStream();
-                javax.imageio.ImageIO.write(decoded, "png", out);
-                return out.toByteArray();
-            } finally {
-                reader.dispose();
-            }
-        } catch (java.io.IOException e) {
-            throw ApiException.invalid("invalid_request", "No se pudo leer el logo.", null);
-        }
-    }
 
     @Operation(operationId = "changeCompanyEnvironment")
     @POST

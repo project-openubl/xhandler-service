@@ -6,10 +6,7 @@ import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
-import io.github.projectopenubl.xhandler.managers.Notifications;
 import io.github.projectopenubl.xhandler.utils.RegisterFormats;
-import io.github.projectopenubl.xhandler.managers.RegisterRows;
-import io.github.projectopenubl.xhandler.managers.CredentialService;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -40,25 +37,25 @@ import org.jboss.logging.Logger;
  * Failed polls back off exponentially and give up after {@link #MAX_ATTEMPTS}.
  */
 @ApplicationScoped
-public class SireService {
+public class SireManager {
 
     private final CompanyProvider companyProvider;
 
     static final int MAX_ATTEMPTS = 20;
     private static final String CLAIM = "claim:";
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final Logger LOG = Logger.getLogger(SireService.class);
+    private static final Logger LOG = Logger.getLogger(SireManager.class);
 
     private final SireProvider sireProvider;
     private final TenantAccess access;
     private final Engine engine;
-    private final CredentialService credentials;
+    private final CredentialManager credentials;
     private final FileStore files;
-    private final RegisterRows registers;
-    private final Notifications notifications;
+    private final RegisterManager registers;
+    private final NotificationManager notifications;
 
-    public SireService(SireProvider sireProvider, TenantAccess access, Engine engine, CredentialService credentials, FileStore files,
-            RegisterRows registers, Notifications notifications, CompanyProvider companyProvider) {
+    public SireManager(SireProvider sireProvider, TenantAccess access, Engine engine, CredentialManager credentials, FileStore files,
+            RegisterManager registers, NotificationManager notifications, CompanyProvider companyProvider) {
         this.companyProvider = companyProvider;
         this.sireProvider = sireProvider;
         this.access = access;
@@ -274,7 +271,7 @@ public class SireService {
         FileStore.Stored stored = files.put(tenantId, zip);
         String reconciliation = QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(tenantId);
-            List<RegisterRows.Row> rows = "rvie".equals(p.book())
+            List<RegisterManager.Row> rows = "rvie".equals(p.book())
                     ? registers.sales(p.companyId(), p.sunatEnv(), p.period())
                     : registers.purchases(p.companyId(), p.period());
             return JSON.writeValueAsString(RegisterFormats.reconcile(p.book(), proposal, rows));
@@ -285,12 +282,12 @@ public class SireService {
 
     /** Builds the replacement from the stored rows and submits it (a period in {@code submitting}). */
     public void replace(UUID tenantId, UUID id) {
-        record Call(Period period, CompanyModel company, EngineModels.ApiCredentials creds, List<RegisterRows.Row> rows) {}
+        record Call(Period period, CompanyModel company, EngineModels.ApiCredentials creds, List<RegisterManager.Row> rows) {}
         Call call = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(tenantId);
             Period p = load(id);
             CompanyModel company = companyProvider.getCompany(p.companyId()).orElse(null);
-            List<RegisterRows.Row> rows = "rvie".equals(p.book())
+            List<RegisterManager.Row> rows = "rvie".equals(p.book())
                     ? registers.sales(p.companyId(), p.sunatEnv(), p.period())
                     : registers.purchases(p.companyId(), p.period());
             return new Call(p, company, apiCredentials(scope, company, "sire:" + id).orElse(null), rows);

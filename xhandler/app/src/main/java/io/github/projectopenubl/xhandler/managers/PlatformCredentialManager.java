@@ -23,7 +23,7 @@ import org.jboss.logging.Logger;
  * log owns them). PSE documents spread over the pool, so no single SOL user is a bottleneck (§10.2).
  */
 @ApplicationScoped
-public class PlatformCredentials {
+public class PlatformCredentialManager {
 
     /** A pool member without its secret. */
     public record Entry(UUID id, String purpose, String label, boolean active) {}
@@ -34,7 +34,7 @@ public class PlatformCredentials {
     private final SecretBox box;
     private final ObjectMapper json;
 
-    public PlatformCredentials(PlatformSecretProvider platformSecretProvider, SecretBox box, ObjectMapper json) {
+    public PlatformCredentialManager(PlatformSecretProvider platformSecretProvider, SecretBox box, ObjectMapper json) {
         this.platformSecretProvider = platformSecretProvider;
         this.box = box;
         this.json = json;

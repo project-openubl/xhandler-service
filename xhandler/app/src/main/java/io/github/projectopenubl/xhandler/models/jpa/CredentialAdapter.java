@@ -1,6 +1,5 @@
 package io.github.projectopenubl.xhandler.models.jpa;
 
-import io.github.projectopenubl.xhandler.keys.SecretBox;
 import io.github.projectopenubl.xhandler.models.CredentialModel;
 import io.github.projectopenubl.xhandler.models.ModelType;
 import io.github.projectopenubl.xhandler.models.jpa.entities.CredentialEntity;

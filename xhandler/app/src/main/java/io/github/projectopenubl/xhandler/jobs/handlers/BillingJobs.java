@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.clients.LagoClient;
-import io.github.projectopenubl.xhandler.managers.Entitlements;
+import io.github.projectopenubl.xhandler.managers.EntitlementManager;
 
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
@@ -103,9 +103,9 @@ public final class BillingJobs {
         private final BillingProvider billingProvider;
         private final LagoClient lago;
         private final TenantAccess access;
-        private final Entitlements entitlements;
+        private final EntitlementManager entitlements;
 
-        public EntitlementSync(BillingProvider billingProvider, LagoClient lago, TenantAccess access, Entitlements entitlements) {
+        public EntitlementSync(BillingProvider billingProvider, LagoClient lago, TenantAccess access, EntitlementManager entitlements) {
             this.billingProvider = billingProvider;
             this.lago = lago;
             this.access = access;

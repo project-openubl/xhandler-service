@@ -4,9 +4,8 @@ import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
-import io.github.projectopenubl.xhandler.managers.Summaries;
+import io.github.projectopenubl.xhandler.managers.SummaryManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import io.github.projectopenubl.xhandler.models.CompanyModel;
@@ -16,7 +15,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -45,9 +43,9 @@ public class BoletaSummaryFallback implements JobHandler {
     private static final Logger LOG = Logger.getLogger(BoletaSummaryFallback.class);
 
     private final TenantAccess access;
-    private final Summaries summaries;
+    private final SummaryManager summaries;
 
-    public BoletaSummaryFallback(TenantAccess access, Summaries summaries, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
+    public BoletaSummaryFallback(TenantAccess access, SummaryManager summaries, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
         this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;
         this.documentEventProvider = documentEventProvider;
@@ -88,7 +86,7 @@ public class BoletaSummaryFallback implements JobHandler {
                     break;
                 }
                 summariesCreated++;
-                if (chunk.lines() < Summaries.MAX_LINES) {
+                if (chunk.lines() < SummaryManager.MAX_LINES) {
                     break;
                 }
             }
@@ -104,7 +102,7 @@ public class BoletaSummaryFallback implements JobHandler {
         CompanyModel company = companyProvider.getCompanyForShare(companyId).orElse(null);
         int numero = summaries.reserveResumenDiario(company, sunatEnv);
         List<DocumentModel> boletas = documentProvider.getSummaryCandidatesForUpdate(companyId, sunatEnv, fecha, today.minusDays(5),
-                Summaries.MAX_LINES, true);
+                SummaryManager.MAX_LINES, true);
         boletas = boletas.stream().filter(d -> !attemptActive(d.getId())).toList();
         if (boletas.isEmpty()) {
             // Rolls back: the reserved number is not consumed
@@ -133,7 +131,7 @@ public class BoletaSummaryFallback implements JobHandler {
             QuarkusTransaction.requiringNew().run(() -> {
                 access.enterAsPlatform(tenantId);
                 List<DocumentModel> boletas = documentProvider.getSummaryCandidatesForUpdate(companyId, sunatEnv, fecha, today.minusDays(5),
-                        Summaries.MAX_LINES, false);
+                        SummaryManager.MAX_LINES, false);
                 for (DocumentModel boleta : boletas) {
                     boleta.setCodeClass("summary_failed");
                     boleta.setHoldReason("needs_attention");

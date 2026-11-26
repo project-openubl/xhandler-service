@@ -7,7 +7,6 @@ import io.github.projectopenubl.xhandler.models.WebhookSubscriptionModel;
 
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.transaction.Transactional;

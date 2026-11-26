@@ -11,8 +11,8 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Constraints;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.managers.Idempotency;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
+import io.github.projectopenubl.xhandler.managers.IdempotencyManager;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
@@ -59,10 +59,10 @@ public class MemberResource {
     public record UpdateMember(@NotBlank @Pattern(regexp = "admin|operator|viewer") String role) {}
 
     private final TenantAccess access;
-    private final Auditor auditor;
-    private final Idempotency idempotency;
+    private final AuditManager auditor;
+    private final IdempotencyManager idempotency;
 
-    public MemberResource(TenantAccess access, Auditor auditor, Idempotency idempotency, TenantMemberProvider tenantMemberProvider, TenantProvider tenantProvider) {
+    public MemberResource(TenantAccess access, AuditManager auditor, IdempotencyManager idempotency, TenantMemberProvider tenantMemberProvider, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.tenantMemberProvider = tenantMemberProvider;
         this.access = access;

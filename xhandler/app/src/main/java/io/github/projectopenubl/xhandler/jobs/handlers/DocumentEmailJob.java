@@ -11,14 +11,12 @@ import io.github.projectopenubl.xhandler.models.EmailProvider;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.managers.AccessLinks;
+import io.github.projectopenubl.xhandler.managers.AccessLinkManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
-import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.pdf.DocumentPdf;
-import io.github.projectopenubl.xhandler.managers.CredentialService;
+import io.github.projectopenubl.xhandler.managers.CredentialManager;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -52,16 +50,16 @@ public class DocumentEmailJob implements JobHandler {
     private final TenantAccess access;
     private final DocumentPdf pdf;
     private final FileStore files;
-    private final AccessLinks links;
-    private final CredentialService credentials;
+    private final AccessLinkManager links;
+    private final CredentialManager credentials;
     private final EmailSender sender;
     private final EmailProvider emailProvider;
     private final io.github.projectopenubl.xhandler.clients.Egress egress;
-    private final io.github.projectopenubl.xhandler.managers.Entitlements entitlements;
+    private final io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements;
 
-    public DocumentEmailJob(TenantAccess access, DocumentPdf pdf, FileStore files, AccessLinks links, CredentialService credentials,
+    public DocumentEmailJob(TenantAccess access, DocumentPdf pdf, FileStore files, AccessLinkManager links, CredentialManager credentials,
             EmailSender sender, EmailProvider emailProvider, io.github.projectopenubl.xhandler.clients.Egress egress,
-            io.github.projectopenubl.xhandler.managers.Entitlements entitlements, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+            io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
         this.documentEventProvider = documentEventProvider;

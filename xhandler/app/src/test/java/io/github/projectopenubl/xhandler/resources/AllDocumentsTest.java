@@ -14,10 +14,9 @@ import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.projectopenubl.xhandler.resources.TestCompanies;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
-import io.github.projectopenubl.xhandler.managers.ExchangeRates;
+import io.github.projectopenubl.xhandler.jobs.handlers.ExchangeRatesJob;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -41,7 +40,7 @@ class AllDocumentsTest {
     TestCompanies companies;
 
     @Inject
-    ExchangeRates rates;
+    ExchangeRatesJob rates;
 
     @Inject
     BoletaSummaryFallback fallback;
