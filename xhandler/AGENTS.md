@@ -26,6 +26,31 @@ examples/         Sample documents (xbuilder JSON)
 docs/             DESIGN.md and research
 ```
 
+### Code layout (`app/`)
+
+Layered like [openubl's api](https://github.com/project-openubl/openubl/tree/master/api)
+(DESIGN.md §4), under `io.github.projectopenubl.xhandler`:
+
+```
+resources/              JAX-RS (resources/admin: platform admin API, excluded from the OpenAPI)
+managers/               business logic (*Manager)
+models/                 *Model and *Provider interfaces, DocumentSearch, DefaultSeries
+models/jpa/             Jpa*Provider (all SQL), *Adapter; entities/ (*Entity), repositories/
+models/utils/           ModelToRepresentation, RepresentationToModel
+representations/idm/    API records (*Representation, @Schema(name) keeps the OpenAPI name)
+jobs/, jobs/handlers/   job runtime and every JobHandler
+events/                 DocumentStatusChanged and its observers
+security/               TenantAccess, CurrentActor, RLS interceptor
+keys/ files/ xml/ mail/ pdf/ clients/ bootstrap/ utils/   infrastructure
+```
+
+- New SQL goes into a `Jpa*Provider` (`@Transactional(MANDATORY)`, constructor-injected
+  `EntityManager` or repository), never into resources, managers or jobs. Raw JDBC stays in
+  `jobs/DirectConnections`, `LockConnection` and `WorkerRuntime`.
+- Providers return models, `Optional`s or small records and never throw `ApiException`.
+- Request and response types are `representations/idm/*Representation` records; a new one keeps a
+  stable `@Schema(name)` because the SDKs and the UI are generated from the OpenAPI document.
+
 ## Commands
 
 ```bash
@@ -50,7 +75,7 @@ java -jar admin-cli/target/xhandler-admin.jar --help   # xhandler-admin (after .
 
 - **Language**:
   - SUNAT and domain concepts in Spanish (`Detalle`, `tipoComprobante`, `serieNumero`).
-  - Infrastructure in English (`Job`, `Worker`, `…Service`, `…Repository`, `…Exception`).
+  - Infrastructure in English (`Job`, `Worker`, `…Manager`, `…Provider`, `…Repository`, `…Exception`).
   - **User-facing text in Spanish**: UI, API error messages, emails, PDFs. Code, logs and comments in English.
 - **Acronyms are words**: `Igv`, `Sunat`, `Ruc`, `Cdr`, `Xml` (in Java and Rust).
 - **Java**:
@@ -75,8 +100,8 @@ java -jar admin-cli/target/xhandler-admin.jar --help   # xhandler-admin (after .
   - foreign and unknown tenants are both 404.
 - **Secrets and keys**:
   - private keys only through `KeyVault` (an HSM in production; `SoftwareKeyVault` for dev and tests only);
-  - secrets only through `CredentialService`/`SecretBox`;
-  - never log or return them; reads of secrets are audited (`Auditor`).
+  - secrets only through `CredentialManager`/`SecretBox`;
+  - never log or return them; reads of secrets are audited (`AuditManager`).
 - **Tests** use real Keycloak tokens (`Api.as("alice")`) and Dev Services PostgreSQL; they must pass against a database that outlives the run (random RUCs, no fixed ids).
 - **Concurrency rules** (DESIGN.md §10.8) apply to any change touching jobs, documents or numbering.
 - **SUNAT environments**: tests and e2e use SUNAT beta or the fake; never production.
