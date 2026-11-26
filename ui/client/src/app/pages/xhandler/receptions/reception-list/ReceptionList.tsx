@@ -9,6 +9,8 @@ import {
   BreadcrumbItem,
   Content,
   ContentVariants,
+  Flex,
+  FlexItem,
   PageSection,
   PaginationVariant,
 } from "@patternfly/react-core";
@@ -25,12 +27,14 @@ import { ClearFiltersButton } from "@app/components/ClearFiltersButton";
 import { dataViewBodyStates } from "@app/components/dataViewStates";
 import { DateFilter } from "@app/components/DateFilter";
 import { DocumentTitle } from "@app/components/DocumentTitle";
+import { GatedButton } from "@app/components/GatedButton";
 import { ListPagination } from "@app/components/ListPagination";
 import { TableEmptyState } from "@app/components/TableEmptyState";
 import { RENDER_DATE_FORMAT } from "@app/constants";
 import { useNotifications } from "@app/hooks/useNotifications";
 import { usePersistentState } from "@app/hooks/usePersistentState";
 import { useSelectedTenantId } from "@app/hooks/useSelectedTenantId";
+import { useTenantRole } from "@app/hooks/useTenantRole";
 import { useSuspenseCompanyDetailQuery } from "@app/queries/xhandler/companies";
 import {
   hasReceptionFile,
@@ -48,6 +52,7 @@ import {
 import { estimateItemCount, toPageParams } from "@app/utils/listState";
 
 import { ReceptionDetailModal } from "./components/ReceptionDetailModal";
+import { ReceptionUploadModal } from "./components/ReceptionUploadModal";
 import { ReceptionValidityLabel } from "./components/ReceptionValidityLabel";
 import { RECEPTION_FILE_LABELS } from "./receptionFiles";
 import { RECEPTION_LIST_STATE } from "./receptionListState";
@@ -62,6 +67,8 @@ export const ReceptionList: React.FC<IReceptionListProps> = ({ companyId }) => {
   const { addNotification } = useNotifications();
   const { data: company } = useSuspenseCompanyDetailQuery({ companyId });
   const [selected, setSelected] = useState<ReceptionView | null>(null);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const { disabledProps } = useTenantRole();
   // The row opens at once; the read by id brings the latest validity check.
   const { data: detail } = useReceptionQuery({
     companyId,
@@ -204,11 +211,27 @@ export const ReceptionList: React.FC<IReceptionListProps> = ({ companyId }) => {
           </BreadcrumbItem>
           <BreadcrumbItem isActive>Recepciones</BreadcrumbItem>
         </Breadcrumb>
-        <Content component={ContentVariants.h1}>Recepciones</Content>
-        <Content component={ContentVariants.p}>
-          Comprobantes de proveedores recibidos por{" "}
-          {company.razon_social || company.ruc}, con su validez en SUNAT.
-        </Content>
+        <Flex
+          justifyContent={{ default: "justifyContentSpaceBetween" }}
+          alignItems={{ default: "alignItemsCenter" }}
+        >
+          <FlexItem>
+            <Content component={ContentVariants.h1}>Recepciones</Content>
+            <Content component={ContentVariants.p}>
+              Comprobantes de proveedores recibidos por{" "}
+              {company.razon_social || company.ruc}, con su validez en SUNAT.
+            </Content>
+          </FlexItem>
+          <FlexItem>
+            <GatedButton
+              variant="primary"
+              onClick={() => setIsUploadOpen(true)}
+              {...disabledProps("operator")}
+            >
+              Recibir comprobante
+            </GatedButton>
+          </FlexItem>
+        </Flex>
       </PageSection>
       <PageSection>
         <DataView activeState={activeState}>
@@ -259,6 +282,12 @@ export const ReceptionList: React.FC<IReceptionListProps> = ({ companyId }) => {
           onClose={() => setSelected(null)}
         />
       ) : null}
+      <ReceptionUploadModal
+        companyId={companyId}
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        onReceived={setSelected}
+      />
     </>
   );
 };

@@ -1,0 +1,1 @@
+export { ReceptionUploadModal } from "./ReceptionUploadModal";
