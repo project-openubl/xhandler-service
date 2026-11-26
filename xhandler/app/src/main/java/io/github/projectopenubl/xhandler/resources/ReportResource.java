@@ -1,7 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
-import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.jobs.handlers.ReportJob;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -17,7 +16,7 @@ import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.ReportProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -58,15 +57,15 @@ public class ReportResource {
 
     private final TenantAccess access;
     private final Jobs jobs;
-    private final EntityManager em;
+    private final ReportProvider reportProvider;
     private final FileStore files;
     private final Auditor auditor;
 
-    public ReportResource(TenantAccess access, Jobs jobs, EntityManager em, FileStore files, Auditor auditor, CompanyManager companyManager) {
+    public ReportResource(TenantAccess access, Jobs jobs, ReportProvider reportProvider, FileStore files, Auditor auditor, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.access = access;
         this.jobs = jobs;
-        this.em = em;
+        this.reportProvider = reportProvider;
         this.files = files;
         this.auditor = auditor;
     }
@@ -80,15 +79,10 @@ public class ReportResource {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
         CompanyModel company = companyManager.getCompany(companyId);
         UUID id = Ids.newId();
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.report (id, tenant_id, company_id, sunat_env, register, format, period, requested_by)
-                        VALUES (:id, :t, :c, :env, :register, :format, :period, :by)""")
-                .setParameter("id", id).setParameter("t", tenantId).setParameter("c", company.getId()).setParameter("env", company.getSunatEnv())
-                .setParameter("register", request.register()).setParameter("format", request.format()).setParameter("period", request.period())
-                .setParameter("by", scope.actor().auditName()).executeUpdate();
+        reportProvider.addReport(id, tenantId, company.getId(), company.getSunatEnv(), request.register(), request.format(), request.period(),
+                scope.actor().auditName());
         JobModel job = jobs.enqueue(scope, ReportJob.NAME, 4, Map.of("report_id", id.toString()), List.of(), null);
-        em.createNativeQuery("UPDATE xhandler.report SET job_id = :job WHERE id = :id").setParameter("job", job.getId()).setParameter("id", id)
-                .executeUpdate();
+        reportProvider.setReportJob(id, job.getId());
         auditor.record(scope, "report.requested", "company", companyId,
                 Map.of("register", request.register(), "format", request.format(), "period", request.period()));
         return Response.status(202).entity(view(id)).build();
@@ -103,10 +97,7 @@ public class ReportResource {
         companyManager.getCompany(companyId);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
-        @SuppressWarnings("unchecked")
-        List<UUID> ids = em.createNativeQuery("""
-                        SELECT id FROM xhandler.report WHERE company_id = :c ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset""")
-                .setParameter("c", companyId).setParameter("limit", size).setParameter("offset", start).getResultList();
+        List<UUID> ids = reportProvider.getReportIds(companyId, size, start);
         return new Page<>(ids.stream().map(this::view).toList(), size, start);
     }
 
@@ -139,41 +130,29 @@ public class ReportResource {
             @PathParam("reportId") UUID reportId) {
         TenantScope scope = access.enter(tenantId, Role.VIEWER);
         companyManager.getCompany(companyId);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("SELECT file_ref, file_name, format FROM xhandler.report WHERE id = :id AND company_id = :c")
-                .setParameter("id", reportId).setParameter("c", companyId).getResultList();
-        if (rows.isEmpty() || rows.get(0)[0] == null) {
+        java.util.Optional<ReportProvider.ReportFile> found = reportProvider.getReportFile(reportId, companyId);
+        if (found.isEmpty() || found.get().fileRef() == null) {
             throw ApiException.notFound();
         }
         auditor.record(scope, "report.downloaded", "company", companyId, Map.of("report_id", reportId.toString()));
-        String name = (String) rows.get(0)[1];
-        String type = switch ((String) rows.get(0)[2]) {
+        ReportProvider.ReportFile reportFile = found.get();
+        String name = reportFile.fileName();
+        String type = switch (reportFile.format()) {
             case "csv" -> "text/csv; charset=utf-8";
             case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             case "sire" -> "application/zip";
             default -> "text/plain; charset=utf-8";
         };
-        return Response.ok(files.get((String) rows.get(0)[0])).type(type)
+        return Response.ok(files.get(reportFile.fileRef())).type(type)
                 .header("Content-Disposition", "attachment; filename=\"" + name + "\"").header("X-Content-Type-Options", "nosniff").build();
     }
 
     private UUID companyOf(UUID reportId) {
-        List<?> found = em.createNativeQuery("SELECT company_id FROM xhandler.report WHERE id = :id").setParameter("id", reportId)
-                .getResultList();
-        return found.isEmpty() ? null : (UUID) found.get(0);
+        return reportProvider.getReportCompanyId(reportId).orElse(null);
     }
 
     private ReportView view(UUID id) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, register, format, period, sunat_env, status, file_name, rows, detail, job_id, created_at, done_at
-                        FROM xhandler.report WHERE id = :id""").setParameter("id", id).getResultList();
-        if (rows.isEmpty()) {
-            return null;
-        }
-        Object[] r = rows.get(0);
-        return new ReportView((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], (String) r[4], (String) r[5], (String) r[6],
-                r[7] == null ? null : ((Number) r[7]).intValue(), (String) r[8], (UUID) r[9], Times.toInstant(r[10]),
-                Times.toInstant(r[11]));
+        return reportProvider.getReport(id).map(r -> new ReportView(r.id(), r.register(), r.format(), r.period(), r.sunatEnv(), r.status(),
+                r.fileName(), r.rows(), r.detail(), r.jobId(), r.createdAt(), r.doneAt())).orElse(null);
     }
 }

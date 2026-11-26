@@ -11,7 +11,7 @@ import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.ReportProvider;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -30,14 +30,14 @@ public class ReportJob implements JobHandler {
     private final TenantAccess access;
     private final RegisterRows registers;
     private final FileStore files;
-    private final EntityManager em;
+    private final ReportProvider reportProvider;
 
-    public ReportJob(TenantAccess access, RegisterRows registers, FileStore files, EntityManager em, CompanyProvider companyProvider) {
+    public ReportJob(TenantAccess access, RegisterRows registers, FileStore files, ReportProvider reportProvider, CompanyProvider companyProvider) {
         this.companyProvider = companyProvider;
         this.access = access;
         this.registers = registers;
         this.files = files;
-        this.em = em;
+        this.reportProvider = reportProvider;
     }
 
     @Override
@@ -62,14 +62,13 @@ public class ReportJob implements JobHandler {
         record Input(String register, String format, String period, String ruc, String razonSocial, List<RegisterRows.Row> rows) {}
         Input input = QuarkusTransaction.requiringNew().call(() -> {
             access.enterAsPlatform(context.tenantId());
-            Object[] r = (Object[]) em.createNativeQuery("SELECT company_id, sunat_env, register, format, period FROM xhandler.report WHERE id = :id")
-                    .setParameter("id", reportId).getSingleResult();
-            CompanyModel company = companyProvider.getCompany((UUID) r[0]).orElse(null);
-            String register = (String) r[2];
+            ReportProvider.ReportRequestRow r = reportProvider.getReportRequest(reportId);
+            CompanyModel company = companyProvider.getCompany(r.companyId()).orElse(null);
+            String register = r.register();
             List<RegisterRows.Row> rows = "sales".equals(register)
-                    ? registers.sales(company.getId(), (String) r[1], (String) r[4])
-                    : registers.purchases(company.getId(), (String) r[4]);
-            return new Input(register, (String) r[3], (String) r[4], company.getRuc(), company.getRazonSocial(), rows);
+                    ? registers.sales(company.getId(), r.sunatEnv(), r.period())
+                    : registers.purchases(company.getId(), r.period());
+            return new Input(register, r.format(), r.period(), company.getRuc(), company.getRazonSocial(), rows);
         });
         long missing = input.rows().stream().filter(RegisterRows.Row::amountsMissing).count();
         if (missing > 0) {
@@ -100,11 +99,7 @@ public class ReportJob implements JobHandler {
     private void finish(UUID tenantId, UUID reportId, String status, String ref, String name, Integer rows, String detail) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            em.createNativeQuery("""
-                            UPDATE xhandler.report SET status = :s, file_ref = :ref, file_name = :name, rows = :rows, detail = :detail, done_at = now()
-                            WHERE id = :id""")
-                    .setParameter("s", status).setParameter("ref", ref).setParameter("name", name).setParameter("rows", rows)
-                    .setParameter("detail", detail).setParameter("id", reportId).executeUpdate();
+            reportProvider.finishReport(reportId, status, ref, name, rows, detail);
         });
     }
 }

@@ -2,7 +2,6 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.jobs.handlers.ReceptionValidity;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -19,7 +18,7 @@ import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.ReceptionProvider;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.GET;
@@ -65,16 +64,16 @@ public class ReceptionResource {
     private final TenantAccess access;
     private final Engine engine;
     private final FileStore files;
-    private final EntityManager em;
+    private final ReceptionProvider receptionProvider;
     private final Auditor auditor;
     private final ReceptionValidity validity;
 
-    public ReceptionResource(TenantAccess access, Engine engine, FileStore files, EntityManager em, Auditor auditor, ReceptionValidity validity, CompanyManager companyManager) {
+    public ReceptionResource(TenantAccess access, Engine engine, FileStore files, ReceptionProvider receptionProvider, Auditor auditor, ReceptionValidity validity, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.access = access;
         this.engine = engine;
         this.files = files;
-        this.em = em;
+        this.receptionProvider = receptionProvider;
         this.auditor = auditor;
         this.validity = validity;
     }
@@ -108,25 +107,15 @@ public class ReceptionResource {
             }
             UUID receptionId = Ids.newId();
             try {
-                em.createNativeQuery("""
-                                INSERT INTO xhandler.reception (id, tenant_id, company_id, supplier_ruc, tipo_comprobante, serie, numero, fecha_emision,
-                                    moneda, total, digest_value, xml_ref, pdf_ref, cdr_ref, amounts, affected_serie_numero, affected_tipo)
-                                VALUES (:id, :t, :c, :ruc, :tipo, :serie, :numero, :fecha, :moneda, :total, :digest, :xml, :pdf, :cdr,
-                                    cast(:amounts AS jsonb), :affected, :affectedTipo)""")
-                        .setParameter("amounts", amountsJson(identity))
-                        .setParameter("affected", identity.affectedSerieNumero()).setParameter("affectedTipo", identity.affectedTipo())
-                        .setParameter("id", receptionId).setParameter("t", tenantId).setParameter("c", companyId)
-                        .setParameter("ruc", identity.ruc()).setParameter("tipo", identity.tipoComprobante()).setParameter("serie", identity.serie())
-                        .setParameter("numero", identity.numero())
-                        .setParameter("fecha", identity.fechaEmision() == null ? null : LocalDate.parse(identity.fechaEmision()))
-                        .setParameter("moneda", identity.moneda())
-                        .setParameter("total", identity.total() == null ? null : new BigDecimal(identity.total()))
-                        .setParameter("digest", identity.digestValue())
-                        .setParameter("xml", files.put(tenantId, xmlBytes).key())
-                        .setParameter("pdf", pdfBytes == null ? null : files.put(tenantId, pdfBytes).key())
-                        .setParameter("cdr", cdrBytes == null ? null : files.put(tenantId, cdrBytes).key())
-                        .executeUpdate();
-                em.flush();
+                String amounts = amountsJson(identity);
+                String xmlRef = files.put(tenantId, xmlBytes).key();
+                String pdfRef = pdfBytes == null ? null : files.put(tenantId, pdfBytes).key();
+                String cdrRef = cdrBytes == null ? null : files.put(tenantId, cdrBytes).key();
+                receptionProvider.addReception(new ReceptionProvider.NewReception(receptionId, tenantId, companyId, identity.ruc(),
+                        identity.tipoComprobante(), identity.serie(), identity.numero(),
+                        identity.fechaEmision() == null ? null : LocalDate.parse(identity.fechaEmision()), identity.moneda(),
+                        identity.total() == null ? null : new BigDecimal(identity.total()), identity.digestValue(), xmlRef, pdfRef, cdrRef,
+                        amounts, identity.affectedSerieNumero(), identity.affectedTipo()));
             } catch (PersistenceException e) {
                 if (io.github.projectopenubl.xhandler.utils.Constraints.violated(e).isPresent()) {
                     throw ApiException.conflict("reception_exists", "Ese comprobante ya fue recibido.");
@@ -159,13 +148,7 @@ public class ReceptionResource {
         companyManager.getCompany(companyId);
         int size = Page.limit(limit);
         int start = Page.offset(offset);
-        @SuppressWarnings("unchecked")
-        List<UUID> ids = em.createNativeQuery("""
-                        SELECT id FROM xhandler.reception WHERE company_id = :c
-                          AND (CAST(:from AS date) IS NULL OR fecha_emision >= :from) AND (CAST(:to AS date) IS NULL OR fecha_emision <= :to)
-                        ORDER BY fecha_emision DESC NULLS LAST, created_at DESC LIMIT :l OFFSET :o""")
-                .setParameter("c", companyId).setParameter("from", from).setParameter("to", to).setParameter("l", size).setParameter("o", start)
-                .getResultList();
+        List<UUID> ids = receptionProvider.getReceptionIds(companyId, from, to, size, start);
         return new Page<>(ids.stream().map(this::find).toList(), size, start);
     }
 
@@ -177,8 +160,7 @@ public class ReceptionResource {
             @PathParam("receptionId") UUID receptionId) {
         access.enter(tenantId, Role.VIEWER);
         companyManager.getCompany(companyId);
-        if (em.createNativeQuery("SELECT 1 FROM xhandler.reception WHERE id = :id AND company_id = :c")
-                .setParameter("id", receptionId).setParameter("c", companyId).getResultList().isEmpty()) {
+        if (!receptionProvider.existsReception(receptionId, companyId)) {
             throw ApiException.notFound();
         }
         return find(receptionId);
@@ -196,20 +178,13 @@ public class ReceptionResource {
     public Response file(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("receptionId") UUID receptionId,
             @PathParam("kind") String kind) {
         TenantScope scope = access.enter(tenantId, Role.VIEWER);
-        String column = switch (kind) {
-            case "xml" -> "xml_ref";
-            case "pdf" -> "pdf_ref";
-            case "cdr" -> "cdr_ref";
-            default -> throw ApiException.notFound();
-        };
-        Object ref = em.createNativeQuery("SELECT " + column + " FROM xhandler.reception WHERE id = :id AND company_id = :c")
-                .setParameter("id", receptionId).setParameter("c", companyId).getResultStream().findFirst().orElse(null);
-        if (ref == null) {
+        if (!List.of("xml", "pdf", "cdr").contains(kind)) {
             throw ApiException.notFound();
         }
+        String ref = receptionProvider.getFileRef(receptionId, companyId, kind).orElseThrow(ApiException::notFound);
         auditor.record(scope, "reception.file_read", "reception", receptionId, Map.of("kind", kind));
         // Supplier files are untrusted: downloaded, never rendered from the API origin
-        return Response.ok(files.get(ref.toString())).type("xml".equals(kind) ? "application/xml" : "pdf".equals(kind) ? "application/pdf"
+        return Response.ok(files.get(ref)).type("xml".equals(kind) ? "application/xml" : "pdf".equals(kind) ? "application/pdf"
                 : "application/zip").header("Content-Disposition", "attachment; filename=\"" + receptionId + "." + ("cdr".equals(kind) ? "zip" : kind) + "\"")
                 .header("X-Content-Type-Options", "nosniff").build();
     }
@@ -226,18 +201,9 @@ public class ReceptionResource {
     private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
 
     private ReceptionView find(UUID id) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, supplier_ruc, tipo_comprobante, serie || '-' || numero, fecha_emision, moneda, total, validity_state,
-                               validity_checked_at, pdf_ref IS NOT NULL, cdr_ref IS NOT NULL, created_at
-                        FROM xhandler.reception WHERE id = :id""").setParameter("id", id).getResultList();
-        if (rows.isEmpty()) {
-            throw ApiException.notFound();
-        }
-        Object[] r = rows.get(0);
-        return new ReceptionView((UUID) r[0], (String) r[1], (String) r[2], (String) r[3],
-                r[4] == null ? null : r[4] instanceof LocalDate d ? d : ((java.sql.Date) r[4]).toLocalDate(), (String) r[5], (BigDecimal) r[6], (String) r[7],
-                Times.toInstant(r[8]), (Boolean) r[9], (Boolean) r[10], Times.toInstant(r[11]));
+        ReceptionProvider.ReceptionRow r = receptionProvider.getReception(id).orElseThrow(ApiException::notFound);
+        return new ReceptionView(r.id(), r.supplierRuc(), r.tipoComprobante(), r.serieNumero(), r.fechaEmision(), r.moneda(), r.total(),
+                r.validityState(), r.validityCheckedAt(), r.hasPdf(), r.hasCdr(), r.createdAt());
     }
 
     private static byte[] read(FileUpload upload, int max, String what) throws IOException {

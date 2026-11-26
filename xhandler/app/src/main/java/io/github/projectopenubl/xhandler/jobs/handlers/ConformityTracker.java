@@ -2,7 +2,6 @@ package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
-import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
@@ -20,7 +19,7 @@ import io.github.projectopenubl.xhandler.events.WebhookEvents;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.ConformityProvider;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -47,18 +46,18 @@ public class ConformityTracker implements JobHandler {
     static final Duration REMIND_BEFORE = Duration.ofDays(2);
     private static final Logger LOG = Logger.getLogger(ConformityTracker.class);
 
-    private final EntityManager em;
+    private final ConformityProvider conformityProvider;
     private final TenantAccess access;
     private final Engine engine;
     private final CredentialService credentials;
     private final WebhookEvents webhooks;
     private final Notifications notifications;
 
-    public ConformityTracker(EntityManager em, TenantAccess access, Engine engine, CredentialService credentials, WebhookEvents webhooks,
+    public ConformityTracker(ConformityProvider conformityProvider, TenantAccess access, Engine engine, CredentialService credentials, WebhookEvents webhooks,
             Notifications notifications, CompanyProvider companyProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.companyProvider = companyProvider;
-        this.em = em;
+        this.conformityProvider = conformityProvider;
         this.access = access;
         this.engine = engine;
         this.credentials = credentials;
@@ -71,8 +70,7 @@ public class ConformityTracker implements JobHandler {
         DocumentModel d = change.document();
         if ("voided".equals(d.getStatus()) && "01".equals(d.getTipoComprobante())) {
             // A voided factura is no longer negotiable: stop following it
-            em.createNativeQuery("UPDATE xhandler.conformity SET state = 'closed', resolved_at = now() WHERE document_id = :d AND state = 'pending'")
-                    .setParameter("d", d.getId()).executeUpdate();
+            conformityProvider.closeConformity(d.getId());
             return;
         }
         // Facturas negociables are between companies: the buyer is identified by RUC
@@ -81,11 +79,7 @@ public class ConformityTracker implements JobHandler {
             return;
         }
         Instant now = Instant.now();
-        em.createNativeQuery("""
-                        INSERT INTO xhandler.conformity (id, tenant_id, company_id, document_id, buyer_ruc, accepted_at, window_ends_at)
-                        VALUES (:id, :t, :c, :d, :buyer, :at, :ends) ON CONFLICT (document_id) DO NOTHING""")
-                .setParameter("id", Ids.newId()).setParameter("t", d.getTenantId()).setParameter("c", d.getCompanyId()).setParameter("d", d.getId())
-                .setParameter("buyer", d.getCustomerNumero()).setParameter("at", now).setParameter("ends", now.plus(WINDOW)).executeUpdate();
+        conformityProvider.addConformity(Ids.newId(), d.getTenantId(), d.getCompanyId(), d.getId(), d.getCustomerNumero(), now, now.plus(WINDOW));
     }
 
     @Override
@@ -95,21 +89,16 @@ public class ConformityTracker implements JobHandler {
 
     @Override
     public Map<String, Object> run(JobContext context) {
-        record Due(UUID tenant, UUID id) {}
-        List<Due> due = QuarkusTransaction.requiringNew().call(() -> {
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = em.createNativeQuery("SELECT tenant_id, conformity_id FROM xhandler.conformities_to_check(100)").getResultList();
-            return rows.stream().map(r -> new Due((UUID) r[0], (UUID) r[1])).toList();
-        });
+        List<ConformityProvider.DueConformity> due = QuarkusTransaction.requiringNew().call(conformityProvider::getConformitiesToCheck);
         int resolved = 0;
-        for (Due d : due) {
+        for (ConformityProvider.DueConformity d : due) {
             try {
-                if (check(d.tenant(), d.id())) {
+                if (check(d.tenantId(), d.conformityId())) {
                     resolved++;
                 }
             } catch (RuntimeException e) {
-                LOG.warnf("conformity check %s failed: %s", d.id(), e.toString());
-                stamp(d.tenant(), d.id(), "Error al consultar: se reintentará.");
+                LOG.warnf("conformity check %s failed: %s", d.conformityId(), e.toString());
+                stamp(d.tenantId(), d.conformityId(), "Error al consultar: se reintentará.");
             }
         }
         return Map.of("checked", due.size(), "resolved", resolved);
@@ -120,9 +109,8 @@ public class ConformityTracker implements JobHandler {
         record Call(UUID documentId, Instant windowEnds, Instant remindedAt, String sunatEnv, EngineModels.ConformityRequest request) {}
         Call call = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enterAsPlatform(tenantId);
-            Object[] c = (Object[]) em.createNativeQuery("SELECT document_id, window_ends_at, reminded_at FROM xhandler.conformity WHERE id = :id")
-                    .setParameter("id", conformityId).getSingleResult();
-            DocumentModel doc = documentProvider.getDocument((UUID) c[0]).orElse(null);
+            ConformityProvider.ConformityCheck c = conformityProvider.getConformityCheck(conformityId);
+            DocumentModel doc = documentProvider.getDocument(c.documentId()).orElse(null);
             CompanyModel company = companyProvider.getCompany(doc.getCompanyId()).orElse(null);
             EngineModels.ConformityRequest request = credentials.read(scope, company, "sire", "conformity:" + doc.getId())
                     .map(f -> new EngineModels.ConformityRequest("fake".equals(doc.getSunatEnv()) ? EngineModels.Environment.FAKE
@@ -130,8 +118,7 @@ public class ConformityTracker implements JobHandler {
                             new EngineModels.ApiCredentials(f.get("client_id"), f.get("client_secret"), f.get("username"), f.get("password")),
                             company.getRuc(), doc.getTipoComprobante(), doc.getSerie(), doc.getNumero()))
                     .orElse(null);
-            return new Call(doc.getId(), Times.toInstant(c[1]),
-                    Times.toInstant(c[2]), doc.getSunatEnv(), request);
+            return new Call(doc.getId(), c.windowEndsAt(), c.remindedAt(), doc.getSunatEnv(), request);
         });
         if (call.request() == null) {
             remindIfClosing(tenantId, conformityId, call.documentId(), call.windowEnds(), call.remindedAt());
@@ -171,9 +158,7 @@ public class ConformityTracker implements JobHandler {
     private void resolve(UUID tenantId, UUID conformityId, UUID documentId, String state) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            int changed = em.createNativeQuery("""
-                            UPDATE xhandler.conformity SET state = :s, resolved_at = now(), checked_at = now(), check_detail = NULL
-                            WHERE id = :id AND state = 'pending'""").setParameter("s", state).setParameter("id", conformityId).executeUpdate();
+            int changed = conformityProvider.resolveConformity(conformityId, state);
             if (changed == 0) {
                 return;
             }
@@ -198,8 +183,7 @@ public class ConformityTracker implements JobHandler {
         }
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            int changed = em.createNativeQuery("UPDATE xhandler.conformity SET reminded_at = now() WHERE id = :id AND reminded_at IS NULL")
-                    .setParameter("id", conformityId).executeUpdate();
+            int changed = conformityProvider.markReminded(conformityId);
             if (changed == 0) {
                 return;
             }
@@ -215,8 +199,7 @@ public class ConformityTracker implements JobHandler {
     private void stamp(UUID tenantId, UUID conformityId, String detail) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenantId);
-            em.createNativeQuery("UPDATE xhandler.conformity SET checked_at = now(), check_detail = :d WHERE id = :id")
-                    .setParameter("d", detail).setParameter("id", conformityId).executeUpdate();
+            conformityProvider.stampConformity(conformityId, detail);
         });
     }
 }

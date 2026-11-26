@@ -2,7 +2,6 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
-import io.github.projectopenubl.xhandler.utils.Times;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
 import io.github.projectopenubl.xhandler.managers.Auditor;
@@ -12,7 +11,7 @@ import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
-import jakarta.persistence.EntityManager;
+import io.github.projectopenubl.xhandler.models.ConformityProvider;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -47,21 +46,16 @@ public class ConformityResource {
             String checkDetail, Instant resolvedAt, Map<String, Object> suggestedCreditNote) {}
 
     private final TenantAccess access;
-    private final EntityManager em;
+    private final ConformityProvider conformityProvider;
     private final Auditor auditor;
 
-    public ConformityResource(TenantAccess access, EntityManager em, Auditor auditor, DocumentProvider documentProvider, CompanyManager companyManager) {
+    public ConformityResource(TenantAccess access, ConformityProvider conformityProvider, Auditor auditor, DocumentProvider documentProvider, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.documentProvider = documentProvider;
         this.access = access;
-        this.em = em;
+        this.conformityProvider = conformityProvider;
         this.auditor = auditor;
     }
-
-    private static final String SELECT = """
-            SELECT c.document_id, d.serie, d.numero, c.buyer_ruc, c.state, c.accepted_at, c.window_ends_at, c.checked_at, c.check_detail,
-                   c.resolved_at, d.total, d.moneda, d.fecha_emision, d.customer_nombre
-            FROM xhandler.conformity c JOIN xhandler.document d ON d.id = c.document_id""";
 
     @Operation(operationId = "getDocumentConformity")
     @GET
@@ -69,14 +63,9 @@ public class ConformityResource {
     @Transactional
     public ConformityView document(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
         access.enter(tenantId, Role.VIEWER);
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery(SELECT + " WHERE c.document_id = :d").setParameter("d", documentId).getResultList();
-        if (rows.isEmpty()) {
-            throw ApiException.notFound();
-        }
-        Object[] r = rows.get(0);
+        ConformityProvider.ConformityRow r = conformityProvider.getDocumentConformity(documentId).orElseThrow(ApiException::notFound);
         Map<String, Object> creditNote = null;
-        if ("objected".equals(r[4])) {
+        if ("objected".equals(r.state())) {
             creditNote = creditNote13(documentProvider.getDocument(documentId).orElse(null));
         }
         return view(r, creditNote);
@@ -109,10 +98,10 @@ public class ConformityResource {
         companyManager.getCompany(companyId);
         StringBuilder csv = new StringBuilder("﻿serie_numero,fecha_emision,adquirente_ruc,adquirente,moneda,total,conformidad,"
                 + "aceptada_sunat,vence_plazo,resuelta\r\n");
-        for (Object[] r : rows(companyId, state, EXPORT_LIMIT, 0)) {
-            csv.append(String.join(",", List.of(r[1] + "-" + r[2], String.valueOf(r[12]), nz(r[3]), quote(nz(r[13])), nz(r[11]), nz(r[10]),
-                    (String) r[4], String.valueOf(Times.toInstant(r[5])), String.valueOf(Times.toInstant(r[6])),
-                    r[9] == null ? "" : String.valueOf(Times.toInstant(r[9]))))).append("\r\n");
+        for (ConformityProvider.ConformityRow r : rows(companyId, state, EXPORT_LIMIT, 0)) {
+            csv.append(String.join(",", List.of(r.serie() + "-" + r.numero(), String.valueOf(r.fechaEmision()), nz(r.buyerRuc()),
+                    quote(nz(r.customerNombre())), nz(r.moneda()), nz(r.total()), r.state(), String.valueOf(r.acceptedAt()),
+                    String.valueOf(r.windowEndsAt()), r.resolvedAt() == null ? "" : String.valueOf(r.resolvedAt())))).append("\r\n");
         }
         auditor.record(scope, "conformity.exported", "company", companyId, Map.of("state", state == null ? "all" : state));
         return Response.ok(csv.toString().getBytes(StandardCharsets.UTF_8)).type("text/csv; charset=utf-8")
@@ -122,16 +111,11 @@ public class ConformityResource {
     /** Rows in one CSV export: the most recent ones. */
     private static final int EXPORT_LIMIT = 1000;
 
-    @SuppressWarnings("unchecked")
-    private List<Object[]> rows(UUID companyId, String state, int limit, int offset) {
+    private List<ConformityProvider.ConformityRow> rows(UUID companyId, String state, int limit, int offset) {
         if (state != null && !List.of("pending", "agreed", "objected", "silent_agreement").contains(state)) {
             throw ApiException.invalid("invalid_request", "state debe ser pending, agreed, objected o silent_agreement.", null);
         }
-        return em.createNativeQuery(SELECT + """
-                         WHERE c.company_id = :c AND (cast(:s AS text) IS NULL OR c.state = :s)
-                        ORDER BY c.accepted_at DESC, c.document_id DESC LIMIT :limit OFFSET :offset""")
-                .setParameter("c", companyId).setParameter("s", state).setParameter("limit", limit).setParameter("offset", offset)
-                .getResultList();
+        return conformityProvider.getConformities(companyId, state, limit, offset);
     }
 
     /**
@@ -155,9 +139,9 @@ public class ConformityResource {
         return Map.of("kind", "CreditNote", "spec", spec);
     }
 
-    private static ConformityView view(Object[] r, Map<String, Object> creditNote) {
-        return new ConformityView((UUID) r[0], r[1] + "-" + r[2], (String) r[3], (String) r[4], Times.toInstant(r[5]),
-                Times.toInstant(r[6]), Times.toInstant(r[7]), (String) r[8], Times.toInstant(r[9]), creditNote);
+    private static ConformityView view(ConformityProvider.ConformityRow r, Map<String, Object> creditNote) {
+        return new ConformityView(r.documentId(), r.serie() + "-" + r.numero(), r.buyerRuc(), r.state(), r.acceptedAt(),
+                r.windowEndsAt(), r.checkedAt(), r.checkDetail(), r.resolvedAt(), creditNote);
     }
 
     private static String nz(Object value) {
