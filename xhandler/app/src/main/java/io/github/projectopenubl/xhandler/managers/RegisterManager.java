@@ -20,7 +20,7 @@ import java.util.UUID;
  * carry negative amounts; voided documents keep their row with zero amounts (estado anulado).
  */
 @ApplicationScoped
-public class RegisterRows {
+public class RegisterManager {
 
     /** Amount columns, in register order. */
     public static final List<String> AMOUNTS =
@@ -63,7 +63,7 @@ public class RegisterRows {
 
     private final ReportProvider reportProvider;
 
-    public RegisterRows(ReportProvider reportProvider) {
+    public RegisterManager(ReportProvider reportProvider) {
         this.reportProvider = reportProvider;
     }
 

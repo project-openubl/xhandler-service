@@ -7,14 +7,13 @@ import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
-import io.github.projectopenubl.xhandler.managers.CredentialService;
-import io.github.projectopenubl.xhandler.managers.PlatformCredentials;
+import io.github.projectopenubl.xhandler.managers.CredentialManager;
+import io.github.projectopenubl.xhandler.managers.PlatformCredentialManager;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import io.github.projectopenubl.xhandler.models.ReceptionProvider;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,11 +32,11 @@ public class ReceptionValidity implements JobHandler {
     private final ReceptionProvider receptionProvider;
     private final TenantAccess access;
     private final Engine engine;
-    private final CredentialService credentials;
-    private final PlatformCredentials platformCredentials;
+    private final CredentialManager credentials;
+    private final PlatformCredentialManager platformCredentials;
 
-    public ReceptionValidity(ReceptionProvider receptionProvider, TenantAccess access, Engine engine, CredentialService credentials,
-            PlatformCredentials platformCredentials, CompanyProvider companyProvider) {
+    public ReceptionValidity(ReceptionProvider receptionProvider, TenantAccess access, Engine engine, CredentialManager credentials,
+            PlatformCredentialManager platformCredentials, CompanyProvider companyProvider) {
         this.companyProvider = companyProvider;
         this.receptionProvider = receptionProvider;
         this.access = access;

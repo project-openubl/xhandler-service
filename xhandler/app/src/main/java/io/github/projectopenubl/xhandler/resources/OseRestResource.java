@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.clients.OseClients;
-import io.github.projectopenubl.xhandler.managers.OseIntake;
+import io.github.projectopenubl.xhandler.managers.OseIntakeManager;
 import io.github.projectopenubl.xhandler.utils.ZipGuard;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
@@ -35,9 +35,9 @@ public class OseRestResource {
     public record CdrResult(String result, String name, String cdrZipBase64) {}
 
     private final OseClients clients;
-    private final OseIntake intake;
+    private final OseIntakeManager intake;
 
-    public OseRestResource(OseClients clients, OseIntake intake) {
+    public OseRestResource(OseClients clients, OseIntakeManager intake) {
         this.clients = clients;
         this.intake = intake;
     }
@@ -55,9 +55,9 @@ public class OseRestResource {
             throw inconsistency("0156", "El archivo ZIP está corrupto.");
         }
         try {
-            OseIntake.Cdr cdr = intake.sendBill(client, "rest", submission.fileName(), zip);
+            OseIntakeManager.Cdr cdr = intake.sendBill(client, "rest", submission.fileName(), zip);
             return Response.ok(new CdrResult("cdr", cdr.name(), Base64.getEncoder().encodeToString(cdr.zip()))).build();
-        } catch (OseIntake.Fault e) {
+        } catch (OseIntakeManager.Fault e) {
             throw inconsistency(e.code, e.getMessage());
         } catch (ZipGuard.Refused e) {
             throw inconsistency(e.code, e.getMessage());

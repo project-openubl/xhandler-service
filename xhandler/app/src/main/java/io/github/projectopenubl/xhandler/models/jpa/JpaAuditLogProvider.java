@@ -1,10 +1,6 @@
 package io.github.projectopenubl.xhandler.models.jpa;
 
-import java.util.Set;
-import java.util.Map;
 import java.util.List;
-import java.util.HashMap;
-import java.time.LocalDate;
 import io.github.projectopenubl.xhandler.models.*;
 import io.github.projectopenubl.xhandler.models.jpa.entities.AuditLogEntity;
 import io.github.projectopenubl.xhandler.models.jpa.repositories.AuditLogRepository;

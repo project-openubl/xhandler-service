@@ -46,7 +46,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  * ticket for {@code getStatus}. Validation runs before answering in every case.
  */
 @ApplicationScoped
-public class OseIntake {
+public class OseIntakeManager {
 
     /** OSE files live outside any tenant's namespace. */
     static final UUID STORAGE = UUID.fromString("00000000-0000-0000-0000-00000000005e");
@@ -71,7 +71,7 @@ public class OseIntake {
     /** The CDR-OSE of one document. */
     public record Cdr(String name, String cdrXml) {
         public byte[] zip() {
-            return OseIntake.zip(Map.of("R-" + name + ".xml", cdrXml.getBytes(StandardCharsets.UTF_8)));
+            return OseIntakeManager.zip(Map.of("R-" + name + ".xml", cdrXml.getBytes(StandardCharsets.UTF_8)));
         }
     }
 
@@ -88,7 +88,7 @@ public class OseIntake {
     private final Optional<String> oseRuc;
     private final String environment;
 
-    public OseIntake(OseProvider oseProvider, Engine engine, PlatformKeys platformKeys, FileStore files, UsageEvents usage, TenantAccess access,
+    public OseIntakeManager(OseProvider oseProvider, Engine engine, PlatformKeys platformKeys, FileStore files, UsageEvents usage, TenantAccess access,
             MeterRegistry metrics, @ConfigProperty(name = "xhandler.ose.ruc") Optional<String> oseRuc,
             @ConfigProperty(name = "xhandler.ose.environment", defaultValue = "fake") String environment) {
         this.oseProvider = oseProvider;

@@ -9,12 +9,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
-import io.github.projectopenubl.xhandler.managers.RegisterRows;
-import io.github.projectopenubl.xhandler.resources.StatusResource;
+import io.github.projectopenubl.xhandler.managers.RegisterManager;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -69,10 +67,10 @@ public class SireResource {
     private final Jobs jobs;
     private final SireProvider sireProvider;
     private final FileStore files;
-    private final Auditor auditor;
-    private final RegisterRows registers;
+    private final AuditManager auditor;
+    private final RegisterManager registers;
 
-    public SireResource(TenantAccess access, Jobs jobs, SireProvider sireProvider, FileStore files, Auditor auditor, RegisterRows registers,
+    public SireResource(TenantAccess access, Jobs jobs, SireProvider sireProvider, FileStore files, AuditManager auditor, RegisterManager registers,
             CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.registers = registers;
@@ -87,7 +85,7 @@ public class SireResource {
         if (!"rvie".equals(book) && !"rce".equals(book)) {
             throw ApiException.notFound();
         }
-        RegisterRows.month(period);
+        RegisterManager.month(period);
     }
 
     /** Asks SUNAT for its proposal (again, to start over after an error or a change). */
@@ -170,8 +168,8 @@ public class SireResource {
             throw ApiException.conflict("sire_unresolved_documents",
                     "Hay " + unresolved + " comprobantes del periodo sin respuesta definitiva de SUNAT. Espere a que se resuelvan.");
         }
-        List<RegisterRows.Row> rows = "rvie".equals(book) ? registers.sales(companyId, company.getSunatEnv(), period) : registers.purchases(companyId, period);
-        long missing = rows.stream().filter(RegisterRows.Row::amountsMissing).count();
+        List<RegisterManager.Row> rows = "rvie".equals(book) ? registers.sales(companyId, company.getSunatEnv(), period) : registers.purchases(companyId, period);
+        long missing = rows.stream().filter(RegisterManager.Row::amountsMissing).count();
         if (missing > 0) {
             throw ApiException.conflict("amounts_pending",
                     missing + " comprobantes aún no tienen el desglose de impuestos; se completa en unos minutos.");

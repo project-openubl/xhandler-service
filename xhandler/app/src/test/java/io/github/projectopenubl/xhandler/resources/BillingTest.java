@@ -1,6 +1,5 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.jobs.handlers.BillingJobs;
 
 import static io.github.projectopenubl.xhandler.Api.as;
@@ -11,8 +10,6 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.projectopenubl.xhandler.resources.TestCompanies;
-import io.github.projectopenubl.xhandler.resources.TestDocuments;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.security.TenantAccess;

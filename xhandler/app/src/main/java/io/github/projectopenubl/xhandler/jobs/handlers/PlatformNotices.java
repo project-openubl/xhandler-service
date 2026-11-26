@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
-import io.github.projectopenubl.xhandler.managers.Notifications;
+import io.github.projectopenubl.xhandler.managers.NotificationManager;
 
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
@@ -28,9 +28,9 @@ public final class PlatformNotices {
 
         private final NotificationProvider notificationProvider;
         private final TenantAccess access;
-        private final Notifications notifications;
+        private final NotificationManager notifications;
 
-        public CertificateExpiry(NotificationProvider notificationProvider, TenantAccess access, Notifications notifications, CompanyProvider companyProvider) {
+        public CertificateExpiry(NotificationProvider notificationProvider, TenantAccess access, NotificationManager notifications, CompanyProvider companyProvider) {
             this.companyProvider = companyProvider;
             this.notificationProvider = notificationProvider;
             this.access = access;
@@ -54,7 +54,7 @@ public final class PlatformNotices {
                         access.enterAsPlatform(e.tenantId());
                         var company = companyProvider.getCompany(e.companyId()).orElse(null);
                         long left = Math.max(0, ChronoUnit.DAYS.between(Instant.now(), e.validUntil()));
-                        notifications.publish(e.tenantId(), Notifications.CERTIFICATE_EXPIRING,
+                        notifications.publish(e.tenantId(), NotificationManager.CERTIFICATE_EXPIRING,
                                 "Certificado digital por vencer: " + company.getRuc(),
                                 "El certificado digital de " + company.getRazonSocial() + " vence en " + left + " día(s) (" + e.validUntil()
                                         + "). Suba uno nuevo para seguir firmando.", null);
@@ -80,9 +80,9 @@ public final class PlatformNotices {
 
         private final NotificationProvider notificationProvider;
         private final TenantAccess access;
-        private final Notifications notifications;
+        private final NotificationManager notifications;
 
-        public SunatHealth(NotificationProvider notificationProvider, TenantAccess access, Notifications notifications) {
+        public SunatHealth(NotificationProvider notificationProvider, TenantAccess access, NotificationManager notifications) {
             this.notificationProvider = notificationProvider;
             this.access = access;
             this.notifications = notifications;
@@ -109,7 +109,7 @@ public final class PlatformNotices {
                         QuarkusTransaction.requiringNew().run(() -> {
                             access.enterAsPlatform(tenant);
                             boolean down = "down".equals(change.state());
-                            notifications.publish(tenant, Notifications.SUNAT_OUTAGE, down ? "SUNAT no responde" : "SUNAT volvió a responder",
+                            notifications.publish(tenant, NotificationManager.SUNAT_OUTAGE, down ? "SUNAT no responde" : "SUNAT volvió a responder",
                                     down ? "SUNAT no está respondiendo. Sus documentos están guardados y se enviarán automáticamente cuando vuelva."
                                             : "SUNAT volvió a responder. Los documentos pendientes se están enviando por orden de plazo.", null);
                         });

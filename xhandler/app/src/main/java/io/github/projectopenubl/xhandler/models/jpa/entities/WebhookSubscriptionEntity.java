@@ -1,12 +1,10 @@
 package io.github.projectopenubl.xhandler.models.jpa.entities;
 
-import io.github.projectopenubl.xhandler.keys.SecretBox;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /** A tenant's webhook endpoint. Its signing secret is sealed like any other secret (§6). */

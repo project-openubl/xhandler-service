@@ -3,7 +3,6 @@ package io.github.projectopenubl.xhandler.resources;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.WebhookSubscriptionProvider;
 import io.github.projectopenubl.xhandler.models.WebhookDeliveryProvider;
-import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.clients.Egress;
 import io.github.projectopenubl.xhandler.events.WebhookEvents;
 import io.github.projectopenubl.xhandler.models.WebhookDeliveryModel;
@@ -12,8 +11,8 @@ import io.github.projectopenubl.xhandler.models.WebhookSubscriptionModel;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
-import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.managers.Idempotency;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
+import io.github.projectopenubl.xhandler.managers.IdempotencyManager;
 import io.github.projectopenubl.xhandler.keys.SecretBox;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -69,12 +68,12 @@ public class WebhookResource {
     private final SecretBox box;
     private final Egress egress;
     private final WebhookEvents events;
-    private final Auditor auditor;
-    private final io.github.projectopenubl.xhandler.managers.Entitlements entitlements;
-    private final Idempotency idempotency;
+    private final AuditManager auditor;
+    private final io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements;
+    private final IdempotencyManager idempotency;
 
-    public WebhookResource(TenantAccess access, SecretBox box, Egress egress, WebhookEvents events, Auditor auditor,
-            io.github.projectopenubl.xhandler.managers.Entitlements entitlements, Idempotency idempotency, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider, CompanyProvider companyProvider) {
+    public WebhookResource(TenantAccess access, SecretBox box, Egress egress, WebhookEvents events, AuditManager auditor,
+            io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, IdempotencyManager idempotency, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider, CompanyProvider companyProvider) {
         this.companyProvider = companyProvider;
         this.webhookSubscriptionProvider = webhookSubscriptionProvider;
         this.webhookDeliveryProvider = webhookDeliveryProvider;

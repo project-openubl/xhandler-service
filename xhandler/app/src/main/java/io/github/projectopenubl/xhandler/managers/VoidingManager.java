@@ -7,11 +7,9 @@ import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -19,7 +17,6 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
-import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -36,7 +33,7 @@ import java.util.UUID;
  * for RR. Otherwise the answer is 409 and a nota de crédito is the way.
  */
 @ApplicationScoped
-public class VoidingService {
+public class VoidingManager {
 
     private final TenantProvider tenantProvider;
 
@@ -50,11 +47,11 @@ public class VoidingService {
     public record VoidRequest(String motivo, Boolean notDelivered, LocalDate reversalCommunicatedAt) {}
 
     private final TenantAccess access;
-    private final Summaries summaries;
-    private final Auditor auditor;
+    private final SummaryManager summaries;
+    private final AuditManager auditor;
     private final Event<DocumentStatusChanged> statusChanged;
 
-    public VoidingService(TenantAccess access, Summaries summaries, Auditor auditor,
+    public VoidingManager(TenantAccess access, SummaryManager summaries, AuditManager auditor,
             Event<DocumentStatusChanged> statusChanged, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.documentProvider = documentProvider;
@@ -155,7 +152,7 @@ public class VoidingService {
 
     /** Originals of today's RRs of the same company, environment, type and issue date (voided or voiding). */
     private List<DocumentModel> sameDayReversals(DocumentModel original) {
-        String serie = "RR-" + Summaries.BASIC.format(Deadlines.todayInLima());
+        String serie = "RR-" + SummaryManager.BASIC.format(Deadlines.todayInLima());
         List<UUID> rrs = documentProvider.getReversalIds(original.getCompanyId(), original.getSunatEnv(), serie);
         if (rrs.isEmpty()) {
             return List.of();

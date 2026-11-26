@@ -2,7 +2,7 @@ package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.models.OseProvider;
 import io.github.projectopenubl.xhandler.clients.OseClients;
-import io.github.projectopenubl.xhandler.managers.OseIntake;
+import io.github.projectopenubl.xhandler.managers.OseIntakeManager;
 import io.github.projectopenubl.xhandler.utils.ZipGuard;
 
 import io.github.projectopenubl.xhandler.utils.XmlText;
@@ -11,7 +11,7 @@ import io.github.projectopenubl.xhandler.xml.EngineException;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
-import io.github.projectopenubl.xhandler.managers.PlatformCredentials;
+import io.github.projectopenubl.xhandler.managers.PlatformCredentialManager;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -76,12 +76,12 @@ public final class OseJobs {
         private final OseProvider oseProvider;
         private final Engine engine;
         private final FileStore files;
-        private final PlatformCredentials credentials;
+        private final PlatformCredentialManager credentials;
         private final Timer delay;
         private final String environment;
         private final Optional<String> url;
 
-        public Forwarder(OseProvider oseProvider, Engine engine, FileStore files, PlatformCredentials credentials,
+        public Forwarder(OseProvider oseProvider, Engine engine, FileStore files, PlatformCredentialManager credentials,
                 MeterRegistry metrics, @ConfigProperty(name = "xhandler.ose.environment", defaultValue = "fake") String environment,
                 @ConfigProperty(name = "xhandler.ose.forward-url") Optional<String> url) {
             this.oseProvider = oseProvider;
@@ -319,10 +319,10 @@ public final class OseJobs {
         static final Duration SETTLE = Duration.ofSeconds(10);
 
         private final OseClients clients;
-        private final OseIntake intake;
+        private final OseIntakeManager intake;
         private final Optional<Path> root;
 
-        public SftpIntake(OseClients clients, OseIntake intake, @ConfigProperty(name = "xhandler.ose.sftp-root") Optional<Path> root) {
+        public SftpIntake(OseClients clients, OseIntakeManager intake, @ConfigProperty(name = "xhandler.ose.sftp-root") Optional<Path> root) {
             this.clients = clients;
             this.intake = intake;
             this.root = root;
@@ -406,10 +406,10 @@ public final class OseJobs {
                     String answerName;
                     byte[] answer;
                     try {
-                        OseIntake.Cdr cdr = intake.sendBill(client, "sftp", fileName, bytes);
+                        OseIntakeManager.Cdr cdr = intake.sendBill(client, "sftp", fileName, bytes);
                         answerName = "R-" + cdr.name() + ".zip";
                         answer = cdr.zip();
-                    } catch (OseIntake.Fault e) {
+                    } catch (OseIntakeManager.Fault e) {
                         if ("0109".equals(e.code)) {
                             // The service failed, not the document: try again next run
                             continue;

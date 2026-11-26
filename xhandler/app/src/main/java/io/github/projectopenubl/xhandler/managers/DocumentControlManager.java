@@ -5,15 +5,12 @@ import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.models.DocumentEventModel;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.managers.Auditor;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
-import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -28,7 +25,7 @@ import java.util.UUID;
  * document's tenant open and changes rows under a row lock.
  */
 @ApplicationScoped
-public class DocumentControl {
+public class DocumentControlManager {
 
     private final JobQueueProvider jobQueueProvider;
 
@@ -39,11 +36,11 @@ public class DocumentControl {
     /** Statuses a manual retry accepts: non-definitive ones, and exception (resend with the same number). */
     static final Set<String> RETRY_FROM = Set.of("pending_send", "in_progress", "unknown", "exception");
 
-    private final Auditor auditor;
+    private final AuditManager auditor;
     private final io.github.projectopenubl.xhandler.jobs.JobStore jobs;
     private final Event<DocumentStatusChanged> statusChanged;
 
-    public DocumentControl(Auditor auditor, Event<DocumentStatusChanged> statusChanged,
+    public DocumentControlManager(AuditManager auditor, Event<DocumentStatusChanged> statusChanged,
             io.github.projectopenubl.xhandler.jobs.JobStore jobs, DocumentEventProvider documentEventProvider, DocumentProvider documentProvider, JobQueueProvider jobQueueProvider) {
         this.jobQueueProvider = jobQueueProvider;
         this.documentProvider = documentProvider;

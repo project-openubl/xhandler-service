@@ -10,11 +10,10 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.projectopenubl.xhandler.resources.TestCompanies;
 import io.github.projectopenubl.xhandler.jobs.handlers.ConformityTracker;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
-import io.github.projectopenubl.xhandler.managers.SireService;
+import io.github.projectopenubl.xhandler.managers.SireManager;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -39,7 +38,7 @@ class TaxComplianceTest {
     TestCompanies companies;
 
     @Inject
-    SireService sire;
+    SireManager sire;
 
     @Inject
     ConformityTracker conformity;

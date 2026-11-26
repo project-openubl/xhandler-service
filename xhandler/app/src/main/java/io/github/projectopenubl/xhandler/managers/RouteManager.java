@@ -8,8 +8,6 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.models.OseEndpointModel;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
-import io.github.projectopenubl.xhandler.models.CredentialModel;
-import io.github.projectopenubl.xhandler.managers.CredentialService;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
@@ -24,7 +22,7 @@ import java.util.UUID;
  * SUNAT. The submission route is a regulatory status: an OSE-obligated company can't send directly.
  */
 @ApplicationScoped
-public class Routes {
+public class RouteManager {
 
     private final CredentialProvider credentialProvider;
 
@@ -36,13 +34,13 @@ public class Routes {
     /** The endpoint and credential a new document is sent with. */
     public record Assignment(String endpoint, UUID credentialId) {}
 
-    private final CredentialService credentials;
-    private final io.github.projectopenubl.xhandler.managers.PlatformCredentials platformCredentials;
+    private final CredentialManager credentials;
+    private final io.github.projectopenubl.xhandler.managers.PlatformCredentialManager platformCredentials;
 
-    private final io.github.projectopenubl.xhandler.managers.Auditor auditor;
+    private final io.github.projectopenubl.xhandler.managers.AuditManager auditor;
 
-    public Routes(CredentialService credentials, io.github.projectopenubl.xhandler.managers.PlatformCredentials platformCredentials,
-            io.github.projectopenubl.xhandler.managers.Auditor auditor, OseEndpointProvider oseEndpointProvider, CredentialProvider credentialProvider) {
+    public RouteManager(CredentialManager credentials, io.github.projectopenubl.xhandler.managers.PlatformCredentialManager platformCredentials,
+            io.github.projectopenubl.xhandler.managers.AuditManager auditor, OseEndpointProvider oseEndpointProvider, CredentialProvider credentialProvider) {
         this.credentialProvider = credentialProvider;
         this.oseEndpointProvider = oseEndpointProvider;
         this.auditor = auditor;

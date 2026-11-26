@@ -1,13 +1,10 @@
 package io.github.projectopenubl.xhandler.models.jpa.entities;
 
-import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.files.FileStore;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 /** A file of a document in storage: signed XML, CDR, PDF, input or enriched JSON. Immutable. */

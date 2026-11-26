@@ -21,7 +21,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  * link opens the document's XML, CDR and PDF for the legal access period (1 year, §3.3).
  */
 @ApplicationScoped
-public class AccessLinks {
+public class AccessLinkManager {
 
     /** A link resolved to its document. */
     public record Resolved(UUID tenantId, UUID documentId) {}
@@ -32,7 +32,7 @@ public class AccessLinks {
     private final String publicBaseUrl;
     private final Duration validity;
 
-    public AccessLinks(
+    public AccessLinkManager(
             AccessLinkProvider accessLinkProvider,
             @ConfigProperty(name = "xhandler.public-url", defaultValue = "http://localhost:8080") String publicBaseUrl,
             @ConfigProperty(name = "xhandler.access-link.validity", defaultValue = "366d") Duration validity) {

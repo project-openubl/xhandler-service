@@ -17,4 +17,12 @@ public final class Ids {
         long lsb = (RANDOM.nextLong() & 0x3FFFFFFFFFFFFFFFL) | 0x8000000000000000L;
         return new UUID(msb, lsb);
     }
+
+    /** A client correlation id is kept only if it is short and plain; otherwise a new one is made. */
+    public static String correlation(String given) {
+        if (given != null && given.length() <= 100 && given.matches("[A-Za-z0-9._:-]+")) {
+            return given;
+        }
+        return UUID.randomUUID().toString();
+    }
 }

@@ -7,8 +7,8 @@ import io.github.projectopenubl.xhandler.models.OseEndpointModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.managers.CredentialService;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
+import io.github.projectopenubl.xhandler.managers.CredentialManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -47,11 +47,11 @@ public class RouteResource {
     public record RouteView(String submissionRoute, boolean oseObligated, String oseName, String oseInvoiceUrl, String osePerceptionUrl) {}
 
     private final TenantAccess access;
-    private final CredentialService credentials;
+    private final CredentialManager credentials;
     private final Egress egress;
-    private final Auditor auditor;
+    private final AuditManager auditor;
 
-    public RouteResource(TenantAccess access, CredentialService credentials, Egress egress, Auditor auditor, OseEndpointProvider oseEndpointProvider, CompanyManager companyManager) {
+    public RouteResource(TenantAccess access, CredentialManager credentials, Egress egress, AuditManager auditor, OseEndpointProvider oseEndpointProvider, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.oseEndpointProvider = oseEndpointProvider;
         this.access = access;

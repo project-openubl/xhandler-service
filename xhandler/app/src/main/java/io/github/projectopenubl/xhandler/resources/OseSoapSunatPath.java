@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.clients.OseClients;
-import io.github.projectopenubl.xhandler.managers.OseIntake;
+import io.github.projectopenubl.xhandler.managers.OseIntakeManager;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
@@ -15,10 +15,10 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 public class OseSoapSunatPath {
 
     private final OseClients clients;
-    private final OseIntake intake;
+    private final OseIntakeManager intake;
     private final io.micrometer.core.instrument.MeterRegistry metrics;
 
-    public OseSoapSunatPath(OseClients clients, OseIntake intake, io.micrometer.core.instrument.MeterRegistry metrics) {
+    public OseSoapSunatPath(OseClients clients, OseIntakeManager intake, io.micrometer.core.instrument.MeterRegistry metrics) {
         this.clients = clients;
         this.intake = intake;
         this.metrics = metrics;

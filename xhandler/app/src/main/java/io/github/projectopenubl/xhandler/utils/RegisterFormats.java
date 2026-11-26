@@ -1,8 +1,8 @@
 package io.github.projectopenubl.xhandler.utils;
 
-import io.github.projectopenubl.xhandler.managers.RegisterRows;
+import io.github.projectopenubl.xhandler.managers.RegisterManager;
 
-import io.github.projectopenubl.xhandler.managers.RegisterRows.Row;
+import io.github.projectopenubl.xhandler.managers.RegisterManager.Row;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -64,7 +64,7 @@ public final class RegisterFormats {
         c.add(nz(r.partyNombre()));
         c.add(r.moneda());
         c.add(r.tipoCambio() == null ? "" : r.tipoCambio().setScale(3, RoundingMode.HALF_UP).toPlainString());
-        for (String name : RegisterRows.AMOUNTS) {
+        for (String name : RegisterManager.AMOUNTS) {
             c.add(money(r.amount(name)));
         }
         c.add(money(r.total()));

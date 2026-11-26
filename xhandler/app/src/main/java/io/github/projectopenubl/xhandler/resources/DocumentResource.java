@@ -1,21 +1,22 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.utils.DocumentFiles;
+import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.models.DocumentSearch;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
 import io.github.projectopenubl.xhandler.models.DocumentEventProvider;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
-import io.github.projectopenubl.xhandler.managers.AccessLinks;
-import io.github.projectopenubl.xhandler.managers.DocumentControl;
-import io.github.projectopenubl.xhandler.managers.EmitService;
-import io.github.projectopenubl.xhandler.managers.VoidingService;
+import io.github.projectopenubl.xhandler.managers.AccessLinkManager;
+import io.github.projectopenubl.xhandler.managers.DocumentControlManager;
+import io.github.projectopenubl.xhandler.managers.EmitManager;
+import io.github.projectopenubl.xhandler.managers.VoidingManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.models.DocumentEventModel;
-import io.github.projectopenubl.xhandler.models.DocumentFileModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -30,7 +31,6 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -55,16 +55,16 @@ public class DocumentResource {
     public record AccessLink(String accessUrl) {}
 
     private final TenantAccess access;
-    private final VoidingService voiding;
-    private final EmitService emit;
-    private final DocumentControl control;
-    private final AccessLinks links;
+    private final VoidingManager voiding;
+    private final EmitManager emit;
+    private final DocumentControlManager control;
+    private final AccessLinkManager links;
     private final FileStore files;
-    private final Auditor auditor;
+    private final AuditManager auditor;
     private final io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf;
 
-    public DocumentResource(TenantAccess access, EmitService emit, DocumentControl control, AccessLinks links, FileStore files,
-            Auditor auditor, VoidingService voiding, io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+    public DocumentResource(TenantAccess access, EmitManager emit, DocumentControlManager control, AccessLinkManager links, FileStore files,
+            AuditManager auditor, VoidingManager voiding, io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
         this.documentEventProvider = documentEventProvider;
@@ -96,8 +96,8 @@ public class DocumentResource {
             @PathParam("companyId") UUID companyId,
             @HeaderParam("Idempotency-Key") String idempotencyKey,
             @HeaderParam("X-Correlation-Id") String correlationId,
-            EmitService.EmitRequest request) {
-        EmitService.Emitted emitted = emit.emit(tenantId, companyId, idempotencyKey, request, correlation(correlationId));
+            EmitManager.EmitRequest request) {
+        EmitManager.Emitted emitted = emit.emit(tenantId, companyId, idempotencyKey, request, Ids.correlation(correlationId));
         return Response.status(emitted.status()).entity(emitted.body()).build();
     }
 
@@ -185,8 +185,8 @@ public class DocumentResource {
                 : files.get(documentFileProvider.getDocumentFile(doc.getId(), stored).orElseThrow(ApiException::notFound).getStorageKey());
         auditor.record(scope, "document.file_read", "document", doc.getId(), Map.of("kind", kind));
         return Response.ok(content)
-                .type(contentType(kind))
-                .header("Content-Disposition", "attachment; filename=\"" + fileName(scope, doc, kind) + "\"")
+                .type(DocumentFiles.contentType(kind))
+                .header("Content-Disposition", "attachment; filename=\"" + DocumentFiles.fileName(scope, doc, kind) + "\"")
                 .build();
     }
 
@@ -224,8 +224,8 @@ public class DocumentResource {
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentView.class)))
     @Operation(operationId = "voidDocument", summary = "Anula un documento aceptado y no entregado (RA, RC o RR)")
     public Response voidDocument(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId,
-            @HeaderParam("X-Correlation-Id") String correlationId, VoidingService.VoidRequest request) {
-        DocumentModel voidingDocument = voiding.voidDocument(tenantId, documentId, request, correlation(correlationId));
+            @HeaderParam("X-Correlation-Id") String correlationId, VoidingManager.VoidRequest request) {
+        DocumentModel voidingDocument = voiding.voidDocument(tenantId, documentId, request, Ids.correlation(correlationId));
         return Response.status(202).entity(DocumentView.of(voidingDocument)).build();
     }
 
@@ -281,13 +281,6 @@ public class DocumentResource {
         return Response.noContent().build();
     }
 
-    /** A client correlation id is kept only if it is short and plain; otherwise a new one is made. */
-    static String correlation(String given) {
-        if (given != null && given.length() <= 100 && given.matches("[A-Za-z0-9._:-]+")) {
-            return given;
-        }
-        return UUID.randomUUID().toString();
-    }
 
     DocumentModel find(UUID documentId) {
         DocumentModel doc = documentProvider.getDocument(documentId).orElse(null);
@@ -297,24 +290,7 @@ public class DocumentResource {
         return doc;
     }
 
-    static String contentType(String kind) {
-        return switch (kind) {
-            case "xml" -> "application/xml";
-            case "cdr" -> "application/zip";
-            case "pdf" -> "application/pdf";
-            default -> "application/json";
-        };
-    }
 
-    static String fileName(TenantScope scope, DocumentModel doc, String kind) {
-        String base = doc.getTipoComprobante() + "-" + doc.serieNumero();
-        return switch (kind) {
-            case "xml" -> base + ".xml";
-            case "cdr" -> "R-" + base + ".zip";
-            case "pdf" -> base + ".pdf";
-            default -> base + "-" + kind + ".json";
-        };
-    }
 
     private static void add(StringBuilder query, Map<String, Object> params, String field, Object value) {
         if (value != null) {

@@ -1,16 +1,12 @@
 package io.github.projectopenubl.xhandler.resources.admin;
 
+import io.github.projectopenubl.xhandler.jobs.handlers.PseReportJob;
 import io.github.projectopenubl.xhandler.security.PlatformAdmin;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.jobs.JobContext;
-import io.github.projectopenubl.xhandler.jobs.JobHandler;
 import io.github.projectopenubl.xhandler.keys.PlatformKeys;
 import io.github.projectopenubl.xhandler.models.PsePlatformProvider;
-import io.github.projectopenubl.xhandler.managers.PlatformCredentials;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.enterprise.context.ApplicationScoped;
+import io.github.projectopenubl.xhandler.managers.PlatformCredentialManager;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -21,14 +17,12 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Month;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
@@ -44,12 +38,12 @@ public class PseAdminResource {
 
     private final PlatformAdmin admin;
     private final PlatformKeys keys;
-    private final PlatformCredentials credentials;
+    private final PlatformCredentialManager credentials;
     private final PsePlatformProvider pse;
     private final Optional<LocalDate> registeredOn;
     private final io.github.projectopenubl.xhandler.files.FileStore files;
 
-    public PseAdminResource(PlatformAdmin admin, PlatformKeys keys, PlatformCredentials credentials, PsePlatformProvider pse,
+    public PseAdminResource(PlatformAdmin admin, PlatformKeys keys, PlatformCredentialManager credentials, PsePlatformProvider pse,
             @ConfigProperty(name = "xhandler.pse.registered-on") Optional<LocalDate> registeredOn,
             io.github.projectopenubl.xhandler.files.FileStore files) {
         this.files = files;
@@ -75,14 +69,14 @@ public class PseAdminResource {
     @POST
     @Path("/sol-users")
     @Transactional
-    public PlatformCredentials.Entry addSolUser(Map<String, String> body) {
+    public PlatformCredentialManager.Entry addSolUser(Map<String, String> body) {
         String who = admin.require();
         String username = body == null ? null : body.get("username");
         String password = body == null ? null : body.get("password");
         if (username == null || password == null) {
             throw ApiException.invalid("invalid_request", "Indique username y password.", null);
         }
-        PlatformCredentials.Entry entry = credentials.add("pse_sol", body.getOrDefault("label", username),
+        PlatformCredentialManager.Entry entry = credentials.add("pse_sol", body.getOrDefault("label", username),
                 Map.of("username", username, "password", password));
         AdminLog.PLATFORM_AUDIT.infof("admin %s added PSE SOL user %s", who, entry.label());
         return entry;
@@ -91,7 +85,7 @@ public class PseAdminResource {
     @GET
     @Path("/sol-users")
     @Transactional
-    public List<PlatformCredentials.Entry> solUsers() {
+    public List<PlatformCredentialManager.Entry> solUsers() {
         admin.require();
         return credentials.list("pse_sol");
     }
@@ -167,10 +161,10 @@ public class PseAdminResource {
     @Transactional
     public Rate rejectedRate(@QueryParam("period") String period) {
         admin.require();
-        return rate(pse, period == null ? Report.periodOf(io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima()) : period, registeredOn);
+        return rate(pse, period == null ? PseReportJob.periodOf(io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima()) : period, registeredOn);
     }
 
-    static Rate rate(PsePlatformProvider pse, String period, Optional<LocalDate> registeredOn) {
+    public static Rate rate(PsePlatformProvider pse, String period, Optional<LocalDate> registeredOn) {
         if (!period.matches("\\d{4}-H[12]")) {
             throw ApiException.invalid("invalid_request", "El periodo debe ser AAAA-H1 o AAAA-H2.", null);
         }
@@ -190,55 +184,4 @@ public class PseAdminResource {
         return new Rate(period, accepted, rejected, rate, limit, rate.compareTo(limit) > 0);
     }
 
-    /** Computes the current and previous half-years, keeps them, and exposes the rate as a metric. */
-    @ApplicationScoped
-    public static class Report implements JobHandler {
-
-        private final PsePlatformProvider pse;
-        private final Optional<LocalDate> registeredOn;
-
-        public Report(PsePlatformProvider pse, MeterRegistry metrics,
-                @ConfigProperty(name = "xhandler.pse.registered-on") Optional<LocalDate> registeredOn) {
-            this.pse = pse;
-            this.registeredOn = registeredOn;
-            // Read from the database on scrape: every pod reports the same value, also after a restart
-            io.micrometer.core.instrument.Gauge.builder("xhandler.pse.rejected_rate", this, Report::latestRate).register(metrics);
-        }
-
-        double latestRate() {
-            try {
-                Optional<Double> rate = QuarkusTransaction.requiringNew().call(pse::getLatestReportRate);
-                return rate.orElse(0.0);
-            } catch (RuntimeException e) {
-                return Double.NaN;
-            }
-        }
-
-        @Override
-        public String name() {
-            return "platform.pse-report";
-        }
-
-        @Override
-        public Map<String, Object> run(JobContext context) {
-            LocalDate today = io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima();
-            String now = periodOf(today);
-            String previous = periodOf(today.minusMonths(6));
-            for (String period : List.of(previous, now)) {
-                QuarkusTransaction.requiringNew().run(() -> {
-                    Rate rate = rate(pse, period, registeredOn);
-                    pse.saveReport(period, rate.accepted(), rate.rejected(), rate.rate());
-                    if (rate.breached()) {
-                        AdminLog.PLATFORM_AUDIT.errorf("PSE rejected-CDR rate %s in %s is above the %s limit", rate.rate(), period,
-                                rate.limit());
-                    }
-                });
-            }
-            return Map.of("period", now, "at", Instant.now().toString());
-        }
-
-        static String periodOf(LocalDate day) {
-            return day.getYear() + (day.getMonthValue() <= 6 ? "-H1" : "-H2");
-        }
-    }
 }

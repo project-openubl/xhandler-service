@@ -7,12 +7,10 @@ import io.github.projectopenubl.xhandler.jobs.handlers.ReceptionValidity;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.xml.Engine;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
-import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -29,7 +27,6 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -65,10 +62,10 @@ public class ReceptionResource {
     private final Engine engine;
     private final FileStore files;
     private final ReceptionProvider receptionProvider;
-    private final Auditor auditor;
+    private final AuditManager auditor;
     private final ReceptionValidity validity;
 
-    public ReceptionResource(TenantAccess access, Engine engine, FileStore files, ReceptionProvider receptionProvider, Auditor auditor, ReceptionValidity validity, CompanyManager companyManager) {
+    public ReceptionResource(TenantAccess access, Engine engine, FileStore files, ReceptionProvider receptionProvider, AuditManager auditor, ReceptionValidity validity, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.access = access;
         this.engine = engine;

@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.security;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.vertx.core.http.HttpServerRequest;
 import jakarta.enterprise.inject.Instance;
 import java.util.Map;
@@ -22,10 +22,10 @@ public class TenantAccess {
 
     private final MembershipProvider membership;
     private final CurrentActor currentActor;
-    private final Auditor auditor;
+    private final AuditManager auditor;
     private final Instance<HttpServerRequest> request;
 
-    public TenantAccess(MembershipProvider membership, CurrentActor currentActor, Auditor auditor, Instance<HttpServerRequest> request) {
+    public TenantAccess(MembershipProvider membership, CurrentActor currentActor, AuditManager auditor, Instance<HttpServerRequest> request) {
         this.membership = membership;
         this.currentActor = currentActor;
         this.auditor = auditor;

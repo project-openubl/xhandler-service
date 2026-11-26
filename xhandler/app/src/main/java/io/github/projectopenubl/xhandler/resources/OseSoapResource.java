@@ -1,7 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.clients.OseClients;
-import io.github.projectopenubl.xhandler.managers.OseIntake;
+import io.github.projectopenubl.xhandler.managers.OseIntakeManager;
 import io.github.projectopenubl.xhandler.utils.ZipGuard;
 
 import jakarta.ws.rs.Consumes;
@@ -38,10 +38,10 @@ public class OseSoapResource {
     private static final Logger LOG = Logger.getLogger(OseSoapResource.class);
 
     private final OseClients clients;
-    private final OseIntake intake;
+    private final OseIntakeManager intake;
     private final io.micrometer.core.instrument.MeterRegistry metrics;
 
-    public OseSoapResource(OseClients clients, OseIntake intake, io.micrometer.core.instrument.MeterRegistry metrics) {
+    public OseSoapResource(OseClients clients, OseIntakeManager intake, io.micrometer.core.instrument.MeterRegistry metrics) {
         this.clients = clients;
         this.intake = intake;
         this.metrics = metrics;
@@ -61,7 +61,7 @@ public class OseSoapResource {
         }
     }
 
-    static Response answer(OseClients clients, OseIntake intake, io.micrometer.core.instrument.MeterRegistry metrics, byte[] body) {
+    static Response answer(OseClients clients, OseIntakeManager intake, io.micrometer.core.instrument.MeterRegistry metrics, byte[] body) {
         Response response = answer(clients, intake, body);
         if (response.getStatus() == 500) {
             String xml = new String((byte[]) response.getEntity(), java.nio.charset.StandardCharsets.UTF_8);
@@ -72,12 +72,12 @@ public class OseSoapResource {
         return response;
     }
 
-    static Response answer(OseClients clients, OseIntake intake, byte[] body) {
+    static Response answer(OseClients clients, OseIntakeManager intake, byte[] body) {
         try {
             if (body == null || body.length > MAX_ENVELOPE) {
-                throw new OseIntake.Fault("0155", "El mensaje es demasiado grande.");
+                throw new OseIntakeManager.Fault("0155", "El mensaje es demasiado grande.");
             }
-            Request request = parse(body).orElseThrow(() -> new OseIntake.Fault("0306", "No se puede leer (parsear) el mensaje SOAP."));
+            Request request = parse(body).orElseThrow(() -> new OseIntakeManager.Fault("0306", "No se puede leer (parsear) el mensaje SOAP."));
             OseClients.Client client = clients.authenticate(request.username(), request.password());
             return switch (request.operation()) {
                 case "sendBill" -> ok("sendBillResponse", "<applicationResponse>"
@@ -88,7 +88,7 @@ public class OseSoapResource {
                 case "sendPack" -> ok("sendPackResponse",
                         "<ticket>" + intake.sendPack(client, "soap", request.field("fileName"), content(request)) + "</ticket>");
                 case "getStatus" -> {
-                    OseIntake.Status status = intake.getStatus(client, request.field("ticket"));
+                    OseIntakeManager.Status status = intake.getStatus(client, request.field("ticket"));
                     yield ok("getStatusResponse", "<status><statusCode>" + status.statusCode() + "</statusCode><content>"
                             + Base64.getEncoder().encodeToString(status.content()) + "</content></status>");
                 }
@@ -97,7 +97,7 @@ public class OseSoapResource {
                     try {
                         numero = Long.parseLong(request.field("numeroComprobante").strip());
                     } catch (NumberFormatException e) {
-                        throw new OseIntake.Fault("0306", "Número de comprobante inválido.");
+                        throw new OseIntakeManager.Fault("0306", "Número de comprobante inválido.");
                     }
                     yield intake.cdrOf(client, request.field("rucComprobante").strip(), request.field("tipoComprobante").strip(),
                                     request.field("serieComprobante").strip().toUpperCase(), numero)
@@ -107,11 +107,11 @@ public class OseSoapResource {
                                     "<statusCdr><statusCode>0011</statusCode><statusMessage>El comprobante de pago electrónico no existe"
                                             + "</statusMessage></statusCdr>"));
                 }
-                default -> throw new OseIntake.Fault("0100", "Operación no soportada.");
+                default -> throw new OseIntakeManager.Fault("0100", "Operación no soportada.");
             };
         } catch (OseClients.Unauthorized e) {
             return fault("0102", "Usuario o contraseña incorrectos");
-        } catch (OseIntake.Fault e) {
+        } catch (OseIntakeManager.Fault e) {
             return fault(e.code, e.getMessage());
         } catch (ZipGuard.Refused e) {
             return fault(e.code, e.getMessage());
@@ -125,7 +125,7 @@ public class OseSoapResource {
         try {
             return Base64.getMimeDecoder().decode(request.field("contentFile"));
         } catch (IllegalArgumentException e) {
-            throw new OseIntake.Fault("0156", "El archivo ZIP está corrupto.");
+            throw new OseIntakeManager.Fault("0156", "El archivo ZIP está corrupto.");
         }
     }
 

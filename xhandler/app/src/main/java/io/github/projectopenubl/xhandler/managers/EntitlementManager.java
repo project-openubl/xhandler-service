@@ -2,8 +2,6 @@ package io.github.projectopenubl.xhandler.managers;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.managers.EmitQuota;
-import io.github.projectopenubl.xhandler.managers.Notifications;
 import jakarta.enterprise.context.ApplicationScoped;
 import io.github.projectopenubl.xhandler.models.BillingProvider;
 import jakarta.transaction.Transactional;
@@ -20,7 +18,7 @@ import java.util.UUID;
  * counted from the documents themselves, so there is no hot counter row.
  */
 @ApplicationScoped
-public class Entitlements implements EmitQuota {
+public class EntitlementManager implements EmitQuota {
 
     /** A plan's limits. Null limits are unlimited. */
     public record Plan(String code, String name, Integer productionPerMonth, Integer betaPerDay, Integer sandboxPerDay,
@@ -33,11 +31,11 @@ public class Entitlements implements EmitQuota {
     static final Duration STALE_AFTER = Duration.ofHours(24);
 
     private final BillingProvider billingProvider;
-    private final Notifications notifications;
+    private final NotificationManager notifications;
     private final io.github.projectopenubl.xhandler.security.TenantAccess access;
     private final String defaultPlan;
 
-    public Entitlements(BillingProvider billingProvider, Notifications notifications, io.github.projectopenubl.xhandler.security.TenantAccess access,
+    public EntitlementManager(BillingProvider billingProvider, NotificationManager notifications, io.github.projectopenubl.xhandler.security.TenantAccess access,
             @org.eclipse.microprofile.config.inject.ConfigProperty(name = "xhandler.billing.default-plan", defaultValue = "free") String defaultPlan) {
         this.defaultPlan = defaultPlan;
         this.billingProvider = billingProvider;
@@ -129,7 +127,7 @@ public class Entitlements implements EmitQuota {
         billingProvider.ensureEntitlement(tenantId);
         int updated = billingProvider.markQuotaNotified(tenantId, percent, period);
         if (updated == 1) {
-            notifications.publish(tenantId, Notifications.QUOTA, "Uso del plan: " + percent + "%",
+            notifications.publish(tenantId, NotificationManager.QUOTA, "Uso del plan: " + percent + "%",
                     "Su empresa usó el " + percent + "% de los " + usage.plan().productionPerMonth() + " documentos del mes de su plan "
                             + usage.plan().name() + ".", null);
         }

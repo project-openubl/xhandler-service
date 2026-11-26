@@ -5,7 +5,7 @@ import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.jobs.handlers.DocumentEmailJob;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.events.DocumentStatusChanged;
@@ -49,11 +49,11 @@ public class DocumentEmailResource {
 
     private final TenantAccess access;
     private final Jobs jobs;
-    private final Auditor auditor;
+    private final AuditManager auditor;
     private final EmailProvider emailProvider;
     private final long maxPerDay;
 
-    public DocumentEmailResource(TenantAccess access, Jobs jobs, Auditor auditor, EmailProvider emailProvider,
+    public DocumentEmailResource(TenantAccess access, Jobs jobs, AuditManager auditor, EmailProvider emailProvider,
             @org.eclipse.microprofile.config.inject.ConfigProperty(name = "xhandler.mail.max-per-tenant-per-day", defaultValue = "2000")
                     long maxPerDay, CompanyProvider companyProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;

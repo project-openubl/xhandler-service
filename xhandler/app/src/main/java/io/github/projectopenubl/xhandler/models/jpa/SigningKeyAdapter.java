@@ -4,7 +4,6 @@ import io.github.projectopenubl.xhandler.models.ModelType;
 import io.github.projectopenubl.xhandler.models.SigningKeyModel;
 import io.github.projectopenubl.xhandler.models.jpa.entities.SigningKeyEntity;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 public class SigningKeyAdapter implements SigningKeyModel, JpaModel<SigningKeyEntity> {

@@ -6,10 +6,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.resources.CatalogResource;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.resources.CompanyResource;
-import io.github.projectopenubl.xhandler.managers.CredentialService;
+import io.github.projectopenubl.xhandler.managers.CredentialManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -45,20 +43,20 @@ public class IdentityLookup {
     public record Identity(String tipo, String numero, String nombre, String direccion, String estado, String condicion, boolean cached) {}
 
     private final TenantAccess access;
-    private final CredentialService credentials;
+    private final CredentialManager credentials;
     private final CatalogResource catalogs;
     private final Egress egress;
     private final ObjectMapper json;
     private final Optional<String> searchpeUrl;
-    private final io.github.projectopenubl.xhandler.managers.Auditor auditor;
+    private final io.github.projectopenubl.xhandler.managers.AuditManager auditor;
     private final io.github.projectopenubl.xhandler.models.CatalogProvider catalogProvider;
     private final int maxPerHour;
 
     static final java.time.Duration CACHE_TTL = java.time.Duration.ofDays(30);
 
-    public IdentityLookup(TenantAccess access, CredentialService credentials, CatalogResource catalogs, Egress egress, ObjectMapper json,
+    public IdentityLookup(TenantAccess access, CredentialManager credentials, CatalogResource catalogs, Egress egress, ObjectMapper json,
             @ConfigProperty(name = "xhandler.lookup.searchpe-url") Optional<String> searchpeUrl,
-            io.github.projectopenubl.xhandler.managers.Auditor auditor, io.github.projectopenubl.xhandler.models.CatalogProvider catalogProvider,
+            io.github.projectopenubl.xhandler.managers.AuditManager auditor, io.github.projectopenubl.xhandler.models.CatalogProvider catalogProvider,
             @ConfigProperty(name = "xhandler.lookup.max-per-tenant-per-hour", defaultValue = "300") int maxPerHour, CompanyManager companyManager, PublicLookupProvider publicLookupProvider) {
         this.publicLookupProvider = publicLookupProvider;
         this.companyManager = companyManager;

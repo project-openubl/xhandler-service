@@ -1,9 +1,9 @@
 package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.models.TenantProvider;
-import io.github.projectopenubl.xhandler.managers.Entitlements;
+import io.github.projectopenubl.xhandler.managers.EntitlementManager;
 
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
@@ -29,13 +29,13 @@ public class BillingResource {
     public record BillingDetails(@Pattern(regexp = "\\d{11}") String billingRuc, @Size(max = 300) String billingName,
             @Email String billingEmail) {}
 
-    public record BillingView(Entitlements.Usage usage, String billingRuc, String billingName, String billingEmail) {}
+    public record BillingView(EntitlementManager.Usage usage, String billingRuc, String billingName, String billingEmail) {}
 
     private final TenantAccess access;
-    private final Entitlements entitlements;
-    private final Auditor auditor;
+    private final EntitlementManager entitlements;
+    private final AuditManager auditor;
 
-    public BillingResource(TenantAccess access, Entitlements entitlements, Auditor auditor, TenantProvider tenantProvider) {
+    public BillingResource(TenantAccess access, EntitlementManager entitlements, AuditManager auditor, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.access = access;
         this.entitlements = entitlements;

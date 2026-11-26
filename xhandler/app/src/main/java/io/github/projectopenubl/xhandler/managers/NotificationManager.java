@@ -26,7 +26,7 @@ import java.util.UUID;
  * of the event; emails go out through a job.
  */
 @ApplicationScoped
-public class Notifications {
+public class NotificationManager {
 
     private final TenantProvider tenantProvider;
 
@@ -43,7 +43,7 @@ public class Notifications {
     private final NotificationProvider notificationProvider;
     private final Jobs jobs;
 
-    public Notifications(NotificationProvider notificationProvider, Jobs jobs, TenantProvider tenantProvider) {
+    public NotificationManager(NotificationProvider notificationProvider, Jobs jobs, TenantProvider tenantProvider) {
         this.tenantProvider = tenantProvider;
         this.notificationProvider = notificationProvider;
         this.jobs = jobs;

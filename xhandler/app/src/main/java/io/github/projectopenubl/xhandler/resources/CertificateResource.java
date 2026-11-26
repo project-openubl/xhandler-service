@@ -8,9 +8,8 @@ import io.github.projectopenubl.xhandler.models.SigningKeyModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.resources.CompanyResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -44,11 +43,11 @@ public class CertificateResource {
 
     private final TenantAccess access;
     private final KeyVault vault;
-    private final Auditor auditor;
+    private final AuditManager auditor;
     private final jakarta.transaction.TransactionSynchronizationRegistry transactions;
 
     public CertificateResource(
-            TenantAccess access, KeyVault vault, Auditor auditor, jakarta.transaction.TransactionSynchronizationRegistry transactions, SigningKeyProvider signingKeyProvider, CompanyManager companyManager) {
+            TenantAccess access, KeyVault vault, AuditManager auditor, jakarta.transaction.TransactionSynchronizationRegistry transactions, SigningKeyProvider signingKeyProvider, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.signingKeyProvider = signingKeyProvider;
         this.access = access;

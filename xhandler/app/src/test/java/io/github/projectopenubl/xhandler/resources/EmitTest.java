@@ -1,7 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.managers.Idempotency;
-import io.github.projectopenubl.xhandler.models.DocumentModel;
+import io.github.projectopenubl.xhandler.managers.IdempotencyManager;
 import io.github.projectopenubl.xhandler.utils.Deadlines;
 
 import static io.github.projectopenubl.xhandler.Api.as;
@@ -19,7 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.projectopenubl.xhandler.resources.TestCompanies;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -305,7 +303,7 @@ class EmitTest {
     }
 
     @Inject
-    Idempotency idempotency;
+    IdempotencyManager idempotency;
 
     @Inject
     io.github.projectopenubl.xhandler.security.TenantAccess access;
@@ -313,7 +311,7 @@ class EmitTest {
     @Test
     void a_request_that_outlives_a_takeover_cant_touch_the_new_owners_key() {
         String key = UUID.randomUUID().toString();
-        Idempotency.Begun a = idempotency.begin(tenant, key, "h");
+        IdempotencyManager.Begun a = idempotency.begin(tenant, key, "h");
         // A's key looks abandoned (A is stuck); B takes it over
         io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
@@ -321,7 +319,7 @@ class EmitTest {
                             "UPDATE xhandler.idempotency_key SET created_at = now() - interval '5 minutes' WHERE key = :key")
                     .setParameter("key", key).executeUpdate();
         });
-        Idempotency.Begun b = idempotency.begin(tenant, key, "h");
+        IdempotencyManager.Begun b = idempotency.begin(tenant, key, "h");
         org.junit.jupiter.api.Assertions.assertNotEquals(a.claim(), b.claim());
         // A fails late: its abandon leaves B's key alone, and its complete is refused
         idempotency.abandon(tenant, key, a.claim());

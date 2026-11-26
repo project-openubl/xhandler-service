@@ -59,10 +59,10 @@ public class WebhookDeliveryJob implements JobHandler {
     private final SecretBox box;
     private final Egress egress;
     private final ObjectMapper json;
-    private final io.github.projectopenubl.xhandler.managers.Auditor auditor;
+    private final io.github.projectopenubl.xhandler.managers.AuditManager auditor;
 
     public WebhookDeliveryJob(WebhookQueueProvider webhookQueueProvider, TenantAccess access, SecretBox box, Egress egress, ObjectMapper json,
-            io.github.projectopenubl.xhandler.managers.Auditor auditor, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider) {
+            io.github.projectopenubl.xhandler.managers.AuditManager auditor, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider) {
         this.webhookSubscriptionProvider = webhookSubscriptionProvider;
         this.webhookDeliveryProvider = webhookDeliveryProvider;
         this.auditor = auditor;

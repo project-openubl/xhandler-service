@@ -2,8 +2,8 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.models.DocumentDraftProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
-import io.github.projectopenubl.xhandler.managers.EmitService;
-import io.github.projectopenubl.xhandler.managers.Idempotency;
+import io.github.projectopenubl.xhandler.managers.EmitManager;
+import io.github.projectopenubl.xhandler.managers.IdempotencyManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.models.DocumentDraftModel;
 import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
@@ -17,14 +17,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -41,7 +40,6 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -92,12 +90,12 @@ public class DraftResource {
     private static final int MAX_SPEC_BYTES = 512 * 1024;
 
     private final TenantAccess access;
-    private final EmitService emit;
-    private final Idempotency idempotency;
-    private final Auditor auditor;
+    private final EmitManager emit;
+    private final IdempotencyManager idempotency;
+    private final AuditManager auditor;
     private final ObjectMapper json;
 
-    public DraftResource(TenantAccess access, EmitService emit, Idempotency idempotency, Auditor auditor, ObjectMapper json, CompanyProvider companyProvider, DocumentDraftProvider documentDraftProvider) {
+    public DraftResource(TenantAccess access, EmitManager emit, IdempotencyManager idempotency, AuditManager auditor, ObjectMapper json, CompanyProvider companyProvider, DocumentDraftProvider documentDraftProvider) {
         this.documentDraftProvider = documentDraftProvider;
         this.companyProvider = companyProvider;
         this.access = access;
@@ -123,7 +121,7 @@ public class DraftResource {
         if (idempotencyKey != null) {
             // Authorize before touching the idempotency table
             QuarkusTransaction.requiringNew().run(() -> access.enter(tenantId, Role.OPERATOR));
-            Idempotency.Begun begun = idempotency.begin(tenantId, idempotencyKey, hash(companyId, input));
+            IdempotencyManager.Begun begun = idempotency.begin(tenantId, idempotencyKey, hash(companyId, input));
             if (begun.replay() != null) {
                 return Response.status(begun.replay().status()).entity(begun.replay().body()).build();
             }
@@ -250,7 +248,7 @@ public class DraftResource {
             @HeaderParam("Idempotency-Key") String idempotencyKey, @HeaderParam("X-Correlation-Id") String correlationId,
             @Schema(description = "La versión que el usuario revisó; si el borrador cambió desde entonces, 409 (draft_changed).")
             @QueryParam("version") Integer version) {
-        record Snapshot(UUID companyId, int version, EmitService.EmitRequest request) {}
+        record Snapshot(UUID companyId, int version, EmitManager.EmitRequest request) {}
         Snapshot snapshot = QuarkusTransaction.requiringNew().call(() -> {
             access.enter(tenantId, Role.OPERATOR);
             DocumentDraftModel draft = find(draftId, false);
@@ -269,11 +267,11 @@ public class DraftResource {
             document.put("kind", draft.getKind());
             document.set("spec", spec);
             return new Snapshot(draft.getCompanyId(), draft.getVersion(),
-                    new EmitService.EmitRequest(document, draft.getSerie(), null, draft.getLabels().isEmpty() ? null : draft.getLabels()));
+                    new EmitManager.EmitRequest(document, draft.getSerie(), null, draft.getLabels().isEmpty() ? null : draft.getLabels()));
         });
-        String correlation = DocumentResource.correlation(correlationId);
-        EmitService.Emitted emitted = emit.emitDraft(tenantId, snapshot.companyId(), idempotencyKey, snapshot.request(), correlation,
-                new EmitService.DraftIssue("draft:" + draftId, () -> lockUnchanged(draftId, snapshot.version()),
+        String correlation = Ids.correlation(correlationId);
+        EmitManager.Emitted emitted = emit.emitDraft(tenantId, snapshot.companyId(), idempotencyKey, snapshot.request(), correlation,
+                new EmitManager.DraftIssue("draft:" + draftId, () -> lockUnchanged(draftId, snapshot.version()),
                         doc -> markIssued(draftId, snapshot.version(), doc)));
         return Response.status(emitted.status()).entity(emitted.body()).build();
     }
@@ -381,7 +379,7 @@ public class DraftResource {
 
     private String hash(UUID companyId, DraftInput input) {
         try {
-            JsonNode canonical = EmitService.canonical(json.valueToTree(input));
+            JsonNode canonical = EmitManager.canonical(json.valueToTree(input));
             return FileStore.sha256(("draft:" + companyId + ":" + json.writeValueAsString(canonical)).getBytes(StandardCharsets.UTF_8));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);

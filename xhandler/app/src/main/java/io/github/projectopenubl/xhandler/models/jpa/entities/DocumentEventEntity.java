@@ -1,6 +1,5 @@
 package io.github.projectopenubl.xhandler.models.jpa.entities;
 
-import io.github.projectopenubl.xhandler.utils.Ids;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;

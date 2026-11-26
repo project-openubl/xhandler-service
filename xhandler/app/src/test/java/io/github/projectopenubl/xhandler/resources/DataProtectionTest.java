@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.jobs.handlers.TenantDeletionJob;
 import static io.github.projectopenubl.xhandler.Api.as;
 import static io.restassured.RestAssured.given;
 import static org.awaitility.Awaitility.await;
@@ -9,10 +10,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.projectopenubl.xhandler.resources.TestCompanies;
-import io.github.projectopenubl.xhandler.resources.TestDocuments;
 import io.github.projectopenubl.xhandler.xml.EngineStub;
-import io.github.projectopenubl.xhandler.resources.TenantExit;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.handlers.RetentionPurge;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -44,7 +42,7 @@ class DataProtectionTest {
     TestDocuments docs;
 
     @Inject
-    TenantExit.Deletion deletion;
+    TenantDeletionJob deletion;
 
     @Inject
     RetentionPurge retention;

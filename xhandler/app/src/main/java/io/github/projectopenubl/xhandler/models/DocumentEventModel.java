@@ -1,6 +1,5 @@
 package io.github.projectopenubl.xhandler.models;
 
-import io.github.projectopenubl.xhandler.utils.Ids;
 import java.time.Instant;
 import java.util.UUID;
 

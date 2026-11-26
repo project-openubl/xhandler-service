@@ -8,8 +8,6 @@ import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Constraints;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
-import io.github.projectopenubl.xhandler.resources.CompanyResource;
-import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.models.CatalogProvider;
@@ -64,9 +62,9 @@ public class CatalogResource {
     private final TenantAccess access;
     private final CatalogProvider catalogProvider;
     private final ObjectMapper json;
-    private final io.github.projectopenubl.xhandler.managers.Auditor auditor;
+    private final io.github.projectopenubl.xhandler.managers.AuditManager auditor;
 
-    public CatalogResource(TenantAccess access, CatalogProvider catalogProvider, ObjectMapper json, io.github.projectopenubl.xhandler.managers.Auditor auditor, CompanyManager companyManager) {
+    public CatalogResource(TenantAccess access, CatalogProvider catalogProvider, ObjectMapper json, io.github.projectopenubl.xhandler.managers.AuditManager auditor, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.auditor = auditor;
         this.access = access;

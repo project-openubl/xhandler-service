@@ -4,7 +4,7 @@ import io.github.projectopenubl.xhandler.models.SupportSessionProvider;
 import io.github.projectopenubl.xhandler.models.SupportSessionModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.managers.Auditor;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -35,9 +35,9 @@ public class SupportResource {
     public record SessionView(UUID id, String operator, String reason, Instant requestedAt, String approvedBy, Instant expiresAt, Instant revokedAt) {}
 
     private final TenantAccess access;
-    private final Auditor auditor;
+    private final AuditManager auditor;
 
-    public SupportResource(TenantAccess access, Auditor auditor, SupportSessionProvider supportSessionProvider) {
+    public SupportResource(TenantAccess access, AuditManager auditor, SupportSessionProvider supportSessionProvider) {
         this.supportSessionProvider = supportSessionProvider;
         this.access = access;
         this.auditor = auditor;

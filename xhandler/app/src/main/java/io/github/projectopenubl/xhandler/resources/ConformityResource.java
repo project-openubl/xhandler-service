@@ -4,10 +4,8 @@ import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.DocumentProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.representations.idm.Page;
-import io.github.projectopenubl.xhandler.managers.Auditor;
-import io.github.projectopenubl.xhandler.resources.CompanyResource;
+import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
-import io.github.projectopenubl.xhandler.resources.StatusResource;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
@@ -47,9 +45,9 @@ public class ConformityResource {
 
     private final TenantAccess access;
     private final ConformityProvider conformityProvider;
-    private final Auditor auditor;
+    private final AuditManager auditor;
 
-    public ConformityResource(TenantAccess access, ConformityProvider conformityProvider, Auditor auditor, DocumentProvider documentProvider, CompanyManager companyManager) {
+    public ConformityResource(TenantAccess access, ConformityProvider conformityProvider, AuditManager auditor, DocumentProvider documentProvider, CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.documentProvider = documentProvider;
         this.access = access;
