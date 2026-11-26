@@ -131,8 +131,8 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
         run: |
-          ../mvnw -B -q package -DskipTests -pl app -am
-          docker build --platform "linux/$ARCH" -f app/src/main/docker/Dockerfile.jvm -t "$IMAGE" app
+          ../mvnw -B -q package -DskipTests
+          docker build --platform "linux/$ARCH" -f src/main/docker/Dockerfile.jvm -t "$IMAGE" .
       - name: Build ${{ env.IMAGE }}
         if: ${{ !steps.pushed.outputs.pushed && matrix.image == 'xhandler-engine' }}
         env:

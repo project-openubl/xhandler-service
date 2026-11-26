@@ -1059,17 +1059,16 @@ v1 screens:
 ## 20. Repository layout
 
 ```
-xhandler-service/
-├── pom.xml                      Maven multi-module (Java 25, Quarkus)
-├── app/                         Quarkus application (api + worker roles)
-│   └── src/main/java/…          tenancy, identity, documents, numbering, jobs, sunat,
+xhandler/                        the service, inside the monorepo (see AGENTS.md)
+├── pom.xml                      Quarkus application (Java 25; api + worker roles)
+├── src/main/java/…              tenancy, identity, documents, numbering, jobs, sunat,
 │                                ose, reception, delivery, sire, conformity, billing,
 │                                catalogs, reports, webhooks, admin
 ├── engine/                      Rust sidecar (Cargo; depends on xhandler-rust pinned by rev)
-├── deploy/                      Kubernetes manifests / Helm chart, Lago, Keycloak realm
-├── docs/
-│   ├── DESIGN.md
-│   └── research/                regulatory research
+├── sdk/                         SDKs generated from the OpenAPI document
+├── deploy/                      Kustomize base, monitoring, examples
+└── examples/                    sample documents
+(docs, dev tooling and the dev Keycloak realm live at the repository root: docs/, hack/)
 (CI lives at the repository root: .github/workflows/xhandler*.yml — Java, Rust, images, e2e against SUNAT beta)
 ```
 

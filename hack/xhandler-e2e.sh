@@ -18,7 +18,7 @@ COMPOSE="${COMPOSE:-podman compose}"
 WORK="$(mktemp -d)"
 PIDS=()
 RUC=20123456789
-PFX="$X/app/src/test/resources/certificates/valid-$RUC.pfx"
+PFX="$X/src/test/resources/certificates/valid-$RUC.pfx"
 
 cleanup() {
   local status=$?
@@ -71,7 +71,7 @@ XHANDLER_VAULT_SOFTWARE_MASTER_KEYS_E2E="$(head -c 32 /dev/urandom | base64)" \
 XHANDLER_STORAGE_KIND=filesystem \
 XHANDLER_STORAGE_DIR="$WORK/files" \
 XHANDLER_STORAGE_S3_ALLOW_FILESYSTEM_IN_PRODUCTION=true \
-  java -jar "$X/app/target/quarkus-app/quarkus-run.jar" >"$WORK/app.log" 2>&1 &
+  java -jar "$X/target/quarkus-app/quarkus-run.jar" >"$WORK/app.log" 2>&1 &
 PIDS+=($!)
 wait_for http://localhost:8080/q/health/ready "app"
 

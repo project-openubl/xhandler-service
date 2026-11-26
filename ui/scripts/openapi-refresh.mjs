@@ -1,7 +1,7 @@
 // Copies the OpenAPI specs the Maven builds write into client/openapi/, then regenerates the
 // clients. Build the backends first (see docs/ui/scripts.md):
 //   (cd .. && ./mvnw -q -pl searchpe package -DskipTests -Dquarkus.smallrye-openapi.store-schema-directory=target/openapi)
-//   (cd .. && ./mvnw -q -f xhandler -pl app package -DskipTests)
+//   (cd .. && ./mvnw -q -f xhandler package -DskipTests)
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -13,8 +13,8 @@ const repoRoot = path.resolve(uiRoot, "..");
 const SPECS = [
   {
     name: "xhandler",
-    from: path.join(repoRoot, "xhandler/app/target/openapi/openapi.json"),
-    build: "./mvnw -q -f xhandler -pl app package -DskipTests",
+    from: path.join(repoRoot, "xhandler/target/openapi/openapi.json"),
+    build: "./mvnw -q -f xhandler package -DskipTests",
   },
   {
     name: "searchpe",
