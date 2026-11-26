@@ -1,5 +1,10 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.VoidRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EmitRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.DocumentEventRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.AccessLinkRepresentation;
 import io.github.projectopenubl.xhandler.utils.DocumentFiles;
 import io.github.projectopenubl.xhandler.utils.Ids;
 import io.github.projectopenubl.xhandler.models.DocumentSearch;
@@ -12,10 +17,10 @@ import io.github.projectopenubl.xhandler.managers.EmitManager;
 import io.github.projectopenubl.xhandler.managers.VoidingManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.models.DocumentEventModel;
-import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
+import io.github.projectopenubl.xhandler.representations.idm.DocumentRepresentation;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.files.FileStore;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -44,15 +49,15 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}")
 public class DocumentResource {
 
+    private final ModelToRepresentation modelToRepresentation;
+
     private final DocumentProvider documentProvider;
 
     private final DocumentFileProvider documentFileProvider;
 
     private final DocumentEventProvider documentEventProvider;
 
-    public record Event(Instant at, String status, Integer code, String message, String actor, String correlationId) {}
 
-    public record AccessLink(String accessUrl) {}
 
     private final TenantAccess access;
     private final VoidingManager voiding;
@@ -64,7 +69,8 @@ public class DocumentResource {
     private final io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf;
 
     public DocumentResource(TenantAccess access, EmitManager emit, DocumentControlManager control, AccessLinkManager links, FileStore files,
-            AuditManager auditor, VoidingManager voiding, io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+            AuditManager auditor, VoidingManager voiding, io.github.projectopenubl.xhandler.pdf.DocumentPdf pdf, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
         this.documentEventProvider = documentEventProvider;
@@ -81,7 +87,7 @@ public class DocumentResource {
     @POST
     @Path("/companies/{companyId}/documents")
     @APIResponse(responseCode = "201", description = "Documento emitido (también la respuesta repetida de una Idempotency-Key ya usada, sin access_url).",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentRepresentation.class)))
     @APIResponse(responseCode = "402", description = "Sin cuota de documentos en el plan (quota_exceeded).",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @APIResponse(responseCode = "409", description = "Conflicto: Idempotency-Key en proceso, número ya usado, empresa desactivada o no autorizada.",
@@ -96,7 +102,7 @@ public class DocumentResource {
             @PathParam("companyId") UUID companyId,
             @HeaderParam("Idempotency-Key") String idempotencyKey,
             @HeaderParam("X-Correlation-Id") String correlationId,
-            EmitManager.EmitRequest request) {
+            EmitRequestRepresentation request) {
         EmitManager.Emitted emitted = emit.emit(tenantId, companyId, idempotencyKey, request, Ids.correlation(correlationId));
         return Response.status(emitted.status()).entity(emitted.body()).build();
     }
@@ -105,7 +111,7 @@ public class DocumentResource {
     @Path("/documents")
     @Transactional
     @Operation(operationId = "listDocuments")
-    public Page<DocumentView> list(
+    public PageRepresentation<DocumentRepresentation> list(
             @PathParam("tenantId") UUID tenantId,
             @QueryParam("company_id") UUID companyId,
             @QueryParam("status") String status,
@@ -133,30 +139,30 @@ public class DocumentResource {
                 customerNumero == null || customerNumero.isBlank() ? null : customerNumero.strip(),
                 customerNombre == null || customerNombre.isBlank() ? null : likePrefix(customerNombre.strip().toLowerCase(java.util.Locale.ROOT)),
                 from, to, labelFilters);
-        int size = Page.limit(limit);
-        int start = Page.offset(offset);
+        int size = PageRepresentation.limit(limit);
+        int start = PageRepresentation.offset(offset);
         List<DocumentModel> page = documentProvider.searchDocuments(search, start, size);
-        return new Page<>(page.stream().map(DocumentView::of).toList(), size, start);
+        return new PageRepresentation<>(page.stream().map(modelToRepresentation::toRepresentation).toList(), size, start);
     }
 
     @GET
     @Path("/documents/{documentId}")
     @Transactional
     @Operation(operationId = "getDocument")
-    public DocumentView get(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
+    public DocumentRepresentation get(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
         access.enter(tenantId, Role.VIEWER);
-        return DocumentView.of(find(documentId));
+        return modelToRepresentation.toRepresentation(find(documentId));
     }
 
     @GET
     @Path("/documents/{documentId}/events")
     @Transactional
     @Operation(operationId = "listDocumentEvents", summary = "Línea de tiempo del documento")
-    public List<Event> events(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
+    public List<DocumentEventRepresentation> events(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
         access.enter(tenantId, Role.VIEWER);
         find(documentId);
         List<DocumentEventModel> events = documentEventProvider.getDocumentEvents(documentId);
-        return events.stream().map(e -> new Event(e.getAt(), e.getStatus(), e.getCode(), e.getMessage(), e.getActor(), e.getCorrelationId())).toList();
+        return events.stream().map(e -> new DocumentEventRepresentation(e.getAt(), e.getStatus(), e.getCode(), e.getMessage(), e.getActor(), e.getCorrelationId())).toList();
     }
 
     /** XML, CDR, input or enriched JSON. Reading a document's files is audited (personal data, §3.4). */
@@ -194,24 +200,24 @@ public class DocumentResource {
     @Path("/documents/{documentId}/retry")
     @Transactional
     @Operation(operationId = "retryDocument", summary = "Reintenta el envío ahora (exception: reenvía con el mismo número)")
-    public DocumentView retry(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
-        return DocumentView.of(control.retry(access.enter(tenantId, Role.OPERATOR), documentId));
+    public DocumentRepresentation retry(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
+        return modelToRepresentation.toRepresentation(control.retry(access.enter(tenantId, Role.OPERATOR), documentId));
     }
 
     @POST
     @Path("/documents/{documentId}/hold")
     @Transactional
     @Operation(operationId = "holdDocument")
-    public DocumentView hold(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
-        return DocumentView.of(control.hold(access.enter(tenantId, Role.OPERATOR), documentId));
+    public DocumentRepresentation hold(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
+        return modelToRepresentation.toRepresentation(control.hold(access.enter(tenantId, Role.OPERATOR), documentId));
     }
 
     @POST
     @Path("/documents/{documentId}/release")
     @Transactional
     @Operation(operationId = "releaseDocument")
-    public DocumentView release(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
-        return DocumentView.of(control.release(access.enter(tenantId, Role.OPERATOR), documentId));
+    public DocumentRepresentation release(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
+        return modelToRepresentation.toRepresentation(control.release(access.enter(tenantId, Role.OPERATOR), documentId));
     }
 
     /**
@@ -221,20 +227,20 @@ public class DocumentResource {
     @POST
     @Path("/documents/{documentId}/void")
     @APIResponse(responseCode = "202", description = "Anulación enviada: el documento queda en voiding hasta la respuesta de SUNAT.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentRepresentation.class)))
     @Operation(operationId = "voidDocument", summary = "Anula un documento aceptado y no entregado (RA, RC o RR)")
     public Response voidDocument(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId,
-            @HeaderParam("X-Correlation-Id") String correlationId, VoidingManager.VoidRequest request) {
+            @HeaderParam("X-Correlation-Id") String correlationId, VoidRequestRepresentation request) {
         DocumentModel voidingDocument = voiding.voidDocument(tenantId, documentId, request, Ids.correlation(correlationId));
-        return Response.status(202).entity(DocumentView.of(voidingDocument)).build();
+        return Response.status(202).entity(modelToRepresentation.toRepresentation(voidingDocument)).build();
     }
 
     /** Cancels a void whose RA/RC/RR ended in exception: the document goes back to its previous status. */
     @POST
     @Path("/documents/{documentId}/void/cancel")
     @Operation(operationId = "cancelVoid")
-    public DocumentView cancelVoid(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
-        return DocumentView.of(voiding.cancelVoid(tenantId, documentId));
+    public DocumentRepresentation cancelVoid(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
+        return modelToRepresentation.toRepresentation(voiding.cancelVoid(tenantId, documentId));
     }
 
     /** The client attests the buyer received the document (§9.3): it can no longer be voided. */
@@ -242,7 +248,7 @@ public class DocumentResource {
     @Path("/documents/{documentId}/delivered")
     @Transactional
     @Operation(operationId = "markDocumentDelivered")
-    public DocumentView delivered(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
+    public DocumentRepresentation delivered(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
         DocumentModel doc = control.lock(documentId);
         if (doc.getDeliveredAt() == null) {
@@ -252,7 +258,7 @@ public class DocumentResource {
             documentEventProvider.addDocumentEvent(doc, null, "delivered (client)", scope.actor().auditName(), null);
             auditor.record(scope, "document.delivered", "document", doc.getId());
         }
-        return DocumentView.of(doc);
+        return modelToRepresentation.toRepresentation(doc);
     }
 
     /** A new buyer link (the previous ones stay valid until they expire). */
@@ -260,11 +266,11 @@ public class DocumentResource {
     @Path("/documents/{documentId}/access-link")
     @Transactional
     @Operation(operationId = "createDocumentAccessLink")
-    public AccessLink accessLink(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
+    public AccessLinkRepresentation accessLink(@PathParam("tenantId") UUID tenantId, @PathParam("documentId") UUID documentId) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
         DocumentModel doc = find(documentId);
         auditor.record(scope, "document.access_link_created", "document", doc.getId());
-        return new AccessLink(links.url(links.create(doc)));
+        return new AccessLinkRepresentation(links.url(links.create(doc)));
     }
 
     /** Ends every buyer link of the document now (e.g. sent to the wrong person). */

@@ -1,12 +1,16 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EmitRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.DraftRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.DraftInputRepresentation;
 import io.github.projectopenubl.xhandler.models.DocumentDraftProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.managers.EmitManager;
 import io.github.projectopenubl.xhandler.managers.IdempotencyManager;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.models.DocumentDraftModel;
-import io.github.projectopenubl.xhandler.representations.idm.DocumentView;
+import io.github.projectopenubl.xhandler.representations.idm.DocumentRepresentation;
 import io.github.projectopenubl.xhandler.utils.DocumentTypes;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -16,7 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.files.FileStore;
@@ -26,9 +30,6 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
@@ -55,37 +56,13 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}")
 public class DraftResource {
 
+    private final ModelToRepresentation modelToRepresentation;
+
     private final DocumentDraftProvider documentDraftProvider;
 
     private final CompanyProvider companyProvider;
 
-    /** What a draft holds: the xbuilder document (kind and spec, no number), the series and labels. */
-    public record DraftInput(
-            @NotBlank String kind,
-            @Schema(description = "El documento de xbuilder sin número (`serie_numero` no se acepta: se numera al emitir).")
-            @jakarta.validation.constraints.NotNull ObjectNode spec,
-            @Pattern(regexp = "[A-Z0-9]{4}", message = "debe tener 4 caracteres en mayúsculas o dígitos") String serie,
-            Map<String, @Size(max = 200) String> labels,
-            @Schema(description = "Al editar: la versión que se editó; si el borrador cambió desde entonces, 409 (draft_changed).")
-            Integer version) {}
 
-    public record DraftView(
-            UUID id,
-            String prn,
-            UUID companyId,
-            @Schema(description = "draft (en edición) o issued (emitido: ver document_id).") String status,
-            int version,
-            String kind,
-            String tipoComprobante,
-            String serie,
-            JsonNode spec,
-            Map<String, String> labels,
-            DocumentView.Customer customer,
-            String moneda,
-            UUID documentId,
-            String createdBy,
-            Instant createdAt,
-            Instant updatedAt) {}
 
     private static final int MAX_SPEC_BYTES = 512 * 1024;
 
@@ -95,7 +72,8 @@ public class DraftResource {
     private final AuditManager auditor;
     private final ObjectMapper json;
 
-    public DraftResource(TenantAccess access, EmitManager emit, IdempotencyManager idempotency, AuditManager auditor, ObjectMapper json, CompanyProvider companyProvider, DocumentDraftProvider documentDraftProvider) {
+    public DraftResource(TenantAccess access, EmitManager emit, IdempotencyManager idempotency, AuditManager auditor, ObjectMapper json, CompanyProvider companyProvider, DocumentDraftProvider documentDraftProvider, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.documentDraftProvider = documentDraftProvider;
         this.companyProvider = companyProvider;
         this.access = access;
@@ -108,14 +86,14 @@ public class DraftResource {
     @POST
     @Path("/companies/{companyId}/drafts")
     @APIResponse(responseCode = "201", description = "Borrador creado (también la respuesta repetida de una Idempotency-Key ya usada).",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DraftView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DraftRepresentation.class)))
     @APIResponse(responseCode = "409", description = "Idempotency-Key en proceso.",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @APIResponse(responseCode = "422", description = "Borrador inválido, o Idempotency-Key reutilizada con otra solicitud.",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @Operation(operationId = "createDraft", summary = "Crea un borrador de documento, sin número (emisión manual)")
     public Response create(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
-            @HeaderParam("Idempotency-Key") String idempotencyKey, @Valid DraftInput input) {
+            @HeaderParam("Idempotency-Key") String idempotencyKey, @Valid DraftInputRepresentation input) {
         checkInput(input);
         UUID claim = null;
         if (idempotencyKey != null) {
@@ -129,7 +107,7 @@ public class DraftResource {
         }
         UUID owned = claim;
         try {
-            DraftView view = QuarkusTransaction.requiringNew().call(() -> {
+            DraftRepresentation view = QuarkusTransaction.requiringNew().call(() -> {
                 TenantScope scope = access.enter(tenantId, Role.OPERATOR);
                 CompanyModel company = companyProvider.getCompany(companyId).orElse(null);
                 if (company == null || company.getDeletedAt() != null) {
@@ -145,7 +123,7 @@ public class DraftResource {
                 draft.setUpdatedAt(now);
                 documentDraftProvider.persist(draft);
                 auditor.record(scope, "draft.created", "document_draft", draft.getId());
-                DraftView created = view(draft);
+                DraftRepresentation created = modelToRepresentation.toRepresentation(draft);
                 if (idempotencyKey != null) {
                     idempotency.complete(tenantId, idempotencyKey, owned, 201, json.valueToTree(created));
                 }
@@ -164,39 +142,39 @@ public class DraftResource {
     @Path("/drafts")
     @Transactional
     @Operation(operationId = "listDrafts", summary = "Borradores de documentos, los más recientes primero")
-    public Page<DraftView> list(
+    public PageRepresentation<DraftRepresentation> list(
             @PathParam("tenantId") UUID tenantId,
             @QueryParam("company_id") UUID companyId,
             @Schema(description = "draft o issued; sin filtro, ambos.") @QueryParam("status") String status,
             @QueryParam("limit") Integer limit,
             @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
-        int size = Page.limit(limit);
-        int start = Page.offset(offset);
+        int size = PageRepresentation.limit(limit);
+        int start = PageRepresentation.offset(offset);
         List<DocumentDraftModel> page = documentDraftProvider.getDocumentDrafts(companyId, status, start, size);
-        return new Page<>(page.stream().map(this::view).toList(), size, start);
+        return new PageRepresentation<>(page.stream().map(modelToRepresentation::toRepresentation).toList(), size, start);
     }
 
     @GET
     @Path("/drafts/{draftId}")
     @Transactional
     @Operation(operationId = "getDraft")
-    public DraftView get(@PathParam("tenantId") UUID tenantId, @PathParam("draftId") UUID draftId) {
+    public DraftRepresentation get(@PathParam("tenantId") UUID tenantId, @PathParam("draftId") UUID draftId) {
         access.enter(tenantId, Role.VIEWER);
-        return view(find(draftId, false));
+        return modelToRepresentation.toRepresentation(find(draftId, false));
     }
 
     @PUT
     @Path("/drafts/{draftId}")
     @Transactional
     @APIResponse(responseCode = "200", description = "Borrador guardado.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DraftView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DraftRepresentation.class)))
     @APIResponse(responseCode = "409", description = "El borrador ya se emitió (draft_issued) o cambió desde la versión editada (draft_changed).",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @APIResponse(responseCode = "422", description = "Borrador inválido.",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @Operation(operationId = "updateDraft", summary = "Reemplaza el contenido de un borrador")
-    public DraftView update(@PathParam("tenantId") UUID tenantId, @PathParam("draftId") UUID draftId, @Valid DraftInput input) {
+    public DraftRepresentation update(@PathParam("tenantId") UUID tenantId, @PathParam("draftId") UUID draftId, @Valid DraftInputRepresentation input) {
         checkInput(input);
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
         // Row lock, then decide (§10.8 rule 2)
@@ -206,7 +184,7 @@ public class DraftResource {
         draft.setVersion(draft.getVersion() + 1);
         draft.setUpdatedAt(Instant.now());
         auditor.record(scope, "draft.updated", "document_draft", draft.getId());
-        return view(draft);
+        return modelToRepresentation.toRepresentation(draft);
     }
 
     @DELETE
@@ -234,7 +212,7 @@ public class DraftResource {
     @POST
     @Path("/drafts/{draftId}/issue")
     @APIResponse(responseCode = "201", description = "Documento emitido (también la respuesta repetida de una Idempotency-Key ya usada, sin access_url).",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentRepresentation.class)))
     @APIResponse(responseCode = "402", description = "Sin cuota de documentos en el plan (quota_exceeded).",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @APIResponse(responseCode = "409", description = "El borrador ya se emitió o cambió mientras se emitía, Idempotency-Key en proceso, empresa desactivada o no autorizada.",
@@ -248,7 +226,7 @@ public class DraftResource {
             @HeaderParam("Idempotency-Key") String idempotencyKey, @HeaderParam("X-Correlation-Id") String correlationId,
             @Schema(description = "La versión que el usuario revisó; si el borrador cambió desde entonces, 409 (draft_changed).")
             @QueryParam("version") Integer version) {
-        record Snapshot(UUID companyId, int version, EmitManager.EmitRequest request) {}
+        record Snapshot(UUID companyId, int version, EmitRequestRepresentation request) {}
         Snapshot snapshot = QuarkusTransaction.requiringNew().call(() -> {
             access.enter(tenantId, Role.OPERATOR);
             DocumentDraftModel draft = find(draftId, false);
@@ -267,7 +245,7 @@ public class DraftResource {
             document.put("kind", draft.getKind());
             document.set("spec", spec);
             return new Snapshot(draft.getCompanyId(), draft.getVersion(),
-                    new EmitManager.EmitRequest(document, draft.getSerie(), null, draft.getLabels().isEmpty() ? null : draft.getLabels()));
+                    new EmitRequestRepresentation(document, draft.getSerie(), null, draft.getLabels().isEmpty() ? null : draft.getLabels()));
         });
         String correlation = Ids.correlation(correlationId);
         EmitManager.Emitted emitted = emit.emitDraft(tenantId, snapshot.companyId(), idempotencyKey, snapshot.request(), correlation,
@@ -312,7 +290,7 @@ public class DraftResource {
         }
     }
 
-    private void checkInput(DraftInput input) {
+    private void checkInput(DraftInputRepresentation input) {
         if (input == null || input.kind() == null || input.spec() == null) {
             throw ApiException.invalid("invalid_request", "Envíe el borrador como {\"kind\": ..., \"spec\": {...}}.", null);
         }
@@ -326,7 +304,7 @@ public class DraftResource {
         }
     }
 
-    private void apply(DocumentDraftModel draft, DraftInput input) {
+    private void apply(DocumentDraftModel draft, DraftInputRepresentation input) {
         draft.setKind(input.kind());
         draft.setTipoComprobante(tipoComprobante(input));
         draft.setSerie(input.serie());
@@ -338,7 +316,7 @@ public class DraftResource {
      * A draft has no {@code serie_numero} to tell a boleta from a factura: without
      * {@code tipo_comprobante}, an Invoice's type follows its series (B → 03, otherwise 01).
      */
-    static String tipoComprobante(DraftInput input) {
+    static String tipoComprobante(DraftInputRepresentation input) {
         if ("Invoice".equals(input.kind()) && !input.spec().hasNonNull("tipo_comprobante") && input.serie() != null) {
             return input.serie().startsWith("B") ? "03" : "01";
         }
@@ -353,16 +331,6 @@ public class DraftResource {
         return draft;
     }
 
-    private DraftView view(DocumentDraftModel d) {
-        JsonNode spec = json.valueToTree(d.getSpec());
-        JsonNode cliente = spec.path("cliente");
-        DocumentView.Customer customer = cliente.isObject()
-                ? new DocumentView.Customer(text(cliente, "tipo_documento_identidad"), text(cliente, "numero_documento_identidad"),
-                        text(cliente, "nombre"))
-                : null;
-        return new DraftView(d.getId(), "xh:draft:" + d.getId(), d.getCompanyId(), d.getStatus(), d.getVersion(), d.getKind(), d.getTipoComprobante(), d.getSerie(), spec,
-                d.getLabels(), customer, text(spec, "moneda"), d.getDocumentId(), d.getCreatedBy(), d.getCreatedAt(), d.getUpdatedAt());
-    }
 
     private static String text(JsonNode node, String field) {
         JsonNode value = node.path(field);
@@ -377,7 +345,7 @@ public class DraftResource {
         }
     }
 
-    private String hash(UUID companyId, DraftInput input) {
+    private String hash(UUID companyId, DraftInputRepresentation input) {
         try {
             JsonNode canonical = EmitManager.canonical(json.valueToTree(input));
             return FileStore.sha256(("draft:" + companyId + ":" + json.writeValueAsString(canonical)).getBytes(StandardCharsets.UTF_8));

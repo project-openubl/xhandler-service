@@ -1,9 +1,15 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.PersonalDraftRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.PersonalDocumentRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.PersonalDataRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.NewRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.DataSubjectRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.CloseRepresentation;
 import io.github.projectopenubl.xhandler.models.PrivacyProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.managers.NotificationManager;
 import io.github.projectopenubl.xhandler.security.Role;
@@ -11,9 +17,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -39,39 +42,11 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 @Path("/api/v1/tenants/{tenantId}/data-subject-requests")
 public class DataSubjectRequests {
 
-    public record NewRequest(
-            @NotBlank @Pattern(regexp = "[0-9A-Z]{1,2}") String subjectDocType,
-            @NotBlank @Size(max = 20) String subjectDocNumber,
-            @Size(max = 200) String subjectName,
-            @NotBlank @Pattern(regexp = "access|rectification|cancellation|opposition") String kind,
-            @Size(max = 2000) String details) {}
 
-    public record Close(@NotBlank @Size(max = 2000) String resolution) {}
 
-    public record DataSubjectRequestView(
-            UUID id,
-            String subjectDocType,
-            String subjectDocNumber,
-            String subjectName,
-            @Schema(description = "access, rectification, cancellation u opposition.") String kind,
-            @Schema(description = "tenant (registrada por la organización) o platform (llegó a la plataforma).") String channel,
-            String details,
-            String receivedAt,
-            String forwardedAt,
-            String responseDueAt,
-            @Schema(description = "open o closed.") String status,
-            String resolution,
-            String closedAt) {}
 
-    /** A document issued to the person (status and amounts, no files). Values as text, as stored. */
-    public record PersonalDocument(UUID id, String issuerRuc, String tipoComprobante, String serieNumero, String fechaEmision, String nombre,
-            String moneda, String total, String status) {}
 
-    /** A draft naming the person as buyer; deleted ones too, until they are purged. */
-    public record PersonalDraft(UUID id, String issuerRuc, String kind, String tipoComprobante, String serie, String nombre, String status,
-            String createdAt, String deletedAt) {}
 
-    public record PersonalData(DataSubjectRequestView request, List<PersonalDocument> documents, List<PersonalDraft> drafts) {}
 
     private final TenantAccess access;
     private final PrivacyProvider privacy;
@@ -91,7 +66,7 @@ public class DataSubjectRequests {
 
     /** With the tenant open: records a request and tells the tenant. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public UUID register(TenantScope scope, NewRequest request, String channel) {
+    public UUID register(TenantScope scope, NewRequestRepresentation request, String channel) {
         UUID id = Ids.newId();
         Instant now = Instant.now();
         privacy.addRequest(id, scope.tenantId(), request.subjectDocType(), request.subjectDocNumber(), request.subjectName(), request.kind(),
@@ -119,7 +94,7 @@ public class DataSubjectRequests {
     @Operation(operationId = "createDataSubjectRequest")
     @POST
     @Transactional
-    public DataSubjectRequestView create(@PathParam("tenantId") UUID tenantId, @Valid NewRequest request) {
+    public DataSubjectRequestRepresentation create(@PathParam("tenantId") UUID tenantId, @Valid NewRequestRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         return view(register(scope, request, "tenant"));
     }
@@ -127,14 +102,14 @@ public class DataSubjectRequests {
     @Operation(operationId = "listDataSubjectRequests", summary = "Solicitudes de derechos de datos personales, las más recientes primero")
     @GET
     @Transactional
-    public Page<DataSubjectRequestView> list(@PathParam("tenantId") UUID tenantId,
+    public PageRepresentation<DataSubjectRequestRepresentation> list(@PathParam("tenantId") UUID tenantId,
             @Schema(description = "open o closed; sin filtro, ambas.") @QueryParam("status") String status,
             @QueryParam("limit") Integer limit, @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.ADMIN);
-        int size = Page.limit(limit);
-        int start = Page.offset(offset);
+        int size = PageRepresentation.limit(limit);
+        int start = PageRepresentation.offset(offset);
         List<UUID> ids = privacy.getRequestIds(status, size, start);
-        return new Page<>(ids.stream().map(this::view).toList(), size, start);
+        return new PageRepresentation<>(ids.stream().map(this::view).toList(), size, start);
     }
 
     /**
@@ -145,18 +120,18 @@ public class DataSubjectRequests {
     @GET
     @Path("/{id}/personal-data")
     @Transactional
-    public PersonalData personalData(@PathParam("tenantId") UUID tenantId, @PathParam("id") UUID id) {
+    public PersonalDataRepresentation personalData(@PathParam("tenantId") UUID tenantId, @PathParam("id") UUID id) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        DataSubjectRequestView request = view(id);
+        DataSubjectRequestRepresentation request = view(id);
         List<PrivacyProvider.PersonalDocumentRow> docs = privacy.getPersonalDocuments(request.subjectDocType(), request.subjectDocNumber());
         List<PrivacyProvider.PersonalDraftRow> drafts = privacy.getPersonalDrafts(request.subjectDocType(), request.subjectDocNumber());
         auditor.record(scope, "privacy.personal_data_read", "data_subject_request", id,
                 Map.of("documents", String.valueOf(docs.size()), "drafts", String.valueOf(drafts.size())));
-        return new PersonalData(request,
-                docs.stream().map(r -> new PersonalDocument(r.id(), r.issuerRuc(), r.tipoComprobante(), r.serie() + "-" + r.numero(),
+        return new PersonalDataRepresentation(request,
+                docs.stream().map(r -> new PersonalDocumentRepresentation(r.id(), r.issuerRuc(), r.tipoComprobante(), r.serie() + "-" + r.numero(),
                         String.valueOf(r.fechaEmision()), String.valueOf(r.nombre()), String.valueOf(r.moneda()), String.valueOf(r.total()),
                         r.status())).toList(),
-                drafts.stream().map(r -> new PersonalDraft(r.id(), r.issuerRuc(), r.kind(), r.tipoComprobante(), r.serie(), r.nombre(),
+                drafts.stream().map(r -> new PersonalDraftRepresentation(r.id(), r.issuerRuc(), r.kind(), r.tipoComprobante(), r.serie(), r.nombre(),
                         r.status(), String.valueOf(r.createdAt()), r.deletedAt() == null ? null : String.valueOf(r.deletedAt()))).toList());
     }
 
@@ -164,7 +139,7 @@ public class DataSubjectRequests {
     @POST
     @Path("/{id}/close")
     @Transactional
-    public DataSubjectRequestView close(@PathParam("tenantId") UUID tenantId, @PathParam("id") UUID id, @Valid Close request) {
+    public DataSubjectRequestRepresentation close(@PathParam("tenantId") UUID tenantId, @PathParam("id") UUID id, @Valid CloseRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         int closed = privacy.closeRequest(id, request.resolution(), scope.actor().auditName());
         if (closed == 0) {
@@ -174,9 +149,9 @@ public class DataSubjectRequests {
         return view(id);
     }
 
-    DataSubjectRequestView view(UUID id) {
+    DataSubjectRequestRepresentation view(UUID id) {
         PrivacyProvider.DataSubjectRequestRow r = privacy.getRequest(id).orElseThrow(ApiException::notFound);
-        return new DataSubjectRequestView(r.id(), r.subjectDocType(), r.subjectDocNumber(), r.subjectName(), r.kind(), r.channel(),
+        return new DataSubjectRequestRepresentation(r.id(), r.subjectDocType(), r.subjectDocNumber(), r.subjectName(), r.kind(), r.channel(),
                 r.details(), String.valueOf(r.receivedAt()), r.forwardedAt() == null ? null : String.valueOf(r.forwardedAt()),
                 String.valueOf(r.responseDueAt()), r.status(), r.resolution(),
                 r.closedAt() == null ? null : String.valueOf(r.closedAt()));

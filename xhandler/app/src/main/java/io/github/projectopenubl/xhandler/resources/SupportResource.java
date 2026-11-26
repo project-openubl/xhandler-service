@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.SessionRepresentation;
 import io.github.projectopenubl.xhandler.models.SupportSessionProvider;
 import io.github.projectopenubl.xhandler.models.SupportSessionModel;
 
@@ -28,16 +30,18 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/support-sessions")
 public class SupportResource {
 
+    private final ModelToRepresentation modelToRepresentation;
+
     private final SupportSessionProvider supportSessionProvider;
 
     static final Duration SESSION_LENGTH = Duration.ofHours(4);
 
-    public record SessionView(UUID id, String operator, String reason, Instant requestedAt, String approvedBy, Instant expiresAt, Instant revokedAt) {}
 
     private final TenantAccess access;
     private final AuditManager auditor;
 
-    public SupportResource(TenantAccess access, AuditManager auditor, SupportSessionProvider supportSessionProvider) {
+    public SupportResource(TenantAccess access, AuditManager auditor, SupportSessionProvider supportSessionProvider, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.supportSessionProvider = supportSessionProvider;
         this.access = access;
         this.auditor = auditor;
@@ -46,17 +50,17 @@ public class SupportResource {
     @Operation(operationId = "listSupportSessions")
     @GET
     @Transactional
-    public List<SessionView> list(@PathParam("tenantId") UUID tenantId) {
+    public List<SessionRepresentation> list(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.ADMIN);
         List<SupportSessionModel> sessions = supportSessionProvider.getSupportSessions();
-        return sessions.stream().map(SupportResource::view).toList();
+        return sessions.stream().map(modelToRepresentation::toRepresentation).toList();
     }
 
     @Operation(operationId = "approveSupportSession")
     @POST
     @Path("/{sessionId}/approve")
     @Transactional
-    public SessionView approve(@PathParam("tenantId") UUID tenantId, @PathParam("sessionId") UUID sessionId) {
+    public SessionRepresentation approve(@PathParam("tenantId") UUID tenantId, @PathParam("sessionId") UUID sessionId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         SupportSessionModel session = find(sessionId);
         if (session.getApprovedAt() != null || session.getRevokedAt() != null) {
@@ -66,21 +70,21 @@ public class SupportResource {
         session.setApprovedAt(Instant.now());
         session.setExpiresAt(session.getApprovedAt().plus(SESSION_LENGTH));
         auditor.record(scope, "support_session.approved", "support_session", session.getId(), Map.of("expires_at", session.getExpiresAt().toString()));
-        return view(session);
+        return modelToRepresentation.toRepresentation(session);
     }
 
     @Operation(operationId = "revokeSupportSession")
     @POST
     @Path("/{sessionId}/revoke")
     @Transactional
-    public SessionView revoke(@PathParam("tenantId") UUID tenantId, @PathParam("sessionId") UUID sessionId) {
+    public SessionRepresentation revoke(@PathParam("tenantId") UUID tenantId, @PathParam("sessionId") UUID sessionId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         SupportSessionModel session = find(sessionId);
         if (session.getRevokedAt() == null) {
             session.setRevokedAt(Instant.now());
             auditor.record(scope, "support_session.revoked", "support_session", session.getId());
         }
-        return view(session);
+        return modelToRepresentation.toRepresentation(session);
     }
 
     private SupportSessionModel find(UUID id) {
@@ -91,7 +95,4 @@ public class SupportResource {
         return session;
     }
 
-    private static SessionView view(SupportSessionModel s) {
-        return new SessionView(s.getId(), s.getOperator(), s.getReason(), s.getRequestedAt(), s.getApprovedBy(), s.getExpiresAt(), s.getRevokedAt());
-    }
 }

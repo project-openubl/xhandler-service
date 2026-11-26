@@ -1,5 +1,11 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.RepresentationToModel;
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.UpdateTenantRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.TenantSummaryRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.TenantRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.CreateTenantRepresentation;
 import io.github.projectopenubl.xhandler.models.TenantMemberProvider;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.models.TenantModel;
@@ -16,8 +22,6 @@ import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.MembershipProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
@@ -35,6 +39,10 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants")
 public class TenantResource {
 
+    private final RepresentationToModel representationToModel;
+
+    private final ModelToRepresentation modelToRepresentation;
+
     private final TenantMemberProvider tenantMemberProvider;
 
     private final TenantProvider tenantProvider;
@@ -42,20 +50,18 @@ public class TenantResource {
     /** Free tenants a person may create (signup abuse control). */
     static final int MAX_FREE_TENANTS_PER_USER = 1;
 
-    public record TenantSummary(UUID id, String name, String role) {}
 
-    public record CreateTenant(@NotBlank @Size(max = 200) String name) {}
 
-    public record UpdateTenant(@NotBlank @Size(max = 200) String name) {}
 
-    public record TenantView(UUID id, String name, String plan, String status, int retentionYears) {}
 
     private final MembershipProvider membership;
     private final CurrentActor currentActor;
     private final TenantAccess access;
     private final AuditManager auditor;
 
-    public TenantResource(MembershipProvider membership, CurrentActor currentActor, TenantAccess access, AuditManager auditor, TenantProvider tenantProvider, TenantMemberProvider tenantMemberProvider) {
+    public TenantResource(MembershipProvider membership, CurrentActor currentActor, TenantAccess access, AuditManager auditor, TenantProvider tenantProvider, TenantMemberProvider tenantMemberProvider, ModelToRepresentation modelToRepresentation, RepresentationToModel representationToModel) {
+        this.representationToModel = representationToModel;
+        this.modelToRepresentation = modelToRepresentation;
         this.tenantMemberProvider = tenantMemberProvider;
         this.tenantProvider = tenantProvider;
         this.membership = membership;
@@ -67,20 +73,20 @@ public class TenantResource {
     @Operation(operationId = "listTenants")
     @GET
     @Transactional
-    public List<TenantSummary> list() {
+    public List<TenantSummaryRepresentation> list() {
         Actor actor = currentActor.get();
         return membership.getTenantsOf(actor.kind(), actor.subject()).stream()
-                .map(r -> new TenantSummary(r.id(), r.name(), r.role()))
+                .map(r -> new TenantSummaryRepresentation(r.id(), r.name(), r.role()))
                 .toList();
     }
 
     /** Self-service signup: a person creates a free tenant and becomes its owner. */
     @APIResponse(responseCode = "201", description = "Cuenta creada.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = TenantView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = TenantRepresentation.class)))
     @Operation(operationId = "createTenant")
     @POST
     @Transactional
-    public Response create(@Valid CreateTenant request) {
+    public Response create(@Valid CreateTenantRepresentation request) {
         Actor actor = currentActor.get();
         if (!actor.isUser()) {
             throw ApiException.forbidden();
@@ -96,7 +102,7 @@ public class TenantResource {
         access.setTenant(tenantId);
 
         TenantModel tenant = tenantProvider.newTenant(tenantId);
-        tenant.setName(request.name().strip());
+        representationToModel.updateTenant(request, tenant);
         tenant.setCreatedBy(actor.subject());
         try {
             tenantProvider.persist(tenant);
@@ -118,20 +124,20 @@ public class TenantResource {
 
         TenantScope scope = new TenantScope(tenantId, actor, Role.OWNER);
         auditor.record(scope, "tenant.created", "tenant", tenantId);
-        return Response.status(201).entity(view(tenant)).build();
+        return Response.status(201).entity(modelToRepresentation.toRepresentation(tenant)).build();
     }
 
     @Operation(operationId = "getTenant")
     @GET
     @Path("/{tenantId}")
     @Transactional
-    public TenantView get(@PathParam("tenantId") UUID tenantId) {
+    public TenantRepresentation get(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
         TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
         if (tenant == null) {
             throw ApiException.notFound();
         }
-        return view(tenant);
+        return modelToRepresentation.toRepresentation(tenant);
     }
 
     /** Renames the tenant (its organization name in the console, emails and partner reports). */
@@ -139,7 +145,7 @@ public class TenantResource {
     @PUT
     @Path("/{tenantId}")
     @Transactional
-    public TenantView update(@PathParam("tenantId") UUID tenantId, @Valid UpdateTenant request) {
+    public TenantRepresentation update(@PathParam("tenantId") UUID tenantId, @Valid UpdateTenantRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         TenantModel tenant = tenantProvider.getTenantForUpdate(tenantId).orElse(null);
         if (tenant == null) {
@@ -151,10 +157,7 @@ public class TenantResource {
             tenant.setName(name);
             auditor.record(scope, "tenant.renamed", "tenant", tenantId, java.util.Map.of("from", previous, "to", name));
         }
-        return view(tenant);
+        return modelToRepresentation.toRepresentation(tenant);
     }
 
-    private static TenantView view(TenantModel tenant) {
-        return new TenantView(tenant.getId(), tenant.getName(), tenant.getPlan(), tenant.getStatus(), tenant.getRetentionYears());
-    }
 }

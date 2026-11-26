@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.PublicDocumentRepresentation;
 import io.github.projectopenubl.xhandler.utils.PublicStatus;
 import io.github.projectopenubl.xhandler.utils.DocumentFiles;
 import io.github.projectopenubl.xhandler.models.DocumentFileProvider;
@@ -20,9 +21,7 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.core.Response;
-import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
@@ -46,18 +45,6 @@ public class PublicDocumentResource {
 
     private final CompanyProvider companyProvider;
 
-    public record PublicDocument(
-            String emisorRuc,
-            String emisorRazonSocial,
-            String tipoComprobante,
-            String serieNumero,
-            LocalDate fechaEmision,
-            String moneda,
-            BigDecimal total,
-            String status,
-            List<String> files,
-            @org.eclipse.microprofile.openapi.annotations.media.Schema(description = "El Libro de Reclamaciones virtual del emisor, si lo configuró.")
-            String libroReclamacionesUrl) {}
 
     private final AccessLinkManager links;
     private final TenantAccess access;
@@ -79,7 +66,7 @@ public class PublicDocumentResource {
     @Operation(operationId = "getPublicDocument")
     @GET
     @Transactional
-    public PublicDocument get(@PathParam("token") String token) {
+    public PublicDocumentRepresentation get(@PathParam("token") String token) {
         DocumentModel doc = open(token);
         CompanyModel company = companyProvider.getCompany(doc.getCompanyId()).orElse(null);
         java.util.List<String> available = documentFileProvider.getDocumentFiles(doc.getId()).stream()
@@ -94,7 +81,7 @@ public class PublicDocumentResource {
         java.util.Collections.sort(available);
         // A test-environment document must never read as a real one
         String status = "production".equals(doc.getSunatEnv()) ? PublicStatus.of(doc.getStatus()) : "documento_de_prueba";
-        return new PublicDocument(company.getRuc(), company.getRazonSocial(), doc.getTipoComprobante(), doc.serieNumero(), doc.getFechaEmision(),
+        return new PublicDocumentRepresentation(company.getRuc(), company.getRazonSocial(), doc.getTipoComprobante(), doc.serieNumero(), doc.getFechaEmision(),
                 doc.getMoneda(), doc.getTotal(), status, available, company.getLibroReclamacionesUrl());
     }
 

@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.CertificateRepresentation;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.SigningKeyProvider;
 import io.github.projectopenubl.xhandler.keys.CertificateImporter;
@@ -35,11 +37,12 @@ import org.jboss.resteasy.reactive.multipart.FileUpload;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/certificate")
 public class CertificateResource {
 
+    private final ModelToRepresentation modelToRepresentation;
+
     private final CompanyManager companyManager;
 
     private final SigningKeyProvider signingKeyProvider;
 
-    public record CertificateView(String subject, String issuer, String serial, String ruc, Instant validFrom, Instant validUntil, boolean rucMatches) {}
 
     private final TenantAccess access;
     private final KeyVault vault;
@@ -47,7 +50,8 @@ public class CertificateResource {
     private final jakarta.transaction.TransactionSynchronizationRegistry transactions;
 
     public CertificateResource(
-            TenantAccess access, KeyVault vault, AuditManager auditor, jakarta.transaction.TransactionSynchronizationRegistry transactions, SigningKeyProvider signingKeyProvider, CompanyManager companyManager) {
+            TenantAccess access, KeyVault vault, AuditManager auditor, jakarta.transaction.TransactionSynchronizationRegistry transactions, SigningKeyProvider signingKeyProvider, CompanyManager companyManager, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.companyManager = companyManager;
         this.signingKeyProvider = signingKeyProvider;
         this.access = access;
@@ -61,7 +65,7 @@ public class CertificateResource {
     @PUT
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Transactional
-    public CertificateView upload(
+    public CertificateRepresentation upload(
             @PathParam("tenantId") UUID tenantId,
             @PathParam("companyId") UUID companyId,
             @RestForm("file") FileUpload file,
@@ -130,21 +134,18 @@ public class CertificateResource {
         boolean rucMatches = company.getRuc().equals(key.getRuc());
         auditor.record(scope, "certificate.imported", "signing_key", key.getId(),
                 Map.of("company_id", company.getId().toString(), "serial", key.getSerial(), "ruc_matches", rucMatches));
-        return view(key, company);
+        return modelToRepresentation.toRepresentation(key, company);
     }
 
     @Operation(operationId = "getCertificate")
     @GET
     @Transactional
-    public CertificateView get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
+    public CertificateRepresentation get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
         CompanyModel company = companyManager.getCompany(companyId);
-        return signingKeyProvider.getActiveSigningKey(company.getId()).map(k -> view(k, company)).orElseThrow(ApiException::notFound);
+        return signingKeyProvider.getActiveSigningKey(company.getId()).map(k -> modelToRepresentation.toRepresentation(k, company)).orElseThrow(ApiException::notFound);
     }
 
-    private static CertificateView view(SigningKeyModel k, CompanyModel company) {
-        return new CertificateView(k.getSubject(), k.getIssuer(), k.getSerial(), k.getRuc(), k.getValidFrom(), k.getValidUntil(), company.getRuc().equals(k.getRuc()));
-    }
 
     private static byte[] readFile(FileUpload file) {
         try {

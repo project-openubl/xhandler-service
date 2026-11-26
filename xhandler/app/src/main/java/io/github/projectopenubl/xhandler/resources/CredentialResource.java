@@ -1,5 +1,11 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.SolCredentialsRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.SmtpCredentialsRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.SireCredentialsRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.LookupCredentialsRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.GreCredentialsRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.CredentialRepresentation;
 import io.github.projectopenubl.xhandler.models.CredentialProvider;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.managers.CredentialManager;
@@ -11,8 +17,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -31,10 +35,7 @@ public class CredentialResource {
 
     private final CompanyManager companyManager;
 
-    public record CredentialView(String kind, String label, Instant updatedAt) {}
 
-    /** SUNAT SOL user (a secondary user with the CPE profile). */
-    public record SolCredentials(@NotBlank @Size(max = 100) String username, @NotBlank @Size(max = 200) String password) {}
 
     private final TenantAccess access;
     private final CredentialManager credentials;
@@ -56,76 +57,63 @@ public class CredentialResource {
     @Operation(operationId = "listCredentials")
     @GET
     @Transactional
-    public List<CredentialView> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
+    public List<CredentialRepresentation> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
         CompanyModel company = companyManager.getCompany(companyId);
         List<CredentialModel> list = credentialProvider.getCredentials(company.getId());
-        return list.stream().map(c -> new CredentialView(c.getKind(), c.getLabel(), c.getUpdatedAt())).toList();
+        return list.stream().map(c -> new CredentialRepresentation(c.getKind(), c.getLabel(), c.getUpdatedAt())).toList();
     }
 
     @Operation(operationId = "setSolCredentials")
     @PUT
     @Path("/sol")
     @Transactional
-    public CredentialView putSol(
-            @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SolCredentials request) {
+    public CredentialRepresentation putSol(
+            @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SolCredentialsRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompany(companyId);
         CredentialModel stored = credentials.store(scope, company, "sol",
                 Map.of("username", request.username(), "password", request.password()), mask(request.username()));
-        return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
+        return new CredentialRepresentation(stored.getKind(), stored.getLabel(), Instant.now());
     }
 
-    /** GRE REST API (DESIGN.md §3.1): the SOL user plus the API client created in SOL. */
-    public record GreCredentials(@NotBlank @Size(max = 100) String username, @NotBlank @Size(max = 200) String password,
-            @NotBlank @Size(max = 200) String clientId, @NotBlank @Size(max = 300) String clientSecret) {}
 
     @Operation(operationId = "setGreCredentials")
     @PUT
     @Path("/gre")
     @Transactional
-    public CredentialView putGre(
-            @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid GreCredentials request) {
+    public CredentialRepresentation putGre(
+            @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid GreCredentialsRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompany(companyId);
         CredentialModel stored = credentials.store(scope, company, "gre", Map.of("username", request.username(), "password",
                 request.password(), "client_id", request.clientId(), "client_secret", request.clientSecret()), mask(request.username()));
-        return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
+        return new CredentialRepresentation(stored.getKind(), stored.getLabel(), Instant.now());
     }
 
-    /**
-     * SUNAT's REST APIs for SIRE and factura negociable conformity (DESIGN.md §3.3, §11.7): the API
-     * client created in SOL plus a SOL user with the SIRE profile (RUC + user).
-     */
-    public record SireCredentials(@NotBlank @Size(max = 100) String username, @NotBlank @Size(max = 200) String password,
-            @NotBlank @Size(max = 200) String clientId, @NotBlank @Size(max = 300) String clientSecret) {}
 
     @Operation(operationId = "setSireCredentials")
     @PUT
     @Path("/sire")
     @Transactional
-    public CredentialView putSire(
-            @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SireCredentials request) {
+    public CredentialRepresentation putSire(
+            @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SireCredentialsRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompany(companyId);
         CredentialModel stored = credentials.store(scope, company, "sire", Map.of("username", request.username(), "password",
                 request.password(), "client_id", request.clientId(), "client_secret", request.clientSecret()), mask(request.username()));
         // SIRE periods waiting for credentials resume where they stopped
         sire.resumeAfterCredentials(company.getId());
-        return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
+        return new CredentialRepresentation(stored.getKind(), stored.getLabel(), Instant.now());
     }
 
-    /** The tenant's own SMTP server for document emails (DESIGN.md §11.6). */
-    public record SmtpCredentials(@NotBlank @Size(max = 255) String host, @jakarta.validation.constraints.Min(1)
-            @jakarta.validation.constraints.Max(65535) int port, @NotBlank @Size(max = 200) String username,
-            @NotBlank @Size(max = 300) String password, @NotBlank @jakarta.validation.constraints.Email String from, Boolean startTls) {}
 
     @Operation(operationId = "setSmtpCredentials")
     @PUT
     @Path("/smtp")
     @Transactional
-    public CredentialView putSmtp(
-            @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SmtpCredentials request) {
+    public CredentialRepresentation putSmtp(
+            @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid SmtpCredentialsRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompany(companyId);
         // A tenant-supplied host: it must resolve to public addresses (DESIGN.md §16)
@@ -134,18 +122,16 @@ public class CredentialResource {
         CredentialModel stored = credentials.store(scope, company, "smtp", Map.of("host", request.host(), "port", String.valueOf(request.port()),
                 "username", request.username(), "password", request.password(), "from", request.from(),
                 "start_tls", String.valueOf(!Boolean.FALSE.equals(request.startTls()))), request.from());
-        return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
+        return new CredentialRepresentation(stored.getKind(), stored.getLabel(), Instant.now());
     }
 
-    /** A commercial RUC/DNI lookup provider (DESIGN.md §17): URL with {tipo}/{numero}, and the tenant's token. */
-    public record LookupCredentials(@NotBlank @Size(max = 2000) String url, @Size(max = 500) String token) {}
 
     @Operation(operationId = "setLookupCredentials")
     @PUT
     @Path("/lookup")
     @Transactional
-    public CredentialView putLookup(
-            @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid LookupCredentials request) {
+    public CredentialRepresentation putLookup(
+            @PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid LookupCredentialsRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompany(companyId);
         egress.check(request.url().replace("{tipo}", "ruc").replace("{numero}", "20000000001"));
@@ -154,7 +140,7 @@ public class CredentialResource {
             fields.put("token", request.token());
         }
         CredentialModel stored = credentials.store(scope, company, "lookup", fields, java.net.URI.create(request.url().replace("{", "").replace("}", "")).getHost());
-        return new CredentialView(stored.getKind(), stored.getLabel(), Instant.now());
+        return new CredentialRepresentation(stored.getKind(), stored.getLabel(), Instant.now());
     }
 
     /** "20123456789MODDATOS" → "2012…ATOS" */

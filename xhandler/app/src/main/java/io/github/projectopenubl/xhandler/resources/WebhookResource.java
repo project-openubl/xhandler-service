@@ -1,5 +1,10 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.RepresentationToModel;
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.WebhookRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.DeliveryRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.CreateWebhookRepresentation;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.WebhookSubscriptionProvider;
 import io.github.projectopenubl.xhandler.models.WebhookDeliveryProvider;
@@ -10,7 +15,7 @@ import io.github.projectopenubl.xhandler.models.WebhookSubscriptionModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.managers.IdempotencyManager;
 import io.github.projectopenubl.xhandler.keys.SecretBox;
@@ -19,9 +24,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
@@ -49,18 +51,18 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}/webhooks")
 public class WebhookResource {
 
+    private final RepresentationToModel representationToModel;
+
+    private final ModelToRepresentation modelToRepresentation;
+
     private final CompanyProvider companyProvider;
 
     private final WebhookSubscriptionProvider webhookSubscriptionProvider;
 
     private final WebhookDeliveryProvider webhookDeliveryProvider;
 
-    public record CreateWebhook(@NotBlank @Size(max = 2000) String url, @NotEmpty List<@NotBlank String> events) {}
 
-    public record WebhookView(UUID id, String url, List<String> events, boolean active, Instant createdAt, String secret) {}
 
-    public record DeliveryView(UUID id, UUID eventId, String eventType, String status, int attempts, Instant nextAttemptAt,
-            Integer lastStatusCode, String lastError, Instant deliveredAt, Instant createdAt) {}
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -73,7 +75,9 @@ public class WebhookResource {
     private final IdempotencyManager idempotency;
 
     public WebhookResource(TenantAccess access, SecretBox box, Egress egress, WebhookEvents events, AuditManager auditor,
-            io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, IdempotencyManager idempotency, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider, CompanyProvider companyProvider) {
+            io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, IdempotencyManager idempotency, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider, CompanyProvider companyProvider, ModelToRepresentation modelToRepresentation, RepresentationToModel representationToModel) {
+        this.representationToModel = representationToModel;
+        this.modelToRepresentation = modelToRepresentation;
         this.companyProvider = companyProvider;
         this.webhookSubscriptionProvider = webhookSubscriptionProvider;
         this.webhookDeliveryProvider = webhookDeliveryProvider;
@@ -88,13 +92,13 @@ public class WebhookResource {
 
     @APIResponse(responseCode = "201", description = "Webhook creado; el secreto se muestra solo esta vez (la respuesta repetida de una "
             + "Idempotency-Key ya usada no lo trae).",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = WebhookView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = WebhookRepresentation.class)))
     @APIResponse(responseCode = "409", description = "Idempotency-Key en proceso, o RUC sin verificar.",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @Operation(operationId = "createWebhook")
     @POST
     public Response create(@PathParam("tenantId") UUID tenantId, @HeaderParam("Idempotency-Key") String idempotencyKey,
-            @Valid CreateWebhook request) {
+            @Valid CreateWebhookRepresentation request) {
         return idempotency.create(tenantId, Role.ADMIN, idempotencyKey, idempotency.hash("webhook", tenantId, request), () -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
             if (!entitlements.usage(tenantId).plan().webhooks()) {
@@ -111,33 +115,32 @@ public class WebhookResource {
             String secret = "whsec_" + Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
             WebhookSubscriptionModel subscription = webhookSubscriptionProvider.newWebhookSubscription(Ids.newId());
             subscription.setTenantId(tenantId);
-            subscription.setUrl(request.url());
-            subscription.setEvents(request.events().toArray(String[]::new));
+            representationToModel.updateWebhookSubscription(request, subscription);
             subscription.seal(box.seal(secret.getBytes(StandardCharsets.UTF_8), subscription.context()));
             subscription.setCreatedAt(Instant.now());
             subscription.setUpdatedAt(subscription.getCreatedAt());
             webhookSubscriptionProvider.persist(subscription);
             auditor.record(scope, "webhook.created", "webhook", subscription.getId(), Map.of("url", request.url()));
-            return view(subscription, secret);
-        }, view -> new WebhookView(view.id(), view.url(), view.events(), view.active(), view.createdAt(), null));
+            return modelToRepresentation.toRepresentation(subscription, secret);
+        }, view -> new WebhookRepresentation(view.id(), view.url(), view.events(), view.active(), view.createdAt(), null));
     }
 
     @Operation(operationId = "listWebhooks")
     @GET
     @Transactional
-    public List<WebhookView> list(@PathParam("tenantId") UUID tenantId) {
+    public List<WebhookRepresentation> list(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
         List<WebhookSubscriptionModel> subscriptions = webhookSubscriptionProvider.getWebhookSubscriptions();
-        return subscriptions.stream().map(s -> view(s, null)).toList();
+        return subscriptions.stream().map(s -> modelToRepresentation.toRepresentation(s, null)).toList();
     }
 
     @Operation(operationId = "getWebhook")
     @GET
     @Path("/{webhookId}")
     @Transactional
-    public WebhookView get(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId) {
+    public WebhookRepresentation get(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId) {
         access.enter(tenantId, Role.VIEWER);
-        return view(find(webhookId), null);
+        return modelToRepresentation.toRepresentation(find(webhookId), null);
     }
 
     @APIResponse(responseCode = "204", description = "Webhook eliminado.")
@@ -159,7 +162,7 @@ public class WebhookResource {
     @POST
     @Path("/{webhookId}/test")
     @Transactional
-    public DeliveryView test(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId) {
+    public DeliveryRepresentation test(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         WebhookSubscriptionModel subscription = find(webhookId);
         auditor.record(scope, "webhook.test_sent", "webhook", webhookId);
@@ -176,28 +179,28 @@ public class WebhookResource {
         delivery.setCreatedAt(delivery.getNextAttemptAt());
         delivery.setUpdatedAt(delivery.getNextAttemptAt());
         webhookDeliveryProvider.persist(delivery);
-        return view(delivery);
+        return modelToRepresentation.toRepresentation(delivery);
     }
 
     @Operation(operationId = "listWebhookDeliveries")
     @GET
     @Path("/{webhookId}/deliveries")
     @Transactional
-    public Page<DeliveryView> deliveries(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId,
+    public PageRepresentation<DeliveryRepresentation> deliveries(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId,
             @QueryParam("status") String status, @QueryParam("limit") Integer limit, @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
         find(webhookId);
-        int size = Page.limit(limit);
-        int start = Page.offset(offset);
+        int size = PageRepresentation.limit(limit);
+        int start = PageRepresentation.offset(offset);
         List<WebhookDeliveryModel> page = webhookDeliveryProvider.getWebhookDeliveries(webhookId, status, start, size);
-        return new Page<>(page.stream().map(WebhookResource::view).toList(), size, start);
+        return new PageRepresentation<>(page.stream().map(modelToRepresentation::toRepresentation).toList(), size, start);
     }
 
     @Operation(operationId = "redeliverWebhook")
     @POST
     @Path("/{webhookId}/deliveries/{deliveryId}/redeliver")
     @Transactional
-    public DeliveryView redeliver(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId,
+    public DeliveryRepresentation redeliver(@PathParam("tenantId") UUID tenantId, @PathParam("webhookId") UUID webhookId,
             @PathParam("deliveryId") UUID deliveryId) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
         WebhookDeliveryModel delivery = webhookDeliveryProvider.getWebhookDeliveryForUpdate(deliveryId).orElse(null);
@@ -209,7 +212,7 @@ public class WebhookResource {
         delivery.setAttempts(0);
         delivery.setNextAttemptAt(Instant.now());
         delivery.setUpdatedAt(delivery.getNextAttemptAt());
-        return view(delivery);
+        return modelToRepresentation.toRepresentation(delivery);
     }
 
     private WebhookSubscriptionModel find(UUID id) {
@@ -220,12 +223,5 @@ public class WebhookResource {
         return subscription;
     }
 
-    private static WebhookView view(WebhookSubscriptionModel s, String secret) {
-        return new WebhookView(s.getId(), s.getUrl(), List.of(s.getEvents()), s.isActive(), s.getCreatedAt(), secret);
-    }
 
-    private static DeliveryView view(WebhookDeliveryModel d) {
-        return new DeliveryView(d.getId(), d.getEventId(), d.getEventType(), d.getStatus(), d.getAttempts(), d.getNextAttemptAt(), d.getLastStatusCode(), d.getLastError(),
-                d.getDeliveredAt(), d.getCreatedAt());
-    }
 }

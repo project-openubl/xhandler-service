@@ -1,5 +1,7 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.IdentityRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EntryRepresentation;
 import io.github.projectopenubl.xhandler.models.PublicLookupProvider;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,8 +41,6 @@ public class IdentityLookup {
 
     private final CompanyManager companyManager;
 
-    /** A normalized answer. */
-    public record Identity(String tipo, String numero, String nombre, String direccion, String estado, String condicion, boolean cached) {}
 
     private final TenantAccess access;
     private final CredentialManager credentials;
@@ -73,7 +73,7 @@ public class IdentityLookup {
 
     @Operation(operationId = "lookupIdentity")
     @GET
-    public Identity lookup(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("tipo") String tipo,
+    public IdentityRepresentation lookup(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("tipo") String tipo,
             @PathParam("numero") String numero) {
         String catalogTipo = switch (tipo) {
             case "ruc" -> {
@@ -100,11 +100,11 @@ public class IdentityLookup {
             if (hits > maxPerHour) {
                 throw new ApiException(429, "too_many_requests", "Demasiadas consultas de RUC/DNI. Intente en una hora.");
             }
-            Optional<CatalogResource.Entry> cached = catalogs.byKey(companyId, "customer", catalogTipo + ":" + numero);
+            Optional<EntryRepresentation> cached = catalogs.byKey(companyId, "customer", catalogTipo + ":" + numero);
             if (cached.isPresent() && cached.get().data().has("lookup_at")
                     && java.time.Instant.parse(cached.get().data().get("lookup_at").asText()).isAfter(java.time.Instant.now().minus(CACHE_TTL))) {
                 JsonNode d = cached.get().data();
-                return new Identity(tipo, numero, d.path("nombre").asText(), text(d, "direccion"), text(d, "estado"), text(d, "condicion"), true);
+                return new IdentityRepresentation(tipo, numero, d.path("nombre").asText(), text(d, "direccion"), text(d, "estado"), text(d, "condicion"), true);
             }
             Optional<Map<String, String>> own = credentials.read(scope, company, "lookup", "lookup");
             if (own.isPresent()) {
@@ -113,7 +113,7 @@ public class IdentityLookup {
             return searchpeUrl.map(url -> new Provider(url, null, false)).orElseThrow(() ->
                     new ApiException(503, "lookup_unavailable", "La consulta de RUC/DNI no está configurada."));
         });
-        if (cachedOrProvider instanceof Identity identity) {
+        if (cachedOrProvider instanceof IdentityRepresentation identity) {
             return identity;
         }
         Provider provider = (Provider) cachedOrProvider;
@@ -151,11 +151,11 @@ public class IdentityLookup {
         if (nombre == null) {
             throw ApiException.notFound();
         }
-        Identity identity = new Identity(tipo, numero, nombre, first(answer, "direccion", "domicilioFiscal"), first(answer, "estado", "estadoContribuyente"),
+        IdentityRepresentation identity = new IdentityRepresentation(tipo, numero, nombre, first(answer, "direccion", "domicilioFiscal"), first(answer, "estado", "estadoContribuyente"),
                 first(answer, "condicion", "condicionDomicilio"), false);
         QuarkusTransaction.requiringNew().run(() -> {
             access.enter(tenantId, Role.OPERATOR);
-            Optional<CatalogResource.Entry> existing = catalogs.byKey(companyId, "customer", catalogTipo + ":" + numero);
+            Optional<EntryRepresentation> existing = catalogs.byKey(companyId, "customer", catalogTipo + ":" + numero);
             // Merge: fields the user entered (contact, email...) are kept; only the looked-up ones change
             ObjectNode data = existing.map(e -> (ObjectNode) e.data().deepCopy()).orElseGet(json::createObjectNode);
             data.put("tipo_documento_identidad", catalogTipo);
@@ -171,7 +171,7 @@ public class IdentityLookup {
                 data.put("condicion", identity.condicion());
             }
             data.put("lookup_at", java.time.Instant.now().toString());
-            catalogs.upsert(tenantId, companyId, "customer", data, existing.map(CatalogResource.Entry::id).orElse(null));
+            catalogs.upsert(tenantId, companyId, "customer", data, existing.map(EntryRepresentation::id).orElse(null));
         });
         return identity;
     }

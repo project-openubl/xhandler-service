@@ -3,7 +3,7 @@ package io.github.projectopenubl.xhandler.xml;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
-import io.github.projectopenubl.xhandler.representations.idm.ApiError;
+import io.github.projectopenubl.xhandler.representations.idm.ErrorRepresentation;
 import org.jboss.logging.Logger;
 
 /**
@@ -19,11 +19,11 @@ public class EngineExceptionHandler implements ExceptionMapper<EngineException> 
     @Override
     public Response toResponse(EngineException e) {
         if (e.status() == 422) {
-            return Response.status(422).entity(new ApiError(e.kind(), clientMessage(e.kind()), e.getMessage())).build();
+            return Response.status(422).entity(new ErrorRepresentation(e.kind(), clientMessage(e.kind()), e.getMessage())).build();
         }
         LOG.errorf("engine error (HTTP %d, %s): %s", e.status(), e.kind(), e.getMessage());
         return Response.status(Response.Status.BAD_GATEWAY)
-                .entity(new ApiError(e.kind(), "Error interno al procesar el documento. Intente nuevamente.", null))
+                .entity(new ErrorRepresentation(e.kind(), "Error interno al procesar el documento. Intente nuevamente.", null))
                 .build();
     }
 

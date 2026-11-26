@@ -1,11 +1,13 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.JobRepresentation;
 import io.github.projectopenubl.xhandler.models.JobProvider;
 import io.github.projectopenubl.xhandler.jobs.Jobs;
 import io.github.projectopenubl.xhandler.models.JobModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import jakarta.transaction.Transactional;
@@ -14,9 +16,7 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
-import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 
@@ -24,30 +24,16 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/jobs")
 public class JobResource {
 
+    private final ModelToRepresentation modelToRepresentation;
+
     private final JobProvider jobProvider;
 
-    public record JobView(
-            UUID id,
-            String prn,
-            String name,
-            String state,
-            int priorityClass,
-            Instant createdAt,
-            Instant unblockedAt,
-            Instant startedAt,
-            Instant finishedAt,
-            String worker,
-            int attempt,
-            List<String> reservedResources,
-            List<String> createdResources,
-            Map<String, Object> result,
-            Map<String, Object> error,
-            String correlationId) {}
 
     private final TenantAccess access;
     private final Jobs jobs;
 
-    public JobResource(TenantAccess access, Jobs jobs, JobProvider jobProvider) {
+    public JobResource(TenantAccess access, Jobs jobs, JobProvider jobProvider, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.jobProvider = jobProvider;
         this.access = access;
         this.jobs = jobs;
@@ -56,37 +42,37 @@ public class JobResource {
     @Operation(operationId = "listJobs")
     @GET
     @Transactional
-    public Page<JobView> list(
+    public PageRepresentation<JobRepresentation> list(
             @PathParam("tenantId") UUID tenantId,
             @QueryParam("state") String state,
             @QueryParam("name") String name,
             @QueryParam("limit") Integer limit,
             @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
-        int size = Page.limit(limit);
-        int from = Page.offset(offset);
+        int size = PageRepresentation.limit(limit);
+        int from = PageRepresentation.offset(offset);
         List<JobModel> page = jobProvider.getJobs(state, name, from, size);
-        return new Page<>(page.stream().map(JobResource::view).toList(), size, from);
+        return new PageRepresentation<>(page.stream().map(modelToRepresentation::toRepresentation).toList(), size, from);
     }
 
     @Operation(operationId = "getJob")
     @GET
     @Path("/{jobId}")
     @Transactional
-    public JobView get(@PathParam("tenantId") UUID tenantId, @PathParam("jobId") UUID jobId) {
+    public JobRepresentation get(@PathParam("tenantId") UUID tenantId, @PathParam("jobId") UUID jobId) {
         access.enter(tenantId, Role.VIEWER);
         JobModel job = jobProvider.getJob(jobId).orElse(null);
         if (job == null) {
             throw ApiException.notFound();
         }
-        return view(job);
+        return modelToRepresentation.toRepresentation(job);
     }
 
     @Operation(operationId = "cancelJob")
     @POST
     @Path("/{jobId}/cancel")
     @Transactional
-    public JobView cancel(@PathParam("tenantId") UUID tenantId, @PathParam("jobId") UUID jobId) {
+    public JobRepresentation cancel(@PathParam("tenantId") UUID tenantId, @PathParam("jobId") UUID jobId) {
         access.enter(tenantId, Role.OPERATOR);
         JobModel job = jobProvider.getJob(jobId).orElse(null);
         if (job == null) {
@@ -101,11 +87,7 @@ public class JobResource {
         }
         jobs.cancel(jobId);
         jobProvider.refresh(job);
-        return view(job);
+        return modelToRepresentation.toRepresentation(job);
     }
 
-    static JobView view(JobModel j) {
-        return new JobView(j.getId(), "xh:job:" + j.getId(), j.getName(), j.getState(), j.getPriorityClass(), j.getCreatedAt(), j.getUnblockedAt(), j.getStartedAt(),
-                j.getFinishedAt(), j.getWorker(), j.getAttempt(), List.of(j.getReservedResources()), j.getCreatedResources(), j.getResult(), j.getError(), j.getCorrelationId());
-    }
 }

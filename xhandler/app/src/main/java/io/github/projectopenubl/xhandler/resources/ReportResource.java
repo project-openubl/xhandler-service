@@ -1,11 +1,13 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.ReportRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.ReportRepresentation;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.jobs.handlers.ReportJob;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.models.JobModel;
@@ -17,15 +19,12 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.github.projectopenubl.xhandler.models.ReportProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -44,14 +43,7 @@ public class ReportResource {
 
     private final CompanyManager companyManager;
 
-    public record ReportRequest(
-            @NotBlank @Pattern(regexp = "sales|purchases") String register,
-            @NotBlank @Pattern(regexp = "csv|xlsx|ple|sire") String format,
-            @NotBlank @Pattern(regexp = "\\d{4}(0[1-9]|1[0-2])") String period) {}
 
-    public record ReportView(
-            UUID id, String register, String format, String period, String sunatEnv, String status, String fileName, Integer rows,
-            String detail, UUID jobId, Instant createdAt, Instant doneAt) {}
 
     private final TenantAccess access;
     private final Jobs jobs;
@@ -69,11 +61,11 @@ public class ReportResource {
     }
 
     @APIResponse(responseCode = "202", description = "Reporte solicitado; lo genera un trabajo (job_id).",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ReportView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ReportRepresentation.class)))
     @Operation(operationId = "createReport")
     @POST
     @Transactional
-    public Response create(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid ReportRequest request) {
+    public Response create(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @Valid ReportRequestRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.OPERATOR);
         CompanyModel company = companyManager.getCompany(companyId);
         UUID id = Ids.newId();
@@ -89,25 +81,25 @@ public class ReportResource {
     @Operation(operationId = "listReports", summary = "Reportes de la empresa, los más recientes primero")
     @GET
     @Transactional
-    public Page<ReportView> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+    public PageRepresentation<ReportRepresentation> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @QueryParam("limit") Integer limit, @QueryParam("offset") Integer offset) {
         access.enter(tenantId, Role.VIEWER);
         companyManager.getCompany(companyId);
-        int size = Page.limit(limit);
-        int start = Page.offset(offset);
+        int size = PageRepresentation.limit(limit);
+        int start = PageRepresentation.offset(offset);
         List<UUID> ids = reportProvider.getReportIds(companyId, size, start);
-        return new Page<>(ids.stream().map(this::view).toList(), size, start);
+        return new PageRepresentation<>(ids.stream().map(this::view).toList(), size, start);
     }
 
     @Operation(operationId = "getReport")
     @GET
     @Path("/{reportId}")
     @Transactional
-    public ReportView get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+    public ReportRepresentation get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
             @PathParam("reportId") UUID reportId) {
         access.enter(tenantId, Role.VIEWER);
         companyManager.getCompany(companyId);
-        ReportView view = view(reportId);
+        ReportRepresentation view = view(reportId);
         if (view == null || !companyId.equals(companyOf(reportId))) {
             throw ApiException.notFound();
         }
@@ -149,8 +141,8 @@ public class ReportResource {
         return reportProvider.getReportCompanyId(reportId).orElse(null);
     }
 
-    private ReportView view(UUID id) {
-        return reportProvider.getReport(id).map(r -> new ReportView(r.id(), r.register(), r.format(), r.period(), r.sunatEnv(), r.status(),
+    private ReportRepresentation view(UUID id) {
+        return reportProvider.getReport(id).map(r -> new ReportRepresentation(r.id(), r.register(), r.format(), r.period(), r.sunatEnv(), r.status(),
                 r.fileName(), r.rows(), r.detail(), r.jobId(), r.createdAt(), r.doneAt())).orElse(null);
     }
 }

@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.SuppressionRepresentation;
 import io.github.projectopenubl.xhandler.models.EmailProvider;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
@@ -12,7 +13,6 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.core.Response;
-import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -27,7 +27,6 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}/email-suppressions")
 public class EmailSuppressions {
 
-    public record Suppression(String address, String reason, Instant createdAt) {}
 
     private final TenantAccess access;
     private final EmailProvider emailProvider;
@@ -42,9 +41,9 @@ public class EmailSuppressions {
     @Operation(operationId = "listEmailSuppressions")
     @GET
     @Transactional
-    public List<Suppression> list(@PathParam("tenantId") UUID tenantId) {
+    public List<SuppressionRepresentation> list(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.VIEWER);
-        return emailProvider.getEmailSuppressions().stream().map(r -> new Suppression(r.address(), r.reason(), r.createdAt())).toList();
+        return emailProvider.getEmailSuppressions().stream().map(r -> new SuppressionRepresentation(r.address(), r.reason(), r.createdAt())).toList();
     }
 
     @APIResponse(responseCode = "204", description = "Dirección quitada de la lista de supresión.")

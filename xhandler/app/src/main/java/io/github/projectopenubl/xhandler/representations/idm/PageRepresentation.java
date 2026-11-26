@@ -10,7 +10,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
  */
 @Schema(description = "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de"
         + " `limit` elementos es la última.")
-public record Page<T>(
+public record PageRepresentation<T>(
         @Schema(required = true, description = "Los elementos de la página, como mucho `limit`.") List<T> items,
         @Schema(required = true, description = "Tamaño de página aplicado (por defecto 50, máximo 200).") int limit,
         @Schema(required = true, description = "Elementos saltados antes de esta página.") int offset) {

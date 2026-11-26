@@ -1,5 +1,11 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.RevokedRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EmissionModeRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.CompanyRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.AuthorizationRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.AuthorizationRepresentation;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 
@@ -15,17 +21,12 @@ import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.github.projectopenubl.xhandler.models.PseProvider;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
-import java.time.Instant;
-import java.time.LocalDate;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -40,13 +41,12 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/pse")
 public class PseResource {
 
+    private final ModelToRepresentation modelToRepresentation;
+
     private final CompanyManager companyManager;
 
-    public record Authorization(@NotNull LocalDate authorizedAt, @NotBlank String evidenceBase64) {}
 
-    public record EmissionMode(@NotBlank @Pattern(regexp = "software|pse") String emissionMode) {}
 
-    public record AuthorizationView(UUID id, LocalDate authorizedAt, boolean evidence, String registeredBy, Instant approvedAt, Instant revokedAt) {}
 
     private final TenantAccess access;
     private final PseProvider pseProvider;
@@ -56,7 +56,8 @@ public class PseResource {
     private final PlatformKeys platformKeys;
 
     public PseResource(TenantAccess access, PseProvider pseProvider, AuditManager auditor, FileStore files, NotificationManager notifications,
-            PlatformKeys platformKeys, CompanyManager companyManager) {
+            PlatformKeys platformKeys, CompanyManager companyManager, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.companyManager = companyManager;
         this.access = access;
         this.pseProvider = pseProvider;
@@ -69,10 +70,10 @@ public class PseResource {
     @Operation(operationId = "listPseAuthorizations")
     @GET
     @Transactional
-    public List<AuthorizationView> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
+    public List<AuthorizationRepresentation> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         access.enter(tenantId, Role.VIEWER);
         companyManager.getCompany(companyId);
-        return pseProvider.getAuthorizations(companyId).stream().map(r -> new AuthorizationView(r.id(), r.authorizedAt(), r.evidence(),
+        return pseProvider.getAuthorizations(companyId).stream().map(r -> new AuthorizationRepresentation(r.id(), r.authorizedAt(), r.evidence(),
                 r.registeredBy(), r.approvedAt(), r.revokedAt())).toList();
     }
 
@@ -81,8 +82,8 @@ public class PseResource {
     @POST
     @Path("/authorization")
     @Transactional
-    public AuthorizationView authorize(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
-            @Valid Authorization request) {
+    public AuthorizationRepresentation authorize(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+            @Valid AuthorizationRequestRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         if (company.getRucVerifiedAt() == null) {
@@ -114,18 +115,16 @@ public class PseResource {
         UUID id = Ids.newId();
         pseProvider.addAuthorization(id, tenantId, companyId, request.authorizedAt(), evidence, scope.actor().auditName());
         auditor.record(scope, "pse.authorization_registered", "company", companyId, Map.of("authorized_at", request.authorizedAt().toString()));
-        return new AuthorizationView(id, request.authorizedAt(), true, scope.actor().auditName(), null, null);
+        return new AuthorizationRepresentation(id, request.authorizedAt(), true, scope.actor().auditName(), null, null);
     }
 
-    /** The company after a revocation: back in software mode. */
-    public record RevokedView(UUID companyId, String emissionMode) {}
 
     /** The tenant revoked the platform in SOL: PSE stops, the company goes back to software mode. */
     @Operation(operationId = "revokePseAuthorization")
     @DELETE
     @Path("/authorization")
     @Transactional
-    public RevokedView revoke(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
+    public RevokedRepresentation revoke(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         long pending = pseProvider.countPendingPseDocuments(companyId);
@@ -143,15 +142,15 @@ public class PseResource {
         notifications.publish(tenantId, NotificationManager.PSE_AUTHORIZATION, "Autorización de PSE revocada: " + company.getRuc(),
                 "La empresa " + company.getRazonSocial() + " dejó de autorizar a la plataforma como PSE. Sus documentos se firmarán con su propio "
                         + "certificado y se enviarán con su usuario SOL.", null);
-        return new RevokedView(companyId, company.getEmissionMode());
+        return new RevokedRepresentation(companyId, company.getEmissionMode());
     }
 
     @Operation(operationId = "setEmissionMode")
     @PUT
     @Path("/mode")
     @Transactional
-    public CompanyResource.CompanyView mode(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
-            @Valid EmissionMode request) {
+    public CompanyRepresentation mode(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+            @Valid EmissionModeRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         if ("pse".equals(request.emissionMode())) {
@@ -168,6 +167,6 @@ public class PseResource {
         }
         company.setEmissionMode(request.emissionMode());
         auditor.record(scope, "company.emission_mode_changed", "company", companyId, Map.of("mode", request.emissionMode()));
-        return CompanyResource.view(company);
+        return modelToRepresentation.toRepresentation(company);
     }
 }

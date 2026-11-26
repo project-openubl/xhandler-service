@@ -1,5 +1,13 @@
 package io.github.projectopenubl.xhandler.resources.admin;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.MigrationRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.JobStateRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EndpointUpdateRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EndpointRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.DocumentStateRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.CountRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.BulkRetryRepresentation;
 import io.github.projectopenubl.xhandler.models.MaintenanceProvider;
 import io.github.projectopenubl.xhandler.models.JobQueueProvider;
 import io.github.projectopenubl.xhandler.models.EmailProvider;
@@ -10,7 +18,6 @@ import io.github.projectopenubl.xhandler.security.PlatformAdmin;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.managers.DocumentControlManager;
 import io.github.projectopenubl.xhandler.jobs.JobStore;
 import io.github.projectopenubl.xhandler.managers.KeyRotationManager;
@@ -21,13 +28,11 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import jakarta.transaction.Transactional;
-import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +44,8 @@ import java.util.UUID;
  */
 @Path("/api/admin/v1")
 public class AdminResource {
+
+    private final ModelToRepresentation modelToRepresentation;
 
     private final MaintenanceProvider maintenanceProvider;
 
@@ -52,20 +59,12 @@ public class AdminResource {
 
     /** Platform-level admin actions (not tied to one tenant's audit log) go to this logger. */
 
-    public record DocumentState(UUID id, UUID tenantId, String serieNumero, String status, String holdReason, Instant nextAttemptAt,
-            int attempts) {}
 
-    public record BulkRetry(UUID companyId, String status, LocalDate from, LocalDate to) {}
 
-    public record Count(int count) {}
 
-    public record Endpoint(String id, String breakerState, Instant breakerUntil, int concurrencyCap, boolean paused) {}
 
-    public record EndpointUpdate(@Min(1) Integer concurrencyCap) {}
 
-    public record JobState(UUID id, String state) {}
 
-    public record Migration(String version, String description, String state, java.time.LocalDateTime installedOn) {}
 
     private final PlatformAdmin admin;
     private final TenantAccess access;
@@ -77,7 +76,8 @@ public class AdminResource {
     private final io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements;
 
     public AdminResource(PlatformAdmin admin, TenantAccess access, DocumentControlManager control, JobStore jobs, KeyRotationManager rotation,
-            AuditManager auditor, PlatformProvider platform, io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider, EmailProvider emailProvider, JobQueueProvider jobQueueProvider, MaintenanceProvider maintenanceProvider) {
+            AuditManager auditor, PlatformProvider platform, io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, CompanyProvider companyProvider, TenantProvider tenantProvider, EmailProvider emailProvider, JobQueueProvider jobQueueProvider, MaintenanceProvider maintenanceProvider, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.maintenanceProvider = maintenanceProvider;
         this.jobQueueProvider = jobQueueProvider;
         this.emailProvider = emailProvider;
@@ -98,31 +98,31 @@ public class AdminResource {
     @POST
     @Path("/documents/{id}/retry")
     @Transactional
-    public DocumentState retry(@PathParam("id") UUID id) {
-        return view(control.retry(openDocumentTenant(id), id));
+    public DocumentStateRepresentation retry(@PathParam("id") UUID id) {
+        return modelToRepresentation.toStateRepresentation(control.retry(openDocumentTenant(id), id));
     }
 
     @POST
     @Path("/documents/{id}/hold")
     @Transactional
-    public DocumentState hold(@PathParam("id") UUID id) {
-        return view(control.hold(openDocumentTenant(id), id));
+    public DocumentStateRepresentation hold(@PathParam("id") UUID id) {
+        return modelToRepresentation.toStateRepresentation(control.hold(openDocumentTenant(id), id));
     }
 
     @POST
     @Path("/documents/{id}/release")
     @Transactional
-    public DocumentState release(@PathParam("id") UUID id) {
-        return view(control.release(openDocumentTenant(id), id));
+    public DocumentStateRepresentation release(@PathParam("id") UUID id) {
+        return modelToRepresentation.toStateRepresentation(control.release(openDocumentTenant(id), id));
     }
 
     @POST
     @Path("/tenants/{tenantId}/retry")
     @Transactional
-    public Count bulkRetry(@PathParam("tenantId") UUID tenantId, BulkRetry filter) {
+    public CountRepresentation bulkRetry(@PathParam("tenantId") UUID tenantId, BulkRetryRepresentation filter) {
         TenantScope scope = openTenant(tenantId);
-        BulkRetry f = filter == null ? new BulkRetry(null, null, null, null) : filter;
-        return new Count(control.retryWhere(scope, f.companyId(), f.status(), f.from(), f.to()));
+        BulkRetryRepresentation f = filter == null ? new BulkRetryRepresentation(null, null, null, null) : filter;
+        return new CountRepresentation(control.retryWhere(scope, f.companyId(), f.status(), f.from(), f.to()));
     }
 
     // --- holds per tenant and company ---------------------------------------------
@@ -290,7 +290,7 @@ public class AdminResource {
     @GET
     @Path("/endpoints")
     @Transactional
-    public List<Endpoint> endpoints() {
+    public List<EndpointRepresentation> endpoints() {
         admin.require();
         return platform.getEndpoints().stream().map(AdminResource::endpoint).toList();
     }
@@ -298,7 +298,7 @@ public class AdminResource {
     @POST
     @Path("/endpoints/{id}/hold")
     @Transactional
-    public Endpoint holdEndpoint(@PathParam("id") String id) {
+    public EndpointRepresentation holdEndpoint(@PathParam("id") String id) {
         admin.require();
         return endpointUpdated(id, platform.setEndpointPaused(id, true));
     }
@@ -306,7 +306,7 @@ public class AdminResource {
     @POST
     @Path("/endpoints/{id}/release")
     @Transactional
-    public Endpoint releaseEndpoint(@PathParam("id") String id) {
+    public EndpointRepresentation releaseEndpoint(@PathParam("id") String id) {
         admin.require();
         return endpointUpdated(id, platform.setEndpointPaused(id, false));
     }
@@ -314,7 +314,7 @@ public class AdminResource {
     @PUT
     @Path("/endpoints/{id}")
     @Transactional
-    public Endpoint setEndpoint(@PathParam("id") String id, EndpointUpdate update) {
+    public EndpointRepresentation setEndpoint(@PathParam("id") String id, EndpointUpdateRepresentation update) {
         if (update == null || update.concurrencyCap() == null || update.concurrencyCap() < 1) {
             throw ApiException.invalid("invalid_request", "concurrency_cap debe ser al menos 1.", null);
         }
@@ -327,19 +327,19 @@ public class AdminResource {
     @POST
     @Path("/jobs/{id}/cancel")
     @Transactional
-    public JobState cancelJob(@PathParam("id") UUID id) {
+    public JobStateRepresentation cancelJob(@PathParam("id") UUID id) {
         admin.require();
         String state = platform.cancelJob(id)
                 .orElseThrow(() -> ApiException.conflict("job_not_cancelable", "El trabajo no existe o ya terminó."));
-        return new JobState(id, state);
+        return new JobStateRepresentation(id, state);
     }
 
     @POST
     @Path("/jobs/purge")
     @Transactional
-    public Count purgeJobs(@jakarta.ws.rs.QueryParam("older_than_hours") Integer hours) {
+    public CountRepresentation purgeJobs(@jakarta.ws.rs.QueryParam("older_than_hours") Integer hours) {
         admin.require();
-        return new Count(jobs.purge(java.time.Duration.ofHours(hours == null ? 24 * 7 : Math.max(1, hours))));
+        return new CountRepresentation(jobs.purge(java.time.Duration.ofHours(hours == null ? 24 * 7 : Math.max(1, hours))));
     }
 
     // --- keys and migrations (rotate-keys, migration-status) --------------------------
@@ -354,10 +354,10 @@ public class AdminResource {
     @GET
     @Path("/migrations")
     @Transactional
-    public List<Migration> migrations() {
+    public List<MigrationRepresentation> migrations() {
         admin.require();
         return platform.getMigrations().stream()
-                .map(m -> new Migration(m.version(), m.description(), m.success() ? "Success" : "Failed", m.installedOn())).toList();
+                .map(m -> new MigrationRepresentation(m.version(), m.description(), m.success() ? "Success" : "Failed", m.installedOn())).toList();
     }
 
     // --- data repair -------------------------------------------------------------------
@@ -377,11 +377,11 @@ public class AdminResource {
     @POST
     @Path("/repair/requeue-stuck")
     @Transactional
-    public Count requeueStuck() {
+    public CountRepresentation requeueStuck() {
         admin.require();
         int n = platform.requeueStuckDocuments();
         notifyReconcile();
-        return new Count(n);
+        return new CountRepresentation(n);
     }
 
     @GET
@@ -441,7 +441,7 @@ public class AdminResource {
     }
 
     /** After an endpoint update ({@code admin.require()} already called): 404 when unknown, else wakes the reconciler. */
-    private Endpoint endpointUpdated(String id, int updated) {
+    private EndpointRepresentation endpointUpdated(String id, int updated) {
         if (updated == 0) {
             throw ApiException.notFound();
         }
@@ -453,11 +453,8 @@ public class AdminResource {
         jobQueueProvider.notifyReconcile();
     }
 
-    private static Endpoint endpoint(PlatformProvider.EndpointRow r) {
-        return new Endpoint(r.id(), r.breakerState(), r.breakerUntil(), r.concurrencyCap(), r.paused());
+    private static EndpointRepresentation endpoint(PlatformProvider.EndpointRow r) {
+        return new EndpointRepresentation(r.id(), r.breakerState(), r.breakerUntil(), r.concurrencyCap(), r.paused());
     }
 
-    private static DocumentState view(DocumentModel d) {
-        return new DocumentState(d.getId(), d.getTenantId(), d.serieNumero(), d.getStatus(), d.getHoldReason(), d.getNextAttemptAt(), d.getAttempts());
-    }
 }

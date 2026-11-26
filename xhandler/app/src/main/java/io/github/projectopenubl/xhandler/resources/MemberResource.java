@@ -1,5 +1,10 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.RepresentationToModel;
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.UpdateMemberRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.MemberRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.AddMemberRepresentation;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
 import io.github.projectopenubl.xhandler.models.TenantMemberProvider;
 import io.github.projectopenubl.xhandler.models.TenantModel;
@@ -16,8 +21,6 @@ import io.github.projectopenubl.xhandler.managers.IdempotencyManager;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
@@ -45,24 +48,24 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 @Path("/api/v1/tenants/{tenantId}/members")
 public class MemberResource {
 
+    private final RepresentationToModel representationToModel;
+
+    private final ModelToRepresentation modelToRepresentation;
+
     private final TenantProvider tenantProvider;
 
     private final TenantMemberProvider tenantMemberProvider;
 
-    public record MemberView(UUID id, String kind, String subject, String role) {}
 
-    public record AddMember(
-            @NotBlank @Pattern(regexp = "user|client") String kind,
-            @NotBlank String subject,
-            @NotBlank @Pattern(regexp = "admin|operator|viewer") String role) {}
 
-    public record UpdateMember(@NotBlank @Pattern(regexp = "admin|operator|viewer") String role) {}
 
     private final TenantAccess access;
     private final AuditManager auditor;
     private final IdempotencyManager idempotency;
 
-    public MemberResource(TenantAccess access, AuditManager auditor, IdempotencyManager idempotency, TenantMemberProvider tenantMemberProvider, TenantProvider tenantProvider) {
+    public MemberResource(TenantAccess access, AuditManager auditor, IdempotencyManager idempotency, TenantMemberProvider tenantMemberProvider, TenantProvider tenantProvider, ModelToRepresentation modelToRepresentation, RepresentationToModel representationToModel) {
+        this.representationToModel = representationToModel;
+        this.modelToRepresentation = modelToRepresentation;
         this.tenantProvider = tenantProvider;
         this.tenantMemberProvider = tenantMemberProvider;
         this.access = access;
@@ -73,27 +76,25 @@ public class MemberResource {
     @Operation(operationId = "listMembers")
     @GET
     @Transactional
-    public List<MemberView> list(@PathParam("tenantId") UUID tenantId) {
+    public List<MemberRepresentation> list(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.ADMIN);
         List<TenantMemberModel> members = tenantMemberProvider.getTenantMembers();
-        return members.stream().map(MemberResource::view).toList();
+        return members.stream().map(modelToRepresentation::toRepresentation).toList();
     }
 
     @APIResponse(responseCode = "201", description = "Miembro agregado (también la respuesta repetida de una Idempotency-Key ya usada).",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = MemberView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = MemberRepresentation.class)))
     @APIResponse(responseCode = "409", description = "El miembro ya pertenece a la cuenta, o Idempotency-Key en proceso.",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @Operation(operationId = "addMember")
     @POST
     public Response add(@PathParam("tenantId") UUID tenantId, @HeaderParam("Idempotency-Key") String idempotencyKey,
-            @Valid AddMember request) {
+            @Valid AddMemberRepresentation request) {
         return idempotency.create(tenantId, Role.ADMIN, idempotencyKey, idempotency.hash("member", tenantId, request), () -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
             TenantMemberModel member = tenantMemberProvider.newTenantMember(Ids.newId());
             member.setTenantId(tenantId);
-            member.setKind(request.kind());
-            member.setSubject(request.subject().strip());
-            member.setRole(request.role());
+            representationToModel.updateTenantMember(request, member);
             try {
                 tenantMemberProvider.persist(member);
                 tenantMemberProvider.flush();
@@ -105,19 +106,19 @@ public class MemberResource {
             }
             auditor.record(scope, "member.added", "tenant_member", member.getId(),
                     Map.of("kind", member.getKind(), "subject", member.getSubject(), "role", member.getRole()));
-            return view(member);
+            return modelToRepresentation.toRepresentation(member);
         }, view -> view);
     }
 
     @APIResponse(responseCode = "200", description = "Miembro con su nuevo rol.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = MemberView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = MemberRepresentation.class)))
     @APIResponse(responseCode = "409", description = "Dejaría a la cuenta sin propietario.",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @Operation(operationId = "updateMember", summary = "Cambia el rol de un miembro")
     @PUT
     @Path("/{memberId}")
     @Transactional
-    public MemberView update(@PathParam("tenantId") UUID tenantId, @PathParam("memberId") UUID memberId, @Valid UpdateMember request) {
+    public MemberRepresentation update(@PathParam("tenantId") UUID tenantId, @PathParam("memberId") UUID memberId, @Valid UpdateMemberRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         TenantMemberModel member = lockedMember(scope, memberId);
         String previous = member.getRole();
@@ -127,7 +128,7 @@ public class MemberResource {
             auditor.record(scope, "member.role_changed", "tenant_member", member.getId(),
                     Map.of("kind", member.getKind(), "subject", member.getSubject(), "from", previous, "to", member.getRole()));
         }
-        return view(member);
+        return modelToRepresentation.toRepresentation(member);
     }
 
     @APIResponse(responseCode = "204", description = "Miembro quitado de la cuenta.")
@@ -173,7 +174,4 @@ public class MemberResource {
         }
     }
 
-    private static MemberView view(TenantMemberModel m) {
-        return new MemberView(m.getId(), m.getKind(), m.getSubject(), m.getRole());
-    }
 }

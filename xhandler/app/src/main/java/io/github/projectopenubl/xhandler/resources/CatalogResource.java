@@ -1,13 +1,13 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.EntryRepresentation;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.utils.Constraints;
 import io.github.projectopenubl.xhandler.utils.Ids;
-import io.github.projectopenubl.xhandler.representations.idm.Page;
+import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
 import io.github.projectopenubl.xhandler.security.Role;
 import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.models.CatalogProvider;
@@ -22,7 +22,6 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
 import java.io.IOException;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -42,7 +41,6 @@ public class CatalogResource {
 
     private final CompanyManager companyManager;
 
-    public record Entry(UUID id, String kind, String key, JsonNode data, Instant createdAt, Instant updatedAt) {}
 
     /** Required fields and the fields that make the key, per kind. */
     static final Map<String, List<String>> REQUIRED = Map.of(
@@ -75,33 +73,33 @@ public class CatalogResource {
     @Operation(operationId = "listCatalogEntries")
     @GET
     @Transactional
-    public Page<Entry> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("kind") String kind,
+    public PageRepresentation<EntryRepresentation> list(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("kind") String kind,
             @QueryParam("q") String q, @QueryParam("limit") Integer limit, @QueryParam("offset") Integer offset) {
         var scope = access.enter(tenantId, Role.VIEWER);
         check(kind);
         companyManager.getCompany(companyId);
         auditPersonalData(scope, kind, companyId, "list");
-        int size = Page.limit(limit);
-        int from = Page.offset(offset);
+        int size = PageRepresentation.limit(limit);
+        int from = PageRepresentation.offset(offset);
         List<CatalogProvider.CatalogRow> rows = catalogProvider.searchEntries(companyId, kind, q, size, from);
-        return new Page<>(rows.stream().map(this::entry).toList(), size, from);
+        return new PageRepresentation<>(rows.stream().map(this::entry).toList(), size, from);
     }
 
     @Operation(operationId = "getCatalogEntry")
     @GET
     @Path("/{id}")
     @Transactional
-    public Entry get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("kind") String kind,
+    public EntryRepresentation get(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("kind") String kind,
             @PathParam("id") UUID id) {
         var scope = access.enter(tenantId, Role.VIEWER);
         check(kind);
-        Entry entry = find(companyId, kind, id);
+        EntryRepresentation entry = find(companyId, kind, id);
         auditPersonalData(scope, kind, companyId, id.toString());
         return entry;
     }
 
     @APIResponse(responseCode = "201", description = "Registro creado o actualizado.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Entry.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = EntryRepresentation.class)))
     @Operation(operationId = "createCatalogEntry")
     @POST
     @Transactional
@@ -117,7 +115,7 @@ public class CatalogResource {
     @PUT
     @Path("/{id}")
     @Transactional
-    public Entry update(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("kind") String kind,
+    public EntryRepresentation update(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @PathParam("kind") String kind,
             @PathParam("id") UUID id, ObjectNode data) {
         access.enter(tenantId, Role.OPERATOR);
         check(kind);
@@ -141,7 +139,7 @@ public class CatalogResource {
 
     /** Creates or updates an entry, with the tenant open. Used by the API and the RUC/DNI lookup cache. */
     @Transactional(Transactional.TxType.MANDATORY)
-    public Entry upsert(UUID tenantId, UUID companyId, String kind, ObjectNode data, UUID id) {
+    public EntryRepresentation upsert(UUID tenantId, UUID companyId, String kind, ObjectNode data, UUID id) {
         if (data == null) {
             throw ApiException.invalid("invalid_request", "Envíe los datos del registro.", null);
         }
@@ -173,17 +171,17 @@ public class CatalogResource {
 
     /** An entry by its natural key, if present (with the tenant open). */
     @Transactional(Transactional.TxType.MANDATORY)
-    public java.util.Optional<Entry> byKey(UUID companyId, String kind, String key) {
+    public java.util.Optional<EntryRepresentation> byKey(UUID companyId, String kind, String key) {
         return catalogProvider.getEntryByKey(companyId, kind, key).map(this::entry);
     }
 
-    private Entry find(UUID companyId, String kind, UUID id) {
+    private EntryRepresentation find(UUID companyId, String kind, UUID id) {
         return catalogProvider.getEntry(companyId, kind, id).map(this::entry).orElseThrow(ApiException::notFound);
     }
 
-    private Entry entry(CatalogProvider.CatalogRow r) {
+    private EntryRepresentation entry(CatalogProvider.CatalogRow r) {
         try {
-            return new Entry(r.id(), r.kind(), r.key(), json.readTree(r.data()), r.createdAt(), r.updatedAt());
+            return new EntryRepresentation(r.id(), r.kind(), r.key(), json.readTree(r.data()), r.createdAt(), r.updatedAt());
         } catch (IOException e) {
             throw new java.io.UncheckedIOException(e);
         }

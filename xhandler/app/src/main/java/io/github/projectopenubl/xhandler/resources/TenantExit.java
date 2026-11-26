@@ -1,5 +1,9 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.representations.idm.ExportRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.ExportPartRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.ExitRequestRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.ExitRepresentation;
 import io.github.projectopenubl.xhandler.jobs.handlers.TenantExportJob;
 import io.github.projectopenubl.xhandler.models.TenantExitProvider;
 import io.github.projectopenubl.xhandler.models.TenantProvider;
@@ -16,7 +20,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -46,20 +49,8 @@ public class TenantExit {
 
     private final TenantProvider tenantProvider;
 
-    public record ExitRequest(@NotBlank String confirmName) {}
 
-    /** An export: {@code parts} lists the ZIPs to download (the index first), once {@code done}. */
-    public record ExportView(UUID id, String status, List<ExportPart> parts, Integer documents, String detail, String createdAt,
-            String doneAt) {}
 
-    /**
-     * A part to download by its position in {@code parts}. Its storage key stays internal: it is
-     * read only to serve the download.
-     */
-    public record ExportPart(
-            @Schema(required = true, description = "Nombre del ZIP.") String name,
-            @Schema(required = true, description = "Tamaño en bytes.") long size,
-            @Schema(description = "Comprobantes (o recepciones) en la parte; en el índice, todos los comprobantes.") Integer documents) {}
 
     static final Duration DELETE_AFTER = Duration.ofDays(730);
 
@@ -79,7 +70,7 @@ public class TenantExit {
     }
 
     @APIResponse(responseCode = "202", description = "Exportación solicitada; la genera un trabajo.",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ExportView.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ExportRepresentation.class)))
     @Operation(operationId = "createExport")
     @POST
     @Path("/exports")
@@ -101,7 +92,7 @@ public class TenantExit {
     @GET
     @Path("/exports")
     @Transactional
-    public List<ExportView> exports(@PathParam("tenantId") UUID tenantId) {
+    public List<ExportRepresentation> exports(@PathParam("tenantId") UUID tenantId) {
         access.enter(tenantId, Role.ADMIN);
         // An export whose job died (a crashed worker) is failed, not pending forever
         exits.failInterruptedExports();
@@ -128,8 +119,6 @@ public class TenantExit {
                 .header("Content-Disposition", "attachment; filename=\"" + part.get("name") + "\"").build();
     }
 
-    /** The tenant after its exit: deleted after {@code deleteAfter}, never when it has an archive plan. */
-    public record ExitView(String status, String deleteAfter) {}
 
     /**
      * Leaves the platform: the organization's name typed, no document waiting for SUNAT, and an
@@ -139,7 +128,7 @@ public class TenantExit {
     @POST
     @Path("/exit")
     @Transactional
-    public ExitView exit(@PathParam("tenantId") UUID tenantId, @Valid ExitRequest request) {
+    public ExitRepresentation exit(@PathParam("tenantId") UUID tenantId, @Valid ExitRequestRepresentation request) {
         TenantScope scope = access.enter(tenantId, Role.OWNER);
         TenantModel tenant = tenantProvider.getTenant(tenantId).orElse(null);
         if (!"active".equals(tenant.getStatus())) {
@@ -160,16 +149,16 @@ public class TenantExit {
         Instant deleteAfter = tenant.isArchivePlan() ? null : Instant.now().plus(DELETE_AFTER);
         exits.markExited(tenantId, deleteAfter);
         auditor.record(scope, "tenant.exit", "tenant", tenantId, Map.of("delete_after", String.valueOf(deleteAfter)));
-        return new ExitView("exited", deleteAfter == null ? null : deleteAfter.toString());
+        return new ExitRepresentation("exited", deleteAfter == null ? null : deleteAfter.toString());
     }
 
-    ExportView view(UUID id) {
+    ExportRepresentation view(UUID id) {
         TenantExitProvider.ExportRow r = exits.getExport(id).orElseThrow(ApiException::notFound);
-        List<ExportPart> parts = parse(r.parts()).stream()
-                .map(p -> new ExportPart(String.valueOf(p.get("name")), ((Number) p.get("size")).longValue(),
+        List<ExportPartRepresentation> parts = parse(r.parts()).stream()
+                .map(p -> new ExportPartRepresentation(String.valueOf(p.get("name")), ((Number) p.get("size")).longValue(),
                         p.get("documents") == null ? null : ((Number) p.get("documents")).intValue()))
                 .toList();
-        return new ExportView(r.id(), r.status(), parts, r.documents(), r.detail(), String.valueOf(r.createdAt()),
+        return new ExportRepresentation(r.id(), r.status(), parts, r.documents(), r.detail(), String.valueOf(r.createdAt()),
                 r.doneAt() == null ? null : String.valueOf(r.doneAt()));
     }
 

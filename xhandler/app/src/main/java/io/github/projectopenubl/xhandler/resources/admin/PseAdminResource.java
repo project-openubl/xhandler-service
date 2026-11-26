@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.resources.admin;
 
+import io.github.projectopenubl.xhandler.representations.idm.PseRejectedRateRepresentation;
 import io.github.projectopenubl.xhandler.jobs.handlers.PseReportJob;
 import io.github.projectopenubl.xhandler.security.PlatformAdmin;
 
@@ -34,7 +35,6 @@ import org.jboss.resteasy.reactive.multipart.FileUpload;
 @Path("/api/admin/v1/pse")
 public class PseAdminResource {
 
-    public record Rate(String period, long accepted, long rejected, BigDecimal rate, BigDecimal limit, boolean breached) {}
 
     private final PlatformAdmin admin;
     private final PlatformKeys keys;
@@ -159,12 +159,12 @@ public class PseAdminResource {
     @GET
     @Path("/rejected-rate")
     @Transactional
-    public Rate rejectedRate(@QueryParam("period") String period) {
+    public PseRejectedRateRepresentation rejectedRate(@QueryParam("period") String period) {
         admin.require();
         return rate(pse, period == null ? PseReportJob.periodOf(io.github.projectopenubl.xhandler.utils.Deadlines.todayInLima()) : period, registeredOn);
     }
 
-    public static Rate rate(PsePlatformProvider pse, String period, Optional<LocalDate> registeredOn) {
+    public static PseRejectedRateRepresentation rate(PsePlatformProvider pse, String period, Optional<LocalDate> registeredOn) {
         if (!period.matches("\\d{4}-H[12]")) {
             throw ApiException.invalid("invalid_request", "El periodo debe ser AAAA-H1 o AAAA-H2.", null);
         }
@@ -181,7 +181,7 @@ public class PseAdminResource {
         // date configured, the stricter limit applies (fail closed)
         boolean firstYear = registeredOn.map(d -> from.isBefore(d.plusYears(1))).orElse(false);
         BigDecimal limit = firstYear ? new BigDecimal("0.10") : new BigDecimal("0.05");
-        return new Rate(period, accepted, rejected, rate, limit, rate.compareTo(limit) > 0);
+        return new PseRejectedRateRepresentation(period, accepted, rejected, rate, limit, rate.compareTo(limit) > 0);
     }
 
 }

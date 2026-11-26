@@ -2,7 +2,7 @@ package io.github.projectopenubl.xhandler.jobs.handlers;
 
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
-import io.github.projectopenubl.xhandler.managers.ExchangeRateManager.Rate;
+import io.github.projectopenubl.xhandler.representations.idm.ExchangeRateRepresentation;
 import io.github.projectopenubl.xhandler.models.ExchangeRateProvider;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -49,18 +49,18 @@ public class ExchangeRatesJob implements JobHandler {
         if (response.statusCode() != 200) {
             throw new IOException("exchange rate source answered HTTP " + response.statusCode());
         }
-        Rate rate = parse(response.body().strip(), url);
+        ExchangeRateRepresentation rate = parse(response.body().strip(), url);
         QuarkusTransaction.requiringNew().run(() -> rates.putRate(rate.day(), rate.compra(), rate.venta(), rate.source()));
         return Map.of("day", rate.day().toString(), "compra", rate.compra().toPlainString(), "venta", rate.venta().toPlainString());
     }
 
     /** {@code 16/11/2026|3.380|3.390|} */
-    static Rate parse(String line, String source) {
+    static ExchangeRateRepresentation parse(String line, String source) {
         String[] parts = line.split("\\|");
         if (parts.length < 3) {
             throw new IllegalArgumentException("unexpected exchange rate line: " + line);
         }
-        Rate rate = new Rate(LocalDate.parse(parts[0].strip(), DMY), new BigDecimal(parts[1].strip()), new BigDecimal(parts[2].strip()), source);
+        ExchangeRateRepresentation rate = new ExchangeRateRepresentation(LocalDate.parse(parts[0].strip(), DMY), new BigDecimal(parts[1].strip()), new BigDecimal(parts[2].strip()), source);
         BigDecimal low = BigDecimal.ONE;
         BigDecimal high = BigDecimal.TEN;
         if (rate.day().isAfter(LocalDate.now().plusDays(1)) || rate.compra().compareTo(low) < 0 || rate.venta().compareTo(low) < 0

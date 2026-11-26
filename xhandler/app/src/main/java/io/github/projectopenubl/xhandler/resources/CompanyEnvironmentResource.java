@@ -1,5 +1,9 @@
 package io.github.projectopenubl.xhandler.resources;
 
+import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.SettingsRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.EnvironmentChangeRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.CompanyRepresentation;
 import io.github.projectopenubl.xhandler.managers.LogoManager;
 import io.github.projectopenubl.xhandler.models.CredentialProvider;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
@@ -26,10 +30,6 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -54,6 +54,8 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}")
 public class CompanyEnvironmentResource {
 
+    private final ModelToRepresentation modelToRepresentation;
+
     private final CredentialProvider credentialProvider;
 
     private final CompanyManager companyManager;
@@ -64,20 +66,7 @@ public class CompanyEnvironmentResource {
 
     private final CompanyProvider companyProvider;
 
-    public record Settings(
-            @Size(max = 300) String nombreComercial,
-            @Email @Size(max = 300) String email,
-            Boolean deliveredOnEmitDefault,
-            @Size(max = 500) String direccion,
-            @Pattern(regexp = "a4|ticket80|ticket58") String pdfFormat,
-            Map<String, Object> pdfOptions,
-            Boolean emailOnAccept,
-            @Size(max = 200) @Pattern(regexp = "[^\\r\\n]*", message = "debe ser una sola línea") String emailSubject,
-            @Size(max = 5000) String emailBody,
-            @org.eclipse.microprofile.openapi.annotations.media.Schema(description = "Enlace https al Libro de Reclamaciones virtual de la empresa, que el portal del comprador muestra; vacío lo quita.")
-            @Size(max = 500) String libroReclamacionesUrl) {}
 
-    public record EnvironmentChange(@NotBlank @Pattern(regexp = "fake|beta|production") String sunatEnv) {}
 
     static final int MAX_FAILURES_PER_HOUR = 5;
 
@@ -90,7 +79,8 @@ public class CompanyEnvironmentResource {
     private final io.github.projectopenubl.xhandler.files.FileStore files;
 
     public CompanyEnvironmentResource(TenantAccess access, AuditManager auditor, CredentialManager credentials, Engine engine,
-            io.github.projectopenubl.xhandler.files.FileStore files, CompanyProvider companyProvider, SigningKeyProvider signingKeyProvider, SeriesProvider seriesProvider, CompanyManager companyManager, CredentialProvider credentialProvider) {
+            io.github.projectopenubl.xhandler.files.FileStore files, CompanyProvider companyProvider, SigningKeyProvider signingKeyProvider, SeriesProvider seriesProvider, CompanyManager companyManager, CredentialProvider credentialProvider, ModelToRepresentation modelToRepresentation) {
+        this.modelToRepresentation = modelToRepresentation;
         this.credentialProvider = credentialProvider;
         this.companyManager = companyManager;
         this.seriesProvider = seriesProvider;
@@ -107,8 +97,8 @@ public class CompanyEnvironmentResource {
     @PUT
     @Path("/settings")
     @Transactional
-    public CompanyResource.CompanyView settings(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
-            @Valid Settings settings) {
+    public CompanyRepresentation settings(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+            @Valid SettingsRepresentation settings) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         if (settings.nombreComercial() != null) {
@@ -144,7 +134,7 @@ public class CompanyEnvironmentResource {
             company.setLibroReclamacionesUrl(libroReclamacionesUrl(settings.libroReclamacionesUrl()));
         }
         auditor.record(scope, "company.updated", "company", companyId);
-        return CompanyResource.view(company);
+        return modelToRepresentation.toRepresentation(company);
     }
 
     /** The company logo for PDFs and emails: PNG or JPEG, up to 200 KB. */
@@ -153,12 +143,12 @@ public class CompanyEnvironmentResource {
     @Path("/logo")
     @jakarta.ws.rs.Consumes({"image/png", "image/jpeg"})
     @Transactional
-    public CompanyResource.CompanyView logo(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, byte[] image) {
+    public CompanyRepresentation logo(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, byte[] image) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyManager.getCompanyForUpdate(companyId);
         company.setLogoRef(files.put(company.getTenantId(), LogoManager.normalize(image)).key());
         auditor.record(scope, "company.logo_changed", "company", companyId);
-        return CompanyResource.view(company);
+        return modelToRepresentation.toRepresentation(company);
     }
 
 
@@ -167,8 +157,8 @@ public class CompanyEnvironmentResource {
     @POST
     @Path("/environment")
     @Transactional
-    public CompanyResource.CompanyView environment(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
-            @Valid EnvironmentChange change) {
+    public CompanyRepresentation environment(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
+            @Valid EnvironmentChangeRepresentation change) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
         CompanyModel company = companyProvider.getCompanyForUpdate(companyId).orElse(null);
         if (company == null || company.getDeletedAt() != null) {
@@ -176,7 +166,7 @@ public class CompanyEnvironmentResource {
         }
         String target = change.sunatEnv();
         if (target.equals(company.getSunatEnv())) {
-            return CompanyResource.view(company);
+            return modelToRepresentation.toRepresentation(company);
         }
         if ("production".equals(target)) {
             if (company.getRucVerifiedAt() == null) {
@@ -214,7 +204,7 @@ public class CompanyEnvironmentResource {
             throw e;
         }
         auditor.record(scope, "company.environment_changed", "company", companyId, Map.of("from", previous, "to", target));
-        return CompanyResource.view(company);
+        return modelToRepresentation.toRepresentation(company);
     }
 
     /**
@@ -225,7 +215,7 @@ public class CompanyEnvironmentResource {
     @Operation(operationId = "verifyCompany")
     @POST
     @Path("/verify")
-    public CompanyResource.CompanyView verify(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
+    public CompanyRepresentation verify(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         record Check(String ruc, EngineModels.Credentials credentials) {}
         Check check = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
@@ -272,7 +262,7 @@ public class CompanyEnvironmentResource {
                 }
                 auditor.record(scope, "company.ruc_verified", "company", companyId, Map.of("method", "sol"));
             }
-            return CompanyResource.view(company);
+            return modelToRepresentation.toRepresentation(company);
         });
     }
 

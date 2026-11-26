@@ -1,5 +1,6 @@
 package io.github.projectopenubl.xhandler.jobs.handlers;
 
+import io.github.projectopenubl.xhandler.representations.idm.PseRejectedRateRepresentation;
 import io.github.projectopenubl.xhandler.resources.admin.AdminLog;
 import io.github.projectopenubl.xhandler.jobs.JobContext;
 import io.github.projectopenubl.xhandler.jobs.JobHandler;
@@ -51,7 +52,7 @@ public class PseReportJob implements JobHandler {
         String previous = periodOf(today.minusMonths(6));
         for (String period : List.of(previous, now)) {
             QuarkusTransaction.requiringNew().run(() -> {
-                PseAdminResource.Rate rate = PseAdminResource.rate(pse, period, registeredOn);
+                PseRejectedRateRepresentation rate = PseAdminResource.rate(pse, period, registeredOn);
                 pse.saveReport(period, rate.accepted(), rate.rejected(), rate.rate());
                 if (rate.breached()) {
                     AdminLog.PLATFORM_AUDIT.errorf("PSE rejected-CDR rate %s in %s is above the %s limit", rate.rate(), period,
