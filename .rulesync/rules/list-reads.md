@@ -55,7 +55,11 @@ comment at the call):
 - xhandler `listExports` (the service answers the latest 20);
 - xhandler `listMembers` (one row per member of the tenant);
 - xhandler `listSenderDomains` (a handful per tenant);
-- xhandler `listWebhooks` (a tenant has a few subscriptions).
+- xhandler `listWebhooks` (a tenant has a few subscriptions);
+- admin `adminListTenantCompanies` (one tenant's companies, read on demand);
+- admin `adminListPlans` (the service's four plans);
+- admin `adminListPartners` (the platform has a few partners);
+- admin `adminListPartnerMembers` (one row per member of the partner).
 
 ## Checklist
 

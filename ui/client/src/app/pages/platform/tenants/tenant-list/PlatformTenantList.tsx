@@ -102,7 +102,17 @@ const PlatformTenantListContent: React.FC = () => {
         ),
       },
       {
-        cell: tenant.partner_name ?? "-",
+        cell:
+          tenant.partner_id && tenant.partner_name ? (
+            <Link
+              to="/plataforma/socios/$partnerId"
+              params={{ partnerId: tenant.partner_id }}
+            >
+              {tenant.partner_name}
+            </Link>
+          ) : (
+            "-"
+          ),
       },
       { cell: String(tenant.companies ?? 0) },
       {

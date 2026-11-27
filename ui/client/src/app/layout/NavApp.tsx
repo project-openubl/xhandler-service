@@ -117,6 +117,7 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
   // Platform console (ADR 0012): only for platform admins, while xhandler answers.
   const platformLinks = [
     { to: "/plataforma/organizaciones", label: "Organizaciones" },
+    { to: "/plataforma/socios", label: "Socios" },
   ] as const;
 
   const group = useLocation({

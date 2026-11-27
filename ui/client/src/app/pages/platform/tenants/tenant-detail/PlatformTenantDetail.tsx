@@ -1,6 +1,7 @@
 import type React from "react";
 import { useState } from "react";
 
+import { Link } from "@tanstack/react-router";
 import dayjs from "dayjs";
 
 import {
@@ -165,7 +166,20 @@ const PlatformTenantDetailContent: React.FC<IPlatformTenantDetailProps> = ({
       value: `${tenant.plan ?? "-"} (${PLAN_SOURCE_LABELS[tenant.plan_source ?? ""] ?? tenant.plan_source ?? "-"})`,
     },
     { label: "Estado", value: tenantStatusLabel(tenant.status) },
-    { label: "Socio", value: tenant.partner_name ?? "Ninguno" },
+    {
+      label: "Socio",
+      value:
+        tenant.partner_id && tenant.partner_name ? (
+          <Link
+            to="/plataforma/socios/$partnerId"
+            params={{ partnerId: tenant.partner_id }}
+          >
+            {tenant.partner_name}
+          </Link>
+        ) : (
+          "Ninguno"
+        ),
+    },
     {
       label: "Empresas",
       value: (tenant.companies ?? 0).toLocaleString("es-PE"),
