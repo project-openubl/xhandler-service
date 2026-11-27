@@ -90,7 +90,7 @@ Code in `xhandler/src` lives under `io.github.projectopenubl.xhandler`, layered 
   tenants; the app runs as `xhandler_app`, never as owner or superuser. Cross-tenant lookups
   are `SECURITY DEFINER` functions in migrations. Foreign and unknown tenants are both 404.
 - **Secrets**: private keys only through `KeyVault`, secrets only through
-  `CredentialManager`/`SecretBox`; never log or return them; reads are audited.
+  `CredentialManager`/`SecretBox`; never log or return them; reads are audited (`AuditManager`: log lines on `xhandler.audit`, no table).
 - **Engine**: stateless. Errors are `{ kind, message }` (`invalid_document | invalid_certificate
   | wrong_password | invalid_request` → 422, `other` → 500). Send outcome `unknown` means SUNAT
   may have the document (ask before resending); `not_delivered` means it never arrived. The

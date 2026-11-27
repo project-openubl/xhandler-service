@@ -109,7 +109,7 @@ export const DocumentToolsCard: React.FC = () => {
                     <HelperTextItem variant={isInvalid ? "error" : "default"}>
                       {isInvalid
                         ? "El identificador no es válido"
-                        : "Queda registrado en la auditoría de su organización."}
+                        : "Queda registrado en la auditoría de la plataforma."}
                     </HelperTextItem>
                   </HelperText>
                 </FormHelperText>

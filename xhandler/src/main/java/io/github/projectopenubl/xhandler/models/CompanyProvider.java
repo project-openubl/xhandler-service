@@ -41,4 +41,7 @@ public interface CompanyProvider {
     /** Failed RUC verifications of a RUC in the last hour, across tenants. */
     int countRecentFailedVerifications(String ruc);
 
+    /** Records a failed RUC verification (SUNAT refused the SOL user), across tenants. */
+    void recordFailedVerification(String ruc);
+
 }

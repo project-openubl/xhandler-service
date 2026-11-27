@@ -63,9 +63,6 @@ class AdminTest {
                 .body("next_attempt_at", notNullValue());
         await().atMost(Duration.ofSeconds(20)).until(() -> "accepted".equals(docs.get(tenant, doc.id()).getStatus()));
 
-        // The tenant sees what the platform did
-        as("alice").get("/api/v1/tenants/" + tenant + "/audit?limit=200").then().statusCode(200)
-                .body("items.action", hasItem("document.retried"));
         // A definitive document can't be retried
         as("olga").post("/api/admin/v1/documents/" + doc.id() + "/retry").then().statusCode(409);
         as("olga").post("/api/admin/v1/documents/" + UUID.randomUUID() + "/retry").then().statusCode(404);

@@ -4,7 +4,7 @@ The tenant is the controller; the platform is the processor (DESIGN.md §16). Le
 DS 016-2024-JUS: the controller notifies the ANPD within 48 hours; we tell tenants at once.
 
 1. **Contain** (minutes): revoke the leaked credentials or tokens, block the access path, keep
-   the evidence (logs, `audit_log`, platform audit log). Don't delete anything.
+   the evidence (logs, including the `xhandler.audit` and platform audit lines). Don't delete anything.
 2. **Assess** (hours): which tenants, which data (buyers' names and document numbers, documents,
    SOL credentials?), how many people, since when. Secrets are envelope-encrypted and keys live in
    the HSM: a database dump alone doesn't expose them.

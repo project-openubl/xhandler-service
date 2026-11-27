@@ -5,7 +5,6 @@ import static io.github.projectopenubl.xhandler.Api.createCompany;
 import static io.github.projectopenubl.xhandler.Api.randomRuc;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.notNullValue;
@@ -60,13 +59,11 @@ class PlatformConsoleTest {
                 .body("audit_hold", equalTo(false));
         as("olga").get("/api/admin/v1/tenants/" + UUID.randomUUID()).then().statusCode(404);
 
-        // Its companies, to act on them; the tenant sees the platform looked
+        // Its companies, to act on them
         as("olga").get("/api/admin/v1/tenants/" + tenant + "/companies").then().statusCode(200)
                 .body("id", equalTo(java.util.List.of(company.toString())))
                 .body("[0].ruc", equalTo(ruc))
                 .body("[0].sending_paused", equalTo(false));
-        as("alice").get("/api/v1/tenants/" + tenant + "/audit?limit=200").then().statusCode(200)
-                .body("items.action", hasItem("tenant.companies_listed"));
     }
 
     @Test

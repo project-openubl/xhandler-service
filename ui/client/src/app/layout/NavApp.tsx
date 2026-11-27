@@ -104,7 +104,6 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
     // Documents and data (U1b)
     { to: "/organizaciones/$tenantId/correo", label: "Correo" },
     { to: "/organizaciones/$tenantId/exportaciones", label: "Exportaciones" },
-    { to: "/organizaciones/$tenantId/auditoria", label: "Auditoría" },
   ] as const;
 
   // Platform console (ADR 0012): only for platform admins, while xhandler answers.
