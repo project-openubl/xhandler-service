@@ -1,0 +1,1 @@
+export { DataSubjectRequestFormModal } from "./DataSubjectRequestFormModal";

@@ -23,6 +23,7 @@ const GROUP_OF_SEGMENT: Record<string, string> = {
   socios: "comprobantes",
   estado: "comprobantes",
   soporte: "comprobantes",
+  plataforma: "plataforma",
   padron: "padron",
   perfil: "cuenta",
 };
@@ -111,6 +112,11 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
     },
     { to: "/organizaciones/$tenantId/auditoria", label: "Auditoría" },
     { to: "/organizaciones/$tenantId/soporte", label: "Soporte" },
+  ] as const;
+
+  // Platform console (ADR 0012): only for platform admins, while xhandler answers.
+  const platformLinks = [
+    { to: "/plataforma/organizaciones", label: "Organizaciones" },
   ] as const;
 
   const group = useLocation({
@@ -237,6 +243,16 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
             <UnavailableItem isLoading={xhandler.isLoading} />
           )}
         </NavExpandable>
+
+        {xhandler.isAvailable && platformRoles.has("platform-admin") ? (
+          <NavExpandable title="Plataforma" {...groupProps("plataforma")}>
+            {platformLinks.map(({ to, label }) => (
+              <NavItem key={to} isActive={!!matchRoute({ to, fuzzy: true })}>
+                <Link to={to}>{label}</Link>
+              </NavItem>
+            ))}
+          </NavExpandable>
+        ) : null}
 
         {searchpe.isEnabled ? (
           <NavExpandable title="Padrón RUC" {...groupProps("padron")}>

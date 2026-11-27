@@ -12,9 +12,9 @@ live in.
 ## Files
 
 One module per domain and backend: `queries/xhandler/<family>.ts` (`tenants`, `companies`,
-`jobs`, `status`, …) and `queries/searchpe/<family>.ts` (`contribuyentes`, `versions`,
-`whoami`, `health`). Shared types and helpers live in `queries/utils/`; the `QueryClient` in
-`queries/config.ts`. A module never imports the other backend's modules, except to invalidate
+`jobs`, `status`, …), `queries/xhandler-admin/<family>.ts` (the admin API: `tenants`, `partners`,
+…) and `queries/searchpe/<family>.ts` (`contribuyentes`, `versions`, `whoami`, `health`).
+Shared types and helpers live in `queries/utils/`; the `QueryClient` in `queries/config.ts`. A module never imports the other backend's modules, except to invalidate
 what its write changes.
 
 ## Calls go through the generated client
@@ -118,7 +118,8 @@ on a non-recoverable condition.
 
 Pass/fail rubric for `/eval`. Check changed `queries/` files.
 
-- [ ] The module sits in `queries/xhandler/` or `queries/searchpe/` by backend, one per domain.
+- [ ] The module sits in `queries/xhandler/`, `queries/xhandler-admin/` (the admin API) or
+      `queries/searchpe/` by backend, one per domain.
 - [ ] Documented endpoints are called through the generated SDK with `throwOnError: true`;
       public pages pass `xhandlerPublicClient`; any raw call has a comment saying why.
 - [ ] Every `*QueryOptions` factory and `use*Query` / `use*Queries` hook takes **exactly one

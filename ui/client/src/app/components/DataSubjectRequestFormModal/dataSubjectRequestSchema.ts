@@ -3,7 +3,7 @@ import { type InferType, object, string } from "yup";
 import { isDataSubjectRequestKind } from "@app/queries/xhandler/data-subject-requests";
 
 /** `DataSubjectRequests.NewRequest`'s constraints, with Spanish messages. */
-export const createDataSubjectRequestSchema = object({
+export const dataSubjectRequestSchema = object({
   subjectDocType: string()
     .required("Elige el tipo de documento.")
     .matches(/^[0-9A-Z]{1,2}$/, "Elige el tipo de documento."),
@@ -34,6 +34,6 @@ export const createDataSubjectRequestSchema = object({
     .max(2000, "El detalle admite hasta 2000 caracteres."),
 });
 
-export type ICreateDataSubjectRequestValues = InferType<
-  typeof createDataSubjectRequestSchema
+export type IDataSubjectRequestValues = InferType<
+  typeof dataSubjectRequestSchema
 >;

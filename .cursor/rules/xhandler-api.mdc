@@ -1,6 +1,6 @@
 ---
 description: 'Apply when code calls or interprets the xhandler-service API: read the operation in client/openapi/xhandler.json, use snake_case JSON, tenant-scoped paths with the hook-injected tenant, its { kind, message, detail } errors, Pulp-like jobs, role gates that mirror Role#allows, and only public endpoints from public pages.'
-globs: ui/client/src/app/queries/xhandler/**,ui/client/src/app/hooks/**,ui/client/src/app/pages/xhandler/**,ui/client/src/app/pages/public/**,ui/client/config/**
+globs: ui/client/src/app/queries/xhandler/**,ui/client/src/app/queries/xhandler-admin/**,ui/client/src/app/pages/platform/**,ui/client/src/app/hooks/**,ui/client/src/app/pages/xhandler/**,ui/client/src/app/pages/public/**,ui/client/config/**
 ---
 
 # xhandler-service API usage
@@ -48,6 +48,17 @@ design is `docs/DESIGN.md` §12; behaviour notes are in
   `Role#allows` (owner > admin > operator > viewer; support only reads). Use the same minimum
   role the endpoint's `TenantAccess.enter` requires.
 
+## Admin API (platform console)
+
+- The admin API (`/api/admin/v1`, `client/openapi/xhandler-admin.json`) is called only through
+  `@app/client/xhandler-admin`, from `queries/xhandler-admin/` and `pages/platform/`
+  ([ADR 0012](../../../docs/adr/0012-platform-console-admin-api.md)). Its operations start with
+  `admin`; it has no tenant from the URL hook: the tenant or partner is an explicit argument.
+- Only `platform-admin` may call it: show the Plataforma section and its pages through
+  `usePlatformRoles().has("platform-admin")` (display only; the server decides and audits).
+- Wide or destructive actions confirm, naming what they affect; one-time passwords are shown
+  once with a copy button; secrets sent to it are never shown back.
+
 ## Public endpoints
 
 - Public pages call only `/api/v1/public/*` and `/api/v1/status`, through
@@ -66,3 +77,5 @@ Pass/fail rubric for `/eval`. Check changed xhandler queries, hooks and pages.
 - [ ] Job state uses `isTerminalJobState` / `isJobCancelable`; cancel is the `POST …/cancel`.
 - [ ] Actions are gated with `useTenantRole` at the endpoint's minimum role.
 - [ ] Public pages use `xhandlerPublicClient` and public endpoints only.
+- [ ] Admin API calls go through `@app/client/xhandler-admin` from `queries/xhandler-admin/`;
+      platform pages show the unauthorized state without `platform-admin`.

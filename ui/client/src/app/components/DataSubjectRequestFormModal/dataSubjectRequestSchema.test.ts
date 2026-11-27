@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createDataSubjectRequestSchema } from "./createDataSubjectRequestSchema";
+import { dataSubjectRequestSchema } from "./dataSubjectRequestSchema";
 
 const valid = {
   subjectDocType: "1",
@@ -10,22 +10,22 @@ const valid = {
   details: "",
 };
 
-describe("createDataSubjectRequestSchema", () => {
+describe("dataSubjectRequestSchema", () => {
   it("accepts a DNI holder's access request", async () => {
     await expect(
-      createDataSubjectRequestSchema.validate(valid),
+      dataSubjectRequestSchema.validate(valid),
     ).resolves.toBeTruthy();
   });
 
   it("checks DNI and RUC lengths", async () => {
     await expect(
-      createDataSubjectRequestSchema.validate({
+      dataSubjectRequestSchema.validate({
         ...valid,
         subjectDocNumber: "123",
       }),
     ).rejects.toThrow("El DNI tiene 8 dígitos.");
     await expect(
-      createDataSubjectRequestSchema.validate({
+      dataSubjectRequestSchema.validate({
         ...valid,
         subjectDocType: "6",
         subjectDocNumber: "12345678",
@@ -35,7 +35,7 @@ describe("createDataSubjectRequestSchema", () => {
 
   it("refuses a right the API doesn't know", async () => {
     await expect(
-      createDataSubjectRequestSchema.validate({ ...valid, kind: "deletion" }),
+      dataSubjectRequestSchema.validate({ ...valid, kind: "deletion" }),
     ).rejects.toThrow("Elige el derecho que se ejerce.");
   });
 });

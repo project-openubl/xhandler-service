@@ -30,14 +30,15 @@ those modules, their tests and `index.ts`. No `components/`, `hooks/` or `contex
 route-to-component adapter (`*DetailRoute.tsx`).
 
 **Areas.** Pages group by product, then entity: `pages/xhandler/<entity>/<page-dir>/`,
-`pages/searchpe/<entity>/<page-dir>/`; cross-product pages sit in `pages/account/`,
+`pages/searchpe/<entity>/<page-dir>/`, and the platform console (xhandler's admin API, ADR 0012)
+in `pages/platform/<entity>/<page-dir>/`; cross-product pages sit in `pages/account/`,
 `pages/home/`, `pages/public/` (public routes only) and `pages/not-found/`. Area and entity
 directories hold only page directories, never `components/`, `hooks/`, `utils/` or `context/`.
 A module shared by pages of one area goes to the app root.
 
 ```
 client/src/app/
-  components/  hooks/  context/  utils/  stores/  queries/{xhandler,searchpe,utils}/
+  components/  hooks/  context/  utils/  stores/  queries/{xhandler,xhandler-admin,searchpe,utils}/
   pages/
     searchpe/                             # area: page directories only
       versions/                           # entity: page directories only
@@ -66,7 +67,7 @@ Pass/fail rubric for `/eval`.
       scope that contains all its users: component folder → page directory → app root.
 - [ ] Component folders are flat and hold an `index.ts`.
 - [ ] A page directory's root holds its main component and its route adapter, if any.
-- [ ] Pages sit under their product area (`xhandler/`, `searchpe/`) or a cross-product area;
+- [ ] Pages sit under their product area (`xhandler/`, `searchpe/`, `platform/`) or a cross-product area;
       no `components/`, `hooks/`, `utils/` or `context/` under an area or entity directory.
 - [ ] New contexts sit at the narrowest scope, split into `<Name>Context.ts` +
       `<Name>Provider.tsx`.
