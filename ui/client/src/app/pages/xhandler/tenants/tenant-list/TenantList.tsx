@@ -66,7 +66,7 @@ export const TenantList: React.FC = () => {
     emptyState: (
       <TableEmptyState
         title="Aún no perteneces a ninguna organización"
-        body="Crea tu organización gratuita o pide a un administrador de una organización que te invite."
+        body="Crea una organización o pide a un administrador de una organización que te invite."
       />
     ),
   });

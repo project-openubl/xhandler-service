@@ -13,11 +13,11 @@ describe("withDefaultPreferences", () => {
 
   it("keeps stored rows, including kinds the UI doesn't know", () => {
     const preferences = withDefaultPreferences([
-      { kind: "quota", email: false, in_app: true },
+      { kind: "sire.deadline", email: false, in_app: true },
       { kind: "privacy.request", email: true, in_app: true },
     ]);
-    expect(preferences.find((pref) => pref.kind === "quota")).toEqual({
-      kind: "quota",
+    expect(preferences.find((pref) => pref.kind === "sire.deadline")).toEqual({
+      kind: "sire.deadline",
       email: false,
       in_app: true,
     });

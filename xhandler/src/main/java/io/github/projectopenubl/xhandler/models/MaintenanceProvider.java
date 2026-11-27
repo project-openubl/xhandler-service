@@ -19,9 +19,6 @@ public interface MaintenanceProvider {
     /** Deletes idempotency keys older than 24 hours; returns how many. */
     int purgeIdempotencyKeys();
 
-    /** Deletes public lookup rate-limit buckets older than a day; returns how many. */
-    int deleteOldRateBuckets();
-
     /** At most 500 documents whose retention period is over. */
     List<ExpiredDocument> getExpiredDocuments();
 

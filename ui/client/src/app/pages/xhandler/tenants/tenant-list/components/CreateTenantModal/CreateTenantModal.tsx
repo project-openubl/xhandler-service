@@ -40,7 +40,7 @@ const schema = object({
 
 type ICreateTenantValues = InferType<typeof schema>;
 
-/** Self-service signup: the user creates their free organization and becomes its owner. */
+/** Self-service signup: the user creates an organization and becomes its owner. */
 export const CreateTenantModal: React.FC<ICreateTenantModalProps> = ({
   isOpen,
   onClose,
@@ -103,7 +103,7 @@ const CreateTenantForm: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       <ModalHeader
         title="Nueva organización"
         labelId="create-tenant-title"
-        description="Crea tu organización gratuita: serás su propietario y empezarás en el entorno beta de SUNAT. Cada persona puede crear una."
+        description="Crea una organización: serás su propietario y sus empresas empezarán en el entorno de pruebas."
       />
       <ModalBody>
         <Form

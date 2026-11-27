@@ -33,7 +33,7 @@ public class JpaPlatformProvider implements PlatformProvider {
                 .getSingleResult();
     }
 
-    private static final String TENANT_COLUMNS = "id, name, plan, plan_source, status, partner_id, partner_name, created_by, created_at, "
+    private static final String TENANT_COLUMNS = "id, name, status, partner_id, partner_name, created_by, created_at, "
             + "sending_paused, audit_hold, archive_plan, delete_after, companies";
 
     @Override
@@ -73,9 +73,9 @@ public class JpaPlatformProvider implements PlatformProvider {
     }
 
     private static TenantRow tenant(Object[] r) {
-        return new TenantRow((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], (String) r[4], (UUID) r[5], (String) r[6],
-                (String) r[7], Times.toInstant(r[8]), Boolean.TRUE.equals(r[9]), Boolean.TRUE.equals(r[10]), Boolean.TRUE.equals(r[11]),
-                Times.toInstant(r[12]), ((Number) r[13]).longValue());
+        return new TenantRow((UUID) r[0], (String) r[1], (String) r[2], (UUID) r[3], (String) r[4],
+                (String) r[5], Times.toInstant(r[6]), Boolean.TRUE.equals(r[7]), Boolean.TRUE.equals(r[8]), Boolean.TRUE.equals(r[9]),
+                Times.toInstant(r[10]), ((Number) r[11]).longValue());
     }
 
     @Override
@@ -90,13 +90,6 @@ public class JpaPlatformProvider implements PlatformProvider {
         Object removed = em.createNativeQuery("SELECT xhandler.remove_partner_member(:p, :k, :s)")
                 .setParameter("p", partnerId).setParameter("k", kind).setParameter("s", subject).getSingleResult();
         return Boolean.TRUE.equals(removed);
-    }
-
-    @Override
-    public void setPlatformSetting(String key, String value) {
-        em.createNativeStatement("INSERT INTO xhandler.platform_setting (key, value) VALUES (:k, :v) "
-                        + "ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = now()")
-                .setParameter("k", key).setParameter("v", value).execute();
     }
 
     @Override

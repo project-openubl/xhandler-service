@@ -120,19 +120,19 @@ class OpenApiTest {
         for (String id : List.of("emitDocument", "emitSfsDocument")) {
             JsonNode responses = operation(id).get("responses");
             assertEquals("#/components/schemas/DocumentView", responses.at("/201/content/application~1json/schema/$ref").asString(), id);
-            for (String code : List.of("402", "409", "422", "503", "4XX", "5XX")) {
+            for (String code : List.of("409", "422", "503", "4XX", "5XX")) {
                 assertEquals("#/components/schemas/ApiError", responses.at("/" + code + "/content/application~1json/schema/$ref").asString(),
                         id + " " + code);
             }
             assertFalse(responses.has("200"), id + ": " + responses);
+            // No quotas: the service never answers 402
+            assertFalse(responses.has("402"), id + ": " + responses);
         }
     }
 
     @Test
     void former_untyped_maps_are_records_with_the_same_names() {
         Map<String, String> expected = Map.ofEntries(
-                Map.entry("getBilling", "BillingView"),
-                Map.entry("updateBillingDetails", "BillingView"),
                 Map.entry("getPartnerBranding", "PartnerBrandingView"),
                 Map.entry("setPartnerBranding", "PartnerBrandingView"),
                 Map.entry("revokePseAuthorization", "RevokedView"),
@@ -146,7 +146,6 @@ class OpenApiTest {
                 operation(id).at("/responses/200/content/application~1json/schema/$ref").asString(), id));
         assertEquals("#/components/schemas/AdapterTokenView",
                 operation("listAdapterTokens").at("/responses/200/content/application~1json/schema/items/$ref").asString());
-        assertEquals(Set.of("usage", "billing_ruc", "billing_name", "billing_email"), names(spec.at("/components/schemas/BillingView/properties")));
         assertEquals(Set.of("status", "delete_after"), names(spec.at("/components/schemas/ExitView/properties")));
         assertEquals(Set.of("company_id", "emission_mode"), names(spec.at("/components/schemas/RevokedView/properties")));
         assertEquals(Set.of("request", "documents", "drafts"), names(spec.at("/components/schemas/PersonalData/properties")));

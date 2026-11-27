@@ -49,14 +49,11 @@ public class DocumentEmailResource {
     private final Jobs jobs;
     private final AuditManager auditor;
     private final EmailProvider emailProvider;
-    private final long maxPerDay;
 
     public DocumentEmailResource(TenantAccess access, Jobs jobs, AuditManager auditor, EmailProvider emailProvider,
-            @org.eclipse.microprofile.config.inject.ConfigProperty(name = "xhandler.mail.max-per-tenant-per-day", defaultValue = "2000")
-                    long maxPerDay, CompanyProvider companyProvider, DocumentProvider documentProvider) {
+            CompanyProvider companyProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.companyProvider = companyProvider;
-        this.maxPerDay = maxPerDay;
         this.access = access;
         this.jobs = jobs;
         this.auditor = auditor;
@@ -78,10 +75,6 @@ public class DocumentEmailResource {
         if (!"production".equals(doc.getSunatEnv()) && company.getRucVerifiedAt() == null) {
             // Test documents from an unverified company (any RUC) must not reach third parties
             throw ApiException.conflict("ruc_not_verified", "Verifique el RUC de la empresa para enviar documentos de prueba por correo.");
-        }
-        long sentToday = emailProvider.countEmailsSentLastDay();
-        if (sentToday >= maxPerDay) {
-            throw new ApiException(429, "email_quota", "Alcanzó el máximo de correos del día.");
         }
         List<String> cc = request.cc() == null ? List.of() : request.cc();
         for (String address : concat(request.to(), cc)) {

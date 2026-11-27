@@ -249,21 +249,6 @@ func xhEgressProxyAddress(cr *xhandlerv1alpha1.XHandler) string {
 	return fmt.Sprintf("%s:%d", xhEgressProxyName(cr), egressProxyPort)
 }
 
-func captchaProvider(captcha *xhandlerv1alpha1.CaptchaSpec) string {
-	if captcha.Provider == "" {
-		return "hcaptcha"
-	}
-	return captcha.Provider
-}
-
-// captchaVerifyURL is where the app checks a CAPTCHA token with the provider's secret.
-func captchaVerifyURL(captcha *xhandlerv1alpha1.CaptchaSpec) string {
-	if captchaProvider(captcha) == "turnstile" {
-		return "https://challenges.cloudflare.com/turnstile/v0/siteverify"
-	}
-	return "https://api.hcaptcha.com/siteverify"
-}
-
 // xhAPIURL is the URL of the api Service of cr, in the cluster.
 func xhAPIURL(cr *xhandlerv1alpha1.XHandler) string {
 	return fmt.Sprintf("http://%s:%d", xhAPIName(cr), xhAppPort)
@@ -448,11 +433,6 @@ func appConfig(cr *xhandlerv1alpha1.XHandler, component string) (*serverConfig, 
 		c.value("QUARKUS_OIDC_AUTH_SERVER_URL", oidc.ServerURL)
 		c.value("QUARKUS_OIDC_CLIENT_ID", oidc.ClientID)
 		c.secret("QUARKUS_OIDC_CREDENTIALS_SECRET", oidc.CredentialsSecret)
-	}
-
-	if captcha := cr.Spec.Captcha; captcha != nil {
-		c.value("XHANDLER_CAPTCHA_VERIFY_URL", captchaVerifyURL(captcha))
-		c.secret("XHANDLER_CAPTCHA_SECRET", captcha.SecretKeySecret)
 	}
 
 	if vault := cr.Spec.Vault; vault != nil {

@@ -61,19 +61,6 @@ class CompanyTest {
                 io.github.projectopenubl.xhandler.utils.Constraints.violated(duplicate).orElseThrow());
     }
 
-    @Test
-    void unverified_companies_per_tenant_are_limited() {
-        UUID tenant = tenantOf("carol");
-        int created = 0;
-        io.restassured.response.Response response;
-        do {
-            response = as("carol").body(Map.of("ruc", randomRuc(), "razon_social", "Empresa"))
-                    .post("/api/v1/tenants/" + tenant + "/companies");
-            created++;
-        } while (response.statusCode() == 201 && created <= 201);
-        response.then().statusCode(409).body("kind", equalTo("limit_reached"));
-    }
-
     private void verify(UUID tenant, UUID company) {
         io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);

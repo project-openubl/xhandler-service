@@ -1,12 +1,5 @@
 import type { AdminTenant } from "@app/client/xhandler-admin";
 
-/** Where the tenant's plan comes from (`entitlement.source`). */
-export const PLAN_SOURCE_LABELS: Record<string, string> = {
-  default: "por defecto",
-  lago: "sincronizado con Lago",
-  admin: "fijado por la plataforma",
-};
-
 /** Actions on the whole tenant that ask for confirmation (ADR 0012). */
 export type TenantAction =
   | "hold"

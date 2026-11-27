@@ -101,7 +101,6 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
     { to: "/organizaciones/$tenantId/miembros", label: "Miembros" },
     { to: "/organizaciones/$tenantId/webhooks", label: "Webhooks" },
     { to: "/organizaciones/$tenantId/notificaciones", label: "Notificaciones" },
-    { to: "/organizaciones/$tenantId/uso", label: "Uso y plan" },
     { to: "/organizaciones/$tenantId/configuracion", label: "Configuración" },
     // Documents and data (U1b)
     { to: "/organizaciones/$tenantId/correo", label: "Correo" },
@@ -120,7 +119,7 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
     { to: "/plataforma/socios", label: "Socios" },
     { to: "/plataforma/envios", label: "Envío a SUNAT" },
     { to: "/plataforma/pse", label: "PSE" },
-    { to: "/plataforma/facturacion", label: "Facturación y SIRE" },
+    { to: "/plataforma/sire", label: "SIRE" },
   ] as const;
 
   const group = useLocation({

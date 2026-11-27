@@ -154,7 +154,7 @@ class DataProtectionTest {
         String export = as("alice").post(base + "/exports").then().statusCode(202)
                 .body("keySet()", containsInAnyOrder("id", "status", "parts", "documents", "detail", "created_at", "done_at"))
                 .extract().path("id");
-        as("alice").post(base + "/exports").then().statusCode(409).body("kind", equalTo("export_recent"));
+        as("alice").post(base + "/exports").then().statusCode(409).body("kind", equalTo("export_in_progress"));
         await().atMost(Duration.ofSeconds(30)).until(() -> "done".equals(
                 as("alice").get(base + "/exports").then().extract().path("find { it.id == '" + export + "' }.status")));
         // Parts carry their name, size and count, never the internal storage key

@@ -29,11 +29,6 @@ public class JpaMaintenanceProvider implements MaintenanceProvider {
     }
 
     @Override
-    public int deleteOldRateBuckets() {
-        return em.createNativeStatement("DELETE FROM xhandler.public_lookup_counter WHERE bucket < now() - interval '1 day'").execute();
-    }
-
-    @Override
     public List<ExpiredDocument> getExpiredDocuments() {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery("SELECT tenant_id, document_id FROM xhandler.expired_documents(500)").getResultList();

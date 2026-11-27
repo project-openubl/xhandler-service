@@ -64,8 +64,7 @@ const PlatformTenantListContent: React.FC = () => {
   const tenants = data?.items ?? [];
 
   const columns: DataViewTh[] = [
-    { cell: "Organización", props: { width: 30 } },
-    { cell: "Plan", props: { width: 15 } },
+    { cell: "Organización", props: { width: 45 } },
     { cell: "Estado", props: { width: 15 } },
     { cell: "Socio", props: { width: 15 } },
     { cell: "Empresas", props: { width: 10 } },
@@ -88,7 +87,6 @@ const PlatformTenantListContent: React.FC = () => {
         ),
         props: { modifier: "truncate" as const },
       },
-      { cell: tenant.plan ?? "-" },
       {
         cell: (
           <LabelGroup>
@@ -160,8 +158,8 @@ const PlatformTenantListContent: React.FC = () => {
           Organizaciones de la plataforma
         </Content>
         <Content component={ContentVariants.p}>
-          Todas las organizaciones, con su plan, su estado y su socio. Desde
-          aquí no se ven sus comprobantes.
+          Todas las organizaciones, con su estado y su socio. Desde aquí no se
+          ven sus comprobantes.
         </Content>
       </PageSection>
       <PageSection>

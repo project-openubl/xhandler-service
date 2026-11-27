@@ -129,39 +129,6 @@
           }
         }
       },
-      "BillingDetails" : {
-        "type" : "object",
-        "properties" : {
-          "billing_ruc" : {
-            "type" : "string",
-            "pattern" : "\\d{11}"
-          },
-          "billing_name" : {
-            "type" : "string",
-            "maxLength" : 300
-          },
-          "billing_email" : {
-            "type" : "string"
-          }
-        }
-      },
-      "BillingView" : {
-        "type" : "object",
-        "properties" : {
-          "usage" : {
-            "$ref" : "#/components/schemas/Usage"
-          },
-          "billing_ruc" : {
-            "type" : "string"
-          },
-          "billing_name" : {
-            "type" : "string"
-          },
-          "billing_email" : {
-            "type" : "string"
-          }
-        }
-      },
       "Branding" : {
         "type" : "object",
         "properties" : {
@@ -1073,7 +1040,7 @@
       },
       "LookupRequest" : {
         "type" : "object",
-        "required" : [ "ruc", "tipo_comprobante", "serie", "numero", "fecha_emision", "total", "captcha" ],
+        "required" : [ "ruc", "tipo_comprobante", "serie", "numero", "fecha_emision", "total" ],
         "properties" : {
           "ruc" : {
             "type" : "string",
@@ -1096,10 +1063,6 @@
           },
           "total" : {
             "type" : "number"
-          },
-          "captcha" : {
-            "type" : "string",
-            "pattern" : "\\S"
           }
         }
       },
@@ -1237,6 +1200,20 @@
           }
         }
       },
+      "PartnerTenantSummary" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        }
+      },
       "PartnerView" : {
         "type" : "object",
         "properties" : {
@@ -1332,35 +1309,6 @@
           },
           "deleted_at" : {
             "type" : "string"
-          }
-        }
-      },
-      "Plan" : {
-        "type" : "object",
-        "properties" : {
-          "code" : {
-            "type" : "string"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "production_per_month" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "beta_per_day" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "sandbox_per_day" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "custom_smtp" : {
-            "type" : "boolean"
-          },
-          "webhooks" : {
-            "type" : "boolean"
           }
         }
       },
@@ -1987,31 +1935,6 @@
           }
         }
       },
-      "TenantUsage" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "$ref" : "#/components/schemas/UUID"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "status" : {
-            "type" : "string"
-          },
-          "plan" : {
-            "type" : "string"
-          },
-          "production_documents" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "other_documents" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        }
-      },
       "TenantView" : {
         "type" : "object",
         "properties" : {
@@ -2019,9 +1942,6 @@
             "$ref" : "#/components/schemas/UUID"
           },
           "name" : {
-            "type" : "string"
-          },
-          "plan" : {
             "type" : "string"
           },
           "status" : {
@@ -2081,35 +2001,6 @@
             "type" : "string",
             "pattern" : "\\S",
             "maxLength" : 200
-          }
-        }
-      },
-      "Usage" : {
-        "type" : "object",
-        "properties" : {
-          "plan" : {
-            "$ref" : "#/components/schemas/Plan"
-          },
-          "source" : {
-            "type" : "string"
-          },
-          "synced_at" : {
-            "$ref" : "#/components/schemas/Instant"
-          },
-          "stale" : {
-            "type" : "boolean"
-          },
-          "production_this_month" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "beta_today" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "sandbox_today" : {
-            "type" : "integer",
-            "format" : "int64"
           }
         }
       },
@@ -2844,12 +2735,6 @@
           "schema" : {
             "$ref" : "#/components/schemas/UUID"
           }
-        }, {
-          "name" : "month",
-          "in" : "query",
-          "schema" : {
-            "type" : "string"
-          }
         } ],
         "responses" : {
           "200" : {
@@ -2859,7 +2744,7 @@
                 "schema" : {
                   "type" : "array",
                   "items" : {
-                    "$ref" : "#/components/schemas/TenantUsage"
+                    "$ref" : "#/components/schemas/PartnerTenantSummary"
                   }
                 }
               }
@@ -3072,56 +2957,6 @@
         },
         "summary" : "File",
         "tags" : [ "Public Document Resource" ]
-      }
-    },
-    "/api/v1/public/lago/webhooks" : {
-      "post" : {
-        "operationId" : "receiveLagoWebhook",
-        "tags" : [ "Webhook" ],
-        "parameters" : [ {
-          "name" : "X-Lago-Signature",
-          "in" : "header",
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/octet-stream" : {
-              "schema" : {
-                "type" : "string",
-                "format" : "binary"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "204" : {
-            "description" : "Evento recibido."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "summary" : "Receive"
       }
     },
     "/api/v1/public/lookup" : {
@@ -3621,123 +3456,6 @@
         } ]
       }
     },
-    "/api/v1/tenants/{tenantId}/billing" : {
-      "get" : {
-        "operationId" : "getBilling",
-        "parameters" : [ {
-          "name" : "tenantId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "$ref" : "#/components/schemas/UUID"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/BillingView"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Sin token o con un token inválido (sin cuerpo)."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "summary" : "Get",
-        "tags" : [ "Billing Resource" ],
-        "security" : [ {
-          "bearer" : [ ]
-        } ]
-      },
-      "put" : {
-        "operationId" : "updateBillingDetails",
-        "parameters" : [ {
-          "name" : "tenantId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "$ref" : "#/components/schemas/UUID"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/BillingDetails"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/BillingView"
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "Bad Request"
-          },
-          "401" : {
-            "description" : "Sin token o con un token inválido (sin cuerpo)."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "summary" : "Details",
-        "tags" : [ "Billing Resource" ],
-        "security" : [ {
-          "bearer" : [ ]
-        } ]
-      }
-    },
     "/api/v1/tenants/{tenantId}/companies" : {
       "get" : {
         "operationId" : "listCompanies",
@@ -3842,7 +3560,7 @@
             }
           },
           "409" : {
-            "description" : "Máximo de empresas sin verificar, o Idempotency-Key en proceso.",
+            "description" : "Idempotency-Key en proceso.",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -5295,16 +5013,6 @@
               }
             }
           },
-          "402" : {
-            "description" : "Sin cuota de documentos en el plan (quota_exceeded).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
           "409" : {
             "description" : "Conflicto: Idempotency-Key en proceso, número ya usado, empresa desactivada o no autorizada.",
             "content" : {
@@ -5409,16 +5117,6 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/DocumentView"
-                }
-              }
-            }
-          },
-          "402" : {
-            "description" : "Sin cuota de documentos en el plan (quota_exceeded).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
                 }
               }
             }
@@ -9129,16 +8827,6 @@
               }
             }
           },
-          "402" : {
-            "description" : "Sin cuota de documentos en el plan (quota_exceeded).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
           "409" : {
             "description" : "El borrador ya se emitió o cambió mientras se emitía, Idempotency-Key en proceso, empresa desactivada o no autorizada.",
             "content" : {
@@ -10893,7 +10581,7 @@
             }
           },
           "409" : {
-            "description" : "Idempotency-Key en proceso, o RUC sin verificar.",
+            "description" : "Idempotency-Key en proceso.",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -11255,9 +10943,6 @@
       }
     }
   },
-  "tags" : [ {
-    "name" : "Webhook"
-  } ],
   "servers" : [ {
     "url" : "http://localhost:8080",
     "description" : "Auto generated value"

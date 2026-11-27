@@ -7,7 +7,6 @@ export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   "document.rejected_after_delivery": "Rechazado después de entregado",
   "certificate.expiring": "Certificado por vencer",
   "sunat.outage": "Caída de SUNAT",
-  quota: "Uso del plan",
   "pse.authorization_revoked": "Autorización PSE revocada",
   "conformity.objected": "Conformidad observada",
   "sire.deadline": "Plazos SIRE",

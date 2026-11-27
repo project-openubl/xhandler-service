@@ -25,7 +25,7 @@ import { dataViewBodyStates } from "@app/components/dataViewStates";
 import { TableEmptyState } from "@app/components/TableEmptyState";
 import { RENDER_DATE_FORMAT } from "@app/constants";
 import { usePersistentState } from "@app/hooks/usePersistentState";
-import { useAdminSireCalendarQuery } from "@app/queries/xhandler-admin/billing";
+import { useAdminSireCalendarQuery } from "@app/queries/xhandler-admin/sire";
 import type { DataViewTh } from "@app/utils/dataViewTypes";
 
 import { isSirePeriod } from "../../utils/sireCalendar";

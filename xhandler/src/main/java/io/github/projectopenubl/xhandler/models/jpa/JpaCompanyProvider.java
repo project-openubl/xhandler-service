@@ -74,16 +74,6 @@ public class JpaCompanyProvider implements CompanyProvider {
     }
 
     @Override
-    public long countUnverifiedCompanies() {
-        return repository.count("rucVerifiedAt is null and deletedAt is null");
-    }
-
-    @Override
-    public long countVerifiedCompanies() {
-        return repository.count("rucVerifiedAt is not null and deletedAt is null");
-    }
-
-    @Override
     public long countCompanies() {
         return repository.count();
     }

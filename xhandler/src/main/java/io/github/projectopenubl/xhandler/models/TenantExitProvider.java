@@ -27,8 +27,8 @@ public interface TenantExitProvider {
     record ExportReceptionRow(UUID id, Object ruc, Object supplierRuc, Object tipoComprobante, Object serie, Object numero, Object fechaEmision,
             Object validityState, String xmlRef, String pdfRef, String cdrRef) {}
 
-    /** Whether an export is pending or was requested in the last hour. */
-    boolean hasRecentExport();
+    /** Whether an export is still being built. */
+    boolean hasPendingExport();
 
     void addExport(UUID id, UUID tenantId, String requestedBy);
 

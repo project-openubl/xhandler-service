@@ -25,7 +25,7 @@ import {
 import { FormSubmitError } from "@app/components/FormSubmitError";
 import { useNotifications } from "@app/hooks/useNotifications";
 import { useSubmitError } from "@app/hooks/useSubmitError";
-import { useAdminLoadSireCalendarMutation } from "@app/queries/xhandler-admin/billing";
+import { useAdminLoadSireCalendarMutation } from "@app/queries/xhandler-admin/sire";
 import { getMutationErrorMessage } from "@app/utils/apiError";
 
 import { parseSireCalendar } from "../../utils/sireCalendar";

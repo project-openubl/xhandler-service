@@ -40,15 +40,13 @@ public class CredentialResource {
     private final TenantAccess access;
     private final CredentialManager credentials;
     private final io.github.projectopenubl.xhandler.clients.Egress egress;
-    private final io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements;
     private final io.github.projectopenubl.xhandler.managers.SireManager sire;
 
     public CredentialResource(TenantAccess access, CredentialManager credentials, io.github.projectopenubl.xhandler.clients.Egress egress,
-            io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, io.github.projectopenubl.xhandler.managers.SireManager sire, CompanyManager companyManager, CredentialProvider credentialProvider) {
+            io.github.projectopenubl.xhandler.managers.SireManager sire, CompanyManager companyManager, CredentialProvider credentialProvider) {
         this.credentialProvider = credentialProvider;
         this.companyManager = companyManager;
         this.sire = sire;
-        this.entitlements = entitlements;
         this.access = access;
         this.credentials = credentials;
         this.egress = egress;
@@ -118,7 +116,6 @@ public class CredentialResource {
         CompanyModel company = companyManager.getCompany(companyId);
         // A tenant-supplied host: it must resolve to public addresses (DESIGN.md §16)
         egress.checkHost(request.host());
-        entitlements.requireCustomSmtp(company);
         CredentialModel stored = credentials.store(scope, company, "smtp", Map.of("host", request.host(), "port", String.valueOf(request.port()),
                 "username", request.username(), "password", request.password(), "from", request.from(),
                 "start_tls", String.valueOf(!Boolean.FALSE.equals(request.startTls()))), request.from());

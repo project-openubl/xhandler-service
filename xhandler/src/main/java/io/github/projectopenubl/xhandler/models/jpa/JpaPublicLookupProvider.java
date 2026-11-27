@@ -18,14 +18,6 @@ public class JpaPublicLookupProvider implements PublicLookupProvider {
     }
 
     @Override
-    public int countLookup(String key) {
-        return ((Number) em.createNativeQuery("""
-                        INSERT INTO xhandler.public_lookup_counter (bucket, key, hits) VALUES (date_trunc('hour', now()), :k, 1)
-                        ON CONFLICT (bucket, key) DO UPDATE SET hits = public_lookup_counter.hits + 1 RETURNING hits""")
-                .setParameter("k", key).getSingleResult()).intValue();
-    }
-
-    @Override
     public String getPublicDocumentStatus(String ruc, String tipoComprobante, String serie, long numero, LocalDate fechaEmision,
             BigDecimal total) {
         Object status = em.createNativeQuery("SELECT xhandler.public_document_status(:ruc, :tipo, :serie, :numero, :fecha, :total)")

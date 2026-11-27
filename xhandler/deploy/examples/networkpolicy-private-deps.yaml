@@ -23,7 +23,7 @@ spec:
               kubernetes.io/metadata.name: keycloak
       ports:
         - { port: 8443, protocol: TCP }
-    # Lago and an S3 interface endpoint
+    # An S3 interface endpoint
     - to:
         - ipBlock: { cidr: 10.20.40.0/24 }
       ports:

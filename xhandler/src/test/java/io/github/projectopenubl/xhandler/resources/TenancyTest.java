@@ -39,14 +39,18 @@ class TenancyTest {
     }
 
     @Test
-    void signup_creates_one_free_tenant_per_person() {
+    void signup_creates_tenants_owned_by_the_person() {
         UUID tenant = tenantOf("alice");
         as("alice").get("/api/v1/tenants").then().statusCode(200)
                 .body("id", hasItem(tenant.toString()))
                 .body("find { it.id == '" + tenant + "' }.role", equalTo("owner"));
 
-        as("alice").body(Map.of("name", "Otra")).post("/api/v1/tenants")
-                .then().statusCode(409).body("kind", equalTo("limit_reached"));
+        // No limit per person: plans and signup abuse are handled outside the service
+        String another = as("alice").body(Map.of("name", "Otra " + UUID.randomUUID())).post("/api/v1/tenants")
+                .then().statusCode(201).body("$", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasKey("plan")))
+                .extract().path("id");
+        as("alice").get("/api/v1/tenants").then().statusCode(200)
+                .body("find { it.id == '" + another + "' }.role", equalTo("owner"));
     }
 
     @Test

@@ -91,12 +91,6 @@ public class JpaEmailProvider implements EmailProvider {
     }
 
     @Override
-    public long countEmailsSentLastDay() {
-        return ((Number) em.createNativeQuery(
-                "SELECT count(*) FROM xhandler.delivery WHERE channel = 'email' AND at > now() - interval '1 day'").getSingleResult()).longValue();
-    }
-
-    @Override
     public void addEmailDelivery(UUID id, UUID tenantId, UUID documentId, String recipient, String result, String detail) {
         em.createNativeStatement("""
                         INSERT INTO xhandler.delivery (id, tenant_id, document_id, channel, recipient, result, detail)

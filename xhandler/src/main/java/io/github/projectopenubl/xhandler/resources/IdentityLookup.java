@@ -2,7 +2,6 @@ package io.github.projectopenubl.xhandler.resources;
 
 import io.github.projectopenubl.xhandler.representations.idm.IdentityRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.EntryRepresentation;
-import io.github.projectopenubl.xhandler.models.PublicLookupProvider;
 import io.github.projectopenubl.xhandler.managers.CompanyManager;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -38,8 +37,6 @@ import tools.jackson.core.JacksonException;
 @Path("/api/v1/tenants/{tenantId}/companies/{companyId}/lookup/{tipo}/{numero}")
 public class IdentityLookup {
 
-    private final PublicLookupProvider publicLookupProvider;
-
     private final CompanyManager companyManager;
 
 
@@ -51,19 +48,16 @@ public class IdentityLookup {
     private final Optional<String> searchpeUrl;
     private final io.github.projectopenubl.xhandler.managers.AuditManager auditor;
     private final io.github.projectopenubl.xhandler.models.CatalogProvider catalogProvider;
-    private final int maxPerHour;
 
     static final java.time.Duration CACHE_TTL = java.time.Duration.ofDays(30);
 
     public IdentityLookup(TenantAccess access, CredentialManager credentials, CatalogResource catalogs, Egress egress, ObjectMapper json,
             @ConfigProperty(name = "xhandler.lookup.searchpe-url") Optional<String> searchpeUrl,
             io.github.projectopenubl.xhandler.managers.AuditManager auditor, io.github.projectopenubl.xhandler.models.CatalogProvider catalogProvider,
-            @ConfigProperty(name = "xhandler.lookup.max-per-tenant-per-hour", defaultValue = "300") int maxPerHour, CompanyManager companyManager, PublicLookupProvider publicLookupProvider) {
-        this.publicLookupProvider = publicLookupProvider;
+            CompanyManager companyManager) {
         this.companyManager = companyManager;
         this.auditor = auditor;
         this.catalogProvider = catalogProvider;
-        this.maxPerHour = maxPerHour;
         this.access = access;
         this.credentials = credentials;
         this.catalogs = catalogs;
@@ -95,12 +89,8 @@ public class IdentityLookup {
         Object cachedOrProvider = QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.OPERATOR);
             CompanyModel company = companyManager.getCompany(companyId);
-            // Personal data: every lookup is audited, and limited per tenant (no free DNI → name oracle)
+            // Personal data: every lookup is audited (rate limits per tenant belong to the gateway)
             auditor.record(scope, "lookup.identity", "company", companyId, Map.of("tipo", tipo, "numero", numero));
-            int hits = publicLookupProvider.countLookup("lookup:" + tenantId);
-            if (hits > maxPerHour) {
-                throw new ApiException(429, "too_many_requests", "Demasiadas consultas de RUC/DNI. Intente en una hora.");
-            }
             Optional<EntryRepresentation> cached = catalogs.byKey(companyId, "customer", catalogTipo + ":" + numero);
             if (cached.isPresent() && cached.get().data().has("lookup_at")
                     && java.time.Instant.parse(cached.get().data().get("lookup_at").asString()).isAfter(java.time.Instant.now().minus(CACHE_TTL))) {

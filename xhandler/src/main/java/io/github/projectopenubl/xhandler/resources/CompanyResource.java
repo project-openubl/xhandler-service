@@ -65,18 +65,12 @@ public class CompanyResource {
     private final TenantAccess access;
     private final AuditManager auditor;
     private final IdempotencyManager idempotency;
-    /**
-     * Unverified companies a tenant may have (DESIGN.md §26.8): RUCs are claimed only when verified,
-     * and this keeps a free signup from registering RUCs in bulk.
-     */
-    private final long maxUnverifiedCompanies;
 
     public CompanyResource(
             TenantAccess access,
             AuditManager auditor,
             IdempotencyManager idempotency,
-            @org.eclipse.microprofile.config.inject.ConfigProperty(name = "xhandler.limits.max-unverified-companies", defaultValue = "3")
-                    long maxUnverifiedCompanies, CompanyProvider companyProvider, SeriesProvider seriesProvider, CompanyManager companyManager, ModelToRepresentation modelToRepresentation, RepresentationToModel representationToModel) {
+            CompanyProvider companyProvider, SeriesProvider seriesProvider, CompanyManager companyManager, ModelToRepresentation modelToRepresentation, RepresentationToModel representationToModel) {
         this.representationToModel = representationToModel;
         this.modelToRepresentation = modelToRepresentation;
         this.companyManager = companyManager;
@@ -85,12 +79,11 @@ public class CompanyResource {
         this.access = access;
         this.auditor = auditor;
         this.idempotency = idempotency;
-        this.maxUnverifiedCompanies = maxUnverifiedCompanies;
     }
 
     @APIResponse(responseCode = "201", description = "Empresa creada (también la respuesta repetida de una Idempotency-Key ya usada).",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = CompanyRepresentation.class)))
-    @APIResponse(responseCode = "409", description = "Máximo de empresas sin verificar, o Idempotency-Key en proceso.",
+    @APIResponse(responseCode = "409", description = "Idempotency-Key en proceso.",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @Operation(operationId = "createCompany")
     @POST
@@ -98,9 +91,6 @@ public class CompanyResource {
             @Valid CreateCompanyRepresentation request) {
         return idempotency.create(tenantId, Role.ADMIN, idempotencyKey, idempotency.hash("company", tenantId, request), () -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
-            if (companyProvider.countUnverifiedCompanies() >= maxUnverifiedCompanies) {
-                throw ApiException.conflict("limit_reached", "Alcanzó el máximo de empresas sin verificar.");
-            }
             CompanyModel company = companyProvider.newCompany(Ids.newId());
             company.setTenantId(tenantId);
             representationToModel.updateCompany(request, company);

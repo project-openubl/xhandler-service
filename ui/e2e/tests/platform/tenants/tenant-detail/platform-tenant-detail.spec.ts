@@ -40,12 +40,6 @@ test("shows an organization, lists its companies on demand and confirms wide act
     page.getByText(/Se reintentar(á|án) \d+ comprobantes?/),
   ).toBeVisible();
 
-  // The plan modal offers the service's plans.
-  await page.getByRole("button", { name: "Cambiar plan" }).click();
-  const plan = page.getByRole("dialog", { name: "Cambiar plan" });
-  await expect(plan.getByRole("option", { name: /^Gratis/ })).toHaveCount(1);
-  await plan.getByRole("button", { name: "Cancelar" }).click();
-
   // An active organization has no exit to cancel.
   await expect(
     page.getByRole("button", { name: "Cancelar salida" }),

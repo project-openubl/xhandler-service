@@ -27,7 +27,4 @@ public interface TenantProvider {
 
     /** Re-reads the tenant from the database (after native updates that bypass the session). */
     void refresh(TenantModel tenant);
-
-    /** Writes pending changes now, so constraint violations surface here. */
-    void flush();
 }

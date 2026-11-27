@@ -2,30 +2,23 @@ import type React from "react";
 import { useState } from "react";
 
 import { Link } from "@tanstack/react-router";
-import dayjs from "dayjs";
 
 import { PaginationVariant } from "@patternfly/react-core";
 import {
   DataView,
-  DataViewFilters,
   DataViewTable,
   DataViewToolbar,
 } from "@patternfly/react-data-view";
 
-import { ClearFiltersButton } from "@app/components/ClearFiltersButton";
 import { dataViewBodyStates } from "@app/components/dataViewStates";
 import { GatedButton } from "@app/components/GatedButton";
 import { ListPagination } from "@app/components/ListPagination";
-import { SingleSelectFilter } from "@app/components/SingleSelectFilter";
 import { TableEmptyState } from "@app/components/TableEmptyState";
 import { usePersistentState } from "@app/hooks/usePersistentState";
 import { usePartnerTenantsQuery } from "@app/queries/xhandler/partners";
 import type { DataViewTh } from "@app/utils/dataViewTypes";
+import { PAGINATION_LIST_STATE } from "@app/utils/listState";
 
-import {
-  PARTNER_TENANT_LIST_STATE,
-  usageMonths,
-} from "../../partnerTenantListState";
 import { CreatePartnerTenantModal } from "../CreatePartnerTenantModal";
 
 interface IPartnerTenantsTabProps {
@@ -40,50 +33,27 @@ const TENANT_STATUS_LABELS: Record<string, string> = {
   exited: "Dada de baja",
 };
 
-const MONTH_OPTIONS = usageMonths().map((month) => ({
-  value: month,
-  label: dayjs(`${month}-01`).format("MMMM [de] YYYY"),
-}));
-
-const formatCount = (value: number | undefined): string =>
-  (value ?? 0).toLocaleString("es-PE");
-
-/** The partner's tenants with their documents in a month (DESIGN.md §14). */
+/** The partner's tenants (DESIGN.md §14). */
 export const PartnerTenantsTab: React.FC<IPartnerTenantsTabProps> = ({
   partnerId,
   gateProps,
 }) => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [pagination, setPagination] = usePersistentState({
-    ...PARTNER_TENANT_LIST_STATE.pagination,
+    ...PAGINATION_LIST_STATE.pagination,
     storage: "url",
   });
-  const [filters, setFilters] = usePersistentState({
-    ...PARTNER_TENANT_LIST_STATE.filters,
-    storage: "url",
-  });
-  const toFirstPage = () => setPagination((prev) => ({ ...prev, page: 1 }));
-  const clearAllFilters = () => {
-    setFilters(PARTNER_TENANT_LIST_STATE.filters.defaultValue);
-    toFirstPage();
-  };
 
   // GET …/partners/{id}/tenants is unpaged (one row per tenant of the partner): read whole,
   // paged on screen.
-  const { data, isLoading, error } = usePartnerTenantsQuery({
-    partnerId,
-    params: { month: filters.mes[0] },
-  });
+  const { data, isLoading, error } = usePartnerTenantsQuery({ partnerId });
   const tenants = data ?? [];
   const start = (pagination.page - 1) * pagination.perPage;
   const pageTenants = tenants.slice(start, start + pagination.perPage);
 
   const columns: DataViewTh[] = [
-    { cell: "Organización", props: { width: 35 } },
-    { cell: "Estado", props: { width: 15 } },
-    { cell: "Plan", props: { width: 15 } },
-    { cell: "Documentos en producción", props: { width: 20 } },
-    { cell: "Otros documentos", props: { width: 15 } },
+    { cell: "Organización", props: { width: 70 } },
+    { cell: "Estado", props: { width: 30 } },
   ];
 
   const rows = pageTenants.map((tenant) => ({
@@ -105,9 +75,6 @@ export const PartnerTenantsTab: React.FC<IPartnerTenantsTabProps> = ({
       {
         cell: TENANT_STATUS_LABELS[tenant.status ?? ""] ?? tenant.status ?? "-",
       },
-      { cell: tenant.plan ?? "-" },
-      { cell: formatCount(tenant.production_documents) },
-      { cell: formatCount(tenant.other_documents) },
     ],
   }));
 
@@ -137,26 +104,6 @@ export const PartnerTenantsTab: React.FC<IPartnerTenantsTabProps> = ({
     <>
       <DataView activeState={activeState}>
         <DataViewToolbar
-          clearAllFilters={clearAllFilters}
-          customLabelGroupContent={
-            <ClearFiltersButton onClick={clearAllFilters} />
-          }
-          filters={
-            <DataViewFilters
-              values={filters}
-              onChange={(_key, next) => {
-                setFilters((prev) => ({ ...prev, ...next }));
-                toFirstPage();
-              }}
-            >
-              <SingleSelectFilter
-                filterId="mes"
-                title="Mes"
-                placeholder="Mes actual"
-                options={MONTH_OPTIONS}
-              />
-            </DataViewFilters>
-          }
           actions={
             <GatedButton
               variant="primary"

@@ -3,10 +3,7 @@ package io.github.projectopenubl.xhandler.resources.admin;
 import io.github.projectopenubl.xhandler.jobs.JobStore;
 import io.github.projectopenubl.xhandler.managers.AuditManager;
 import io.github.projectopenubl.xhandler.managers.DocumentControlManager;
-import io.github.projectopenubl.xhandler.managers.EntitlementManager;
 import io.github.projectopenubl.xhandler.managers.KeyRotationManager;
-import io.github.projectopenubl.xhandler.managers.SelfInvoicingManager;
-import io.github.projectopenubl.xhandler.models.BillingProvider;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.EmailProvider;
@@ -24,11 +21,9 @@ import io.github.projectopenubl.xhandler.representations.idm.EndpointUpdateRepre
 import io.github.projectopenubl.xhandler.representations.idm.JobStateRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.MigrationRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.PageRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.PlanRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.AdminCompanyRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.AdminPartnerRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.AdminTenantRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.admin.BillingIssuerRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.CompanySendingRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.EmailSuppressionRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.JobSummaryRepresentation;
@@ -39,8 +34,6 @@ import io.github.projectopenubl.xhandler.representations.idm.admin.PartnerCreate
 import io.github.projectopenubl.xhandler.representations.idm.admin.PartnerMemberAssignmentRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.PartnerMemberRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.PartnerMemberRequestRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.admin.PlanAssignmentRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.admin.TenantPlanRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.TenantSendingRepresentation;
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.security.Actor;
@@ -84,7 +77,6 @@ public class AdminResource {
     private final EmailProvider emailProvider;
     private final TenantProvider tenantProvider;
     private final CompanyProvider companyProvider;
-    private final BillingProvider billingProvider;
     private final PlatformAdmin admin;
     private final TenantAccess access;
     private final DocumentControlManager control;
@@ -92,20 +84,17 @@ public class AdminResource {
     private final KeyRotationManager rotation;
     private final AuditManager auditor;
     private final PlatformProvider platform;
-    private final EntitlementManager entitlements;
 
     public AdminResource(PlatformAdmin admin, TenantAccess access, DocumentControlManager control, JobStore jobs, KeyRotationManager rotation,
-            AuditManager auditor, PlatformProvider platform, EntitlementManager entitlements, CompanyProvider companyProvider,
+            AuditManager auditor, PlatformProvider platform, CompanyProvider companyProvider,
             TenantProvider tenantProvider, EmailProvider emailProvider, JobQueueProvider jobQueueProvider, MaintenanceProvider maintenanceProvider,
-            ModelToRepresentation modelToRepresentation, BillingProvider billingProvider) {
+            ModelToRepresentation modelToRepresentation) {
         this.modelToRepresentation = modelToRepresentation;
         this.maintenanceProvider = maintenanceProvider;
         this.jobQueueProvider = jobQueueProvider;
         this.emailProvider = emailProvider;
         this.tenantProvider = tenantProvider;
         this.companyProvider = companyProvider;
-        this.billingProvider = billingProvider;
-        this.entitlements = entitlements;
         this.admin = admin;
         this.access = access;
         this.control = control;
@@ -241,7 +230,7 @@ public class AdminResource {
         return new EmailSuppressionRepresentation(address, reason);
     }
 
-    // --- partners and plans (§1.2, §14) ---------------------------------------------
+    // --- partners (§1.2) ---------------------------------------------
 
     @Operation(operationId = "adminListPartners", summary = "Socios de la plataforma con sus miembros y organizaciones")
     @GET
@@ -316,72 +305,6 @@ public class AdminResource {
         }
         AdminLog.PLATFORM_AUDIT.infof("admin %s removed %s:%s from partner %s", who, kind, subject, partnerId);
         return Response.noContent().build();
-    }
-
-    /** The company that issues the platform's own invoices (self-invoicing, §14); both null until set. */
-    @Operation(operationId = "adminGetBillingIssuer", summary = "Empresa que emite las facturas de la plataforma")
-    @GET
-    @Path("/billing/issuer")
-    @Transactional
-    public BillingIssuerRepresentation getBillingIssuer() {
-        admin.require();
-        Map<String, String> settings = billingProvider.getPlatformSettings(SelfInvoicingManager.ISSUER_TENANT, SelfInvoicingManager.ISSUER_COMPANY);
-        return new BillingIssuerRepresentation(settings.get(SelfInvoicingManager.ISSUER_TENANT), settings.get(SelfInvoicingManager.ISSUER_COMPANY));
-    }
-
-    @Operation(operationId = "adminSetBillingIssuer", summary = "Cambia la empresa que emite las facturas de la plataforma")
-    @PUT
-    @Path("/billing/issuer")
-    @Transactional
-    public BillingIssuerRepresentation billingIssuer(BillingIssuerRepresentation body) {
-        String who = admin.require();
-        String tenant = body == null ? null : body.tenantId();
-        String company = body == null ? null : body.companyId();
-        if (tenant == null || company == null) {
-            throw ApiException.invalid("invalid_request", "Indique tenant_id y company_id.", null);
-        }
-        UUID tenantId;
-        UUID companyId;
-        try {
-            tenantId = UUID.fromString(tenant);
-            companyId = UUID.fromString(company);
-        } catch (IllegalArgumentException e) {
-            throw ApiException.invalid("invalid_request", "tenant_id y company_id deben ser UUID.", null);
-        }
-        access.enterAsPlatform(tenantId);
-        if (companyProvider.getCompany(companyId).orElse(null) == null) {
-            throw ApiException.notFound();
-        }
-        AdminLog.PLATFORM_AUDIT.infof("admin %s set the billing issuer to company %s of tenant %s", who, companyId, tenantId);
-        platform.setPlatformSetting(SelfInvoicingManager.ISSUER_TENANT, tenant);
-        platform.setPlatformSetting(SelfInvoicingManager.ISSUER_COMPANY, company);
-        return new BillingIssuerRepresentation(tenant, company);
-    }
-
-    @Operation(operationId = "adminListPlans", summary = "Planes del servicio")
-    @GET
-    @Path("/plans")
-    @Transactional
-    public List<PlanRepresentation> plans() {
-        admin.require();
-        return billingProvider.getPlans().stream().map(r -> new PlanRepresentation(r.code(), r.name(), r.productionPerMonth(), r.betaPerDay(),
-                r.sandboxPerDay(), Boolean.TRUE.equals(r.customSmtp()), Boolean.TRUE.equals(r.webhooks()))).toList();
-    }
-
-    /** Sets a tenant's plan by hand (contracts outside Lago); Lago syncs don't overwrite it. */
-    @Operation(operationId = "adminSetTenantPlan", summary = "Asigna a mano el plan de una organización")
-    @PUT
-    @Path("/tenants/{tenantId}/plan")
-    @Transactional
-    public TenantPlanRepresentation plan(@PathParam("tenantId") UUID tenantId, PlanAssignmentRepresentation body) {
-        TenantScope scope = openTenant(tenantId);
-        String code = body == null ? null : body.plan();
-        if (code == null) {
-            throw ApiException.invalid("invalid_request", "Indique el plan.", null);
-        }
-        entitlements.setPlan(tenantId, code, "admin");
-        auditor.record(scope, "tenant.plan_set", "tenant", tenantId, Map.of("plan", code));
-        return new TenantPlanRepresentation(tenantId, code);
     }
 
     // --- endpoints (endpoint-status, hold/release per endpoint) ---------------------
@@ -563,7 +486,7 @@ public class AdminResource {
     }
 
     private static AdminTenantRepresentation tenant(PlatformProvider.TenantRow t) {
-        return new AdminTenantRepresentation(t.id(), t.name(), t.plan(), t.planSource(), t.status(), t.partnerId(), t.partnerName(), t.createdBy(),
+        return new AdminTenantRepresentation(t.id(), t.name(), t.status(), t.partnerId(), t.partnerName(), t.createdBy(),
                 t.createdAt(), t.sendingPaused(), t.auditHold(), t.archivePlan(), t.deleteAfter(), t.companies());
     }
 }

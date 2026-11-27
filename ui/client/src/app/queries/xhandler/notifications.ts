@@ -36,7 +36,6 @@ export const NOTIFICATION_KINDS = [
   "document.rejected_after_delivery",
   "certificate.expiring",
   "sunat.outage",
-  "quota",
   "pse.authorization_revoked",
   "conformity.objected",
   "sire.deadline",

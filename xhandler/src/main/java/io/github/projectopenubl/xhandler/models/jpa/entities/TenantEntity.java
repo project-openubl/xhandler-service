@@ -18,7 +18,6 @@ public class TenantEntity extends PanacheEntityBase {
 
     private UUID partnerId;
     private String name;
-    private String plan = "free";
     private String status = "active";
     private int retentionYears = 10;
     private boolean auditHold;
@@ -27,9 +26,6 @@ public class TenantEntity extends PanacheEntityBase {
     private boolean sendingPaused;
     /** Where tenant notifications are emailed (DESIGN.md §26.6) */
     private String notificationEmail;
-    private String billingRuc;
-    private String billingName;
-    private String billingEmail;
     /** Exit (DESIGN.md §13): kept past the exit period instead of deleted */
     private boolean archivePlan;
     private Instant exitRequestedAt;
@@ -65,14 +61,6 @@ public class TenantEntity extends PanacheEntityBase {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public String getPlan() {
-        return plan;
-    }
-
-    public void setPlan(String plan) {
-        this.plan = plan;
     }
 
     public String getStatus() {
@@ -121,30 +109,6 @@ public class TenantEntity extends PanacheEntityBase {
 
     public void setNotificationEmail(String notificationEmail) {
         this.notificationEmail = notificationEmail;
-    }
-
-    public String getBillingRuc() {
-        return billingRuc;
-    }
-
-    public void setBillingRuc(String billingRuc) {
-        this.billingRuc = billingRuc;
-    }
-
-    public String getBillingName() {
-        return billingName;
-    }
-
-    public void setBillingName(String billingName) {
-        this.billingName = billingName;
-    }
-
-    public String getBillingEmail() {
-        return billingEmail;
-    }
-
-    public void setBillingEmail(String billingEmail) {
-        this.billingEmail = billingEmail;
     }
 
     public boolean isArchivePlan() {

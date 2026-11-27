@@ -4,7 +4,6 @@ import io.github.projectopenubl.xhandler.models.PartnerProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,14 +36,11 @@ public class JpaPartnerProvider implements PartnerProvider {
     }
 
     @Override
-    public List<PartnerTenantUsage> getPartnerTenants(UUID partnerId, Instant from, Instant to) {
+    public List<PartnerTenant> getPartnerTenants(UUID partnerId) {
         @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, name, status, plan_code, production_documents, other_documents
-                        FROM xhandler.partner_tenants(:p, :from, :to)""")
-                .setParameter("p", partnerId).setParameter("from", from).setParameter("to", to).getResultList();
-        return rows.stream().map(r -> new PartnerTenantUsage((UUID) r[0], (String) r[1], (String) r[2], (String) r[3],
-                ((Number) r[4]).longValue(), ((Number) r[5]).longValue())).toList();
+        List<Object[]> rows = em.createNativeQuery("SELECT id, name, status FROM xhandler.partner_tenants(:p)")
+                .setParameter("p", partnerId).getResultList();
+        return rows.stream().map(r -> new PartnerTenant((UUID) r[0], (String) r[1], (String) r[2])).toList();
     }
 
     @Override

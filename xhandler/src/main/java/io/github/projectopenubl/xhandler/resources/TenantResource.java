@@ -35,7 +35,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 
-/** Tenants of the caller, and self-service signup (DESIGN.md §6, §26.8). */
+/** Tenants of the caller, and self-service signup (DESIGN.md §6). */
 @Path("/api/v1/tenants")
 public class TenantResource {
 
@@ -46,13 +46,6 @@ public class TenantResource {
     private final TenantMemberProvider tenantMemberProvider;
 
     private final TenantProvider tenantProvider;
-
-    /** Free tenants a person may create (signup abuse control). */
-    static final int MAX_FREE_TENANTS_PER_USER = 1;
-
-
-
-
 
     private final MembershipProvider membership;
     private final CurrentActor currentActor;
@@ -80,7 +73,7 @@ public class TenantResource {
                 .toList();
     }
 
-    /** Self-service signup: a person creates a free tenant and becomes its owner. */
+    /** Self-service signup: a person creates a tenant and becomes its owner. */
     @APIResponse(responseCode = "201", description = "Cuenta creada.",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = TenantRepresentation.class)))
     @Operation(operationId = "createTenant")
@@ -94,9 +87,6 @@ public class TenantResource {
         if (!actor.emailVerified()) {
             throw new ApiException(403, "email_not_verified", "Debe verificar su correo electrónico antes de crear una cuenta.");
         }
-        if (membership.countFreeTenantsCreatedBy(actor.subject()) >= MAX_FREE_TENANTS_PER_USER) {
-            throw ApiException.conflict("limit_reached", "Ya tiene una cuenta gratuita.");
-        }
 
         UUID tenantId = Ids.newId();
         access.setTenant(tenantId);
@@ -104,16 +94,7 @@ public class TenantResource {
         TenantModel tenant = tenantProvider.newTenant(tenantId);
         representationToModel.updateTenant(request, tenant);
         tenant.setCreatedBy(actor.subject());
-        try {
-            tenantProvider.persist(tenant);
-            tenantProvider.flush();
-        } catch (jakarta.persistence.PersistenceException e) {
-            // Two concurrent signups: the database keeps one free tenant per person
-            if (io.github.projectopenubl.xhandler.utils.Constraints.violated(e).filter("tenant_one_free_per_person"::equals).isPresent()) {
-                throw ApiException.conflict("limit_reached", "Ya tiene una cuenta gratuita.");
-            }
-            throw e;
-        }
+        tenantProvider.persist(tenant);
 
         TenantMemberModel owner = tenantMemberProvider.newTenantMember(Ids.newId());
         owner.setTenantId(tenantId);

@@ -213,8 +213,6 @@ public class DraftResource {
     @Path("/drafts/{draftId}/issue")
     @APIResponse(responseCode = "201", description = "Documento emitido (también la respuesta repetida de una Idempotency-Key ya usada, sin access_url).",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentRepresentation.class)))
-    @APIResponse(responseCode = "402", description = "Sin cuota de documentos en el plan (quota_exceeded).",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @APIResponse(responseCode = "409", description = "El borrador ya se emitió o cambió mientras se emitía, Idempotency-Key en proceso, empresa desactivada o no autorizada.",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @APIResponse(responseCode = "422", description = "El documento no cumple las validaciones (el borrador sigue editable).",

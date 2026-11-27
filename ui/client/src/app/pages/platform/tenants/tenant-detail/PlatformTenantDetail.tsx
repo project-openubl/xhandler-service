@@ -45,13 +45,11 @@ import { getMutationErrorMessage } from "@app/utils/apiError";
 import { tenantStatusLabel } from "@app/utils/tenantPresentation";
 
 import { BulkRetryModal } from "./components/BulkRetryModal";
-import { ChangePlanModal } from "./components/ChangePlanModal";
 import { RegisterDataSubjectRequestModal } from "./components/RegisterDataSubjectRequestModal";
 import { SuppressEmailModal } from "./components/SuppressEmailModal";
 import { TenantCompaniesPanel } from "./components/TenantCompaniesPanel";
 import {
   cancelExitUnavailable,
-  PLAN_SOURCE_LABELS,
   type TenantAction,
   tenantActionConfirmation,
 } from "./tenantActions";
@@ -60,7 +58,7 @@ interface IPlatformTenantDetailProps {
   tenantId: string;
 }
 
-type OpenModal = "plan" | "retry" | "suppress" | "data-subject" | null;
+type OpenModal = "retry" | "suppress" | "data-subject" | null;
 
 const formatDate = (value: string | undefined, format: string) =>
   value ? dayjs(value).format(format) : "-";
@@ -161,10 +159,6 @@ const PlatformTenantDetailContent: React.FC<IPlatformTenantDetailProps> = ({
 
   const fields: { label: string; value: React.ReactNode }[] = [
     { label: "Identificador", value: <code>{tenant.id}</code> },
-    {
-      label: "Plan",
-      value: `${tenant.plan ?? "-"} (${PLAN_SOURCE_LABELS[tenant.plan_source ?? ""] ?? tenant.plan_source ?? "-"})`,
-    },
     { label: "Estado", value: tenantStatusLabel(tenant.status) },
     {
       label: "Socio",
@@ -235,14 +229,6 @@ const PlatformTenantDetailContent: React.FC<IPlatformTenantDetailProps> = ({
           <FlexItem>
             <ActionList>
               <ActionListGroup>
-                <ActionListItem>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setOpenModal("plan")}
-                  >
-                    Cambiar plan
-                  </Button>
-                </ActionListItem>
                 <ActionListItem>
                   <Button
                     variant="secondary"
@@ -396,9 +382,6 @@ const PlatformTenantDetailContent: React.FC<IPlatformTenantDetailProps> = ({
           </StackItem>
         </Stack>
       </PageSection>
-      {openModal === "plan" ? (
-        <ChangePlanModal tenant={tenant} onClose={() => setOpenModal(null)} />
-      ) : null}
       {openModal === "retry" ? (
         <BulkRetryModal
           tenant={tenant}
