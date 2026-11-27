@@ -44,11 +44,11 @@ type XHandlerSpec struct {
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
-	// The api role: REST, SOAP (OSE) and emission. It takes the traffic.
+	// The api role: the REST API and emission. It takes the traffic.
 	// +optional
 	API *RoleSpec `json:"api,omitempty"`
 
-	// The worker role: runs the jobs (SUNAT sends, OSE forwarding, webhooks, reports). It takes no traffic.
+	// The worker role: runs the jobs (SUNAT sends, webhooks, reports). It takes no traffic.
 	// +optional
 	Worker *RoleSpec `json:"worker,omitempty"`
 
@@ -72,11 +72,7 @@ type XHandlerSpec struct {
 	// +optional
 	SunatFakeURL string `json:"sunatFakeUrl,omitempty"`
 
-	// The OSE role.
-	// +optional
-	OSE *OSESpec `json:"ose,omitempty"`
-
-	// The CAPTCHA of the public validity lookup: the UI's widget and the app's verification.
+	// The CAPTCHA of the public document lookup (POST /api/v1/public/lookup): the app's verification.
 	// Without it the lookup refuses every request (there is no test mode in production).
 	// +optional
 	Captcha *CaptchaSpec `json:"captcha,omitempty"`
@@ -98,7 +94,7 @@ type XHandlerSpec struct {
 	// +optional
 	Ingress *IngressSpec `json:"ingress,omitempty"`
 
-	// An egress proxy (Squid) for SUNAT, third-party OSEs and webhooks: HTTPS to public addresses only.
+	// An egress proxy (Squid) for SUNAT and webhooks: HTTPS to public addresses only.
 	// Without it the app refuses webhooks unless XHANDLER_EGRESS_REQUIRE_PROXY is false (additionalOptions).
 	// +optional
 	EgressProxy *EgressProxySpec `json:"egressProxy,omitempty"`
@@ -254,7 +250,7 @@ type StorageSpec struct {
 	SecretKeySecret *corev1.SecretKeySelector `json:"secretKeySecret,omitempty"`
 }
 
-// CaptchaSpec configures the CAPTCHA of the public validity lookup.
+// CaptchaSpec configures the CAPTCHA of the public document lookup.
 type CaptchaSpec struct {
 	// hcaptcha or turnstile (Cloudflare). Default is hcaptcha.
 	// +kubebuilder:validation:Enum=hcaptcha;turnstile
@@ -262,32 +258,14 @@ type CaptchaSpec struct {
 	// +optional
 	Provider string `json:"provider,omitempty"`
 
-	// The provider's public site key, for the UI's widget.
-	// +kubebuilder:validation:MinLength=1
-	// +required
-	SiteKey string `json:"siteKey"`
+	// The provider's public site key, for whoever renders the widget. The app doesn't use it
+	// and the UI has no CAPTCHA page.
+	// +optional
+	SiteKey string `json:"siteKey,omitempty"`
 
 	// The reference to a secret holding the provider's secret key, for the app's verification.
 	// +required
 	SecretKeySecret *corev1.SecretKeySelector `json:"secretKeySecret"`
-}
-
-// OSESpec configures the OSE role.
-// +kubebuilder:validation:XValidation:rule="!has(self.ruc) || size(self.ruc) == 0 || (has(self.environment) && self.environment in ['beta', 'production'])",message="with a ruc, the environment must be beta or production"
-type OSESpec struct {
-	// The RUC the CDR-OSE are issued for. Without it the OSE intake answers "service unavailable".
-	// +kubebuilder:validation:Pattern=`^[0-9]{11}$`
-	// +optional
-	RUC string `json:"ruc,omitempty"`
-
-	// SUNAT environment the documents are forwarded to.
-	// +kubebuilder:validation:Enum=fake;beta;production
-	// +optional
-	Environment string `json:"environment,omitempty"`
-
-	// URL of SUNAT's OSE service, given at registration.
-	// +optional
-	ForwardURL string `json:"forwardUrl,omitempty"`
 }
 
 // TLSSpec configures the TLS of the ingress.

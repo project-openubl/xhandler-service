@@ -110,7 +110,7 @@ spec:
             description: OTLP over HTTP endpoint of the collector, for the app and the engine
           - path: egressProxy.enabled
             displayName: Egress proxy
-            description: Run an egress proxy for SUNAT, third-party OSEs and webhooks
+            description: Run an egress proxy for SUNAT and webhooks
             x-descriptors:
               - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
           - path: networkPolicies.enabled
@@ -140,7 +140,7 @@ spec:
 
     * **Searchpe**, an enterprise solution for managing natural and legal entities in your organization.
     * **xhandler-service**, a multi-tenant service for SUNAT electronic documents: it builds, signs, sends,
-      tracks, delivers and reports facturas, boletas, notas, guías and more, and can act as an OSE.
+      tracks, delivers and reports facturas, boletas, notas, guías and more, as software or as a PSE.
 
     ### Install
     Once you have successfully installed the Operator, proceed to deploy components by creating the required CRs.
@@ -154,7 +154,7 @@ spec:
     * The database migrations, as a Job per image, before the new pods start.
     * The api and worker roles: the Quarkus application with the Rust engine as a sidecar.
     * UI, the web console, which can look RUCs and DNIs up in a Searchpe.
-    * Optionally, an egress proxy for SUNAT and third-party OSEs, and network policies.
+    * Optionally, an egress proxy for SUNAT, and network policies.
 
     xhandler-service needs PostgreSQL (an owner role for the migrations and a non-owner member of
     xhandler_app for the application), an OIDC server (Keycloak), an HSM reachable through PKCS#11 and an

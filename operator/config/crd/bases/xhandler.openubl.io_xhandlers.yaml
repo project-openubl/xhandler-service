@@ -97,8 +97,8 @@ spec:
                   type: object
                 type: array
               api:
-                description: 'The api role: REST, SOAP (OSE) and emission. It takes
-                  the traffic.'
+                description: 'The api role: the REST API and emission. It takes the
+                  traffic.'
                 properties:
                   instances:
                     default: 2
@@ -109,7 +109,7 @@ spec:
                 type: object
               captcha:
                 description: |-
-                  The CAPTCHA of the public validity lookup: the UI's widget and the app's verification.
+                  The CAPTCHA of the public document lookup (POST /api/v1/public/lookup): the app's verification.
                   Without it the lookup refuses every request (there is no test mode in production).
                 properties:
                   provider:
@@ -145,12 +145,12 @@ spec:
                     type: object
                     x-kubernetes-map-type: atomic
                   siteKey:
-                    description: The provider's public site key, for the UI's widget.
-                    minLength: 1
+                    description: |-
+                      The provider's public site key, for whoever renders the widget. The app doesn't use it
+                      and the UI has no CAPTCHA page.
                     type: string
                 required:
                 - secretKeySecret
-                - siteKey
                 type: object
               db:
                 description: In this section you can find all properties related to
@@ -262,7 +262,7 @@ spec:
                 type: object
               egressProxy:
                 description: |-
-                  An egress proxy (Squid) for SUNAT, third-party OSEs and webhooks: HTTPS to public addresses only.
+                  An egress proxy (Squid) for SUNAT and webhooks: HTTPS to public addresses only.
                   Without it the app refuses webhooks unless XHANDLER_EGRESS_REQUIRE_PROXY is false (additionalOptions).
                 properties:
                   enabled:
@@ -673,29 +673,6 @@ spec:
                     description: Oidc server url. For instance, 'https://keycloak.example.com/realms/xhandler'.
                     type: string
                 type: object
-              ose:
-                description: The OSE role.
-                properties:
-                  environment:
-                    description: SUNAT environment the documents are forwarded to.
-                    enum:
-                    - fake
-                    - beta
-                    - production
-                    type: string
-                  forwardUrl:
-                    description: URL of SUNAT's OSE service, given at registration.
-                    type: string
-                  ruc:
-                    description: The RUC the CDR-OSE are issued for. Without it the
-                      OSE intake answers "service unavailable".
-                    pattern: ^[0-9]{11}$
-                    type: string
-                type: object
-                x-kubernetes-validations:
-                - message: with a ruc, the environment must be beta or production
-                  rule: '!has(self.ruc) || size(self.ruc) == 0 || (has(self.environment)
-                    && self.environment in [''beta'', ''production''])'
               otel:
                 description: 'OpenTelemetry: where the app and the engine export their
                   traces.'
@@ -2877,8 +2854,8 @@ spec:
                     x-kubernetes-map-type: atomic
                 type: object
               worker:
-                description: 'The worker role: runs the jobs (SUNAT sends, OSE forwarding,
-                  webhooks, reports). It takes no traffic.'
+                description: 'The worker role: runs the jobs (SUNAT sends, webhooks,
+                  reports). It takes no traffic.'
                 properties:
                   instances:
                     default: 2
