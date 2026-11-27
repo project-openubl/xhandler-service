@@ -159,11 +159,9 @@ class TenancyTest {
     }
 
     @Test
-    void roles_allow_by_rank_and_support_only_reads() {
+    void roles_allow_by_rank() {
         assertTrue(Role.OWNER.allows(Role.ADMIN));
         assertTrue(Role.OPERATOR.allows(Role.VIEWER));
         assertTrue(!Role.VIEWER.allows(Role.OPERATOR));
-        assertTrue(Role.SUPPORT.allows(Role.VIEWER));
-        assertTrue(!Role.SUPPORT.allows(Role.OPERATOR));
     }
 }

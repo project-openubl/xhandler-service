@@ -13,13 +13,6 @@ describe("tenantRoleAllows", () => {
     );
   });
 
-  it("lets support only read", () => {
-    expect(tenantRoleAllows({ role: "support", minimum: "viewer" })).toBe(true);
-    expect(tenantRoleAllows({ role: "support", minimum: "operator" })).toBe(
-      false,
-    );
-  });
-
   it("allows nothing without a known role", () => {
     expect(tenantRoleAllows({ role: undefined, minimum: "viewer" })).toBe(
       false,

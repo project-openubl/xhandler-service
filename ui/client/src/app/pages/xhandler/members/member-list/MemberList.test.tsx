@@ -28,7 +28,6 @@ vi.mock(import("@app/hooks/useTenantRole"), () => ({
     admin: "Administrador",
     operator: "Operador",
     viewer: "Lector",
-    support: "Soporte",
   },
   useTenantRole: vi.fn(),
 }));

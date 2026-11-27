@@ -444,7 +444,7 @@ public class AdminResource {
         if (tenantProvider.getTenant(tenantId).orElse(null) == null) {
             throw ApiException.notFound();
         }
-        return new TenantScope(tenantId, new Actor("admin", adminName.substring("admin:".length()), false, false), Role.PLATFORM);
+        return new TenantScope(tenantId, new Actor("admin", adminName.substring("admin:".length()), false), Role.PLATFORM);
     }
 
     private TenantSendingRepresentation pauseTenant(UUID tenantId, boolean paused) {

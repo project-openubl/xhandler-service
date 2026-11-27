@@ -26,7 +26,7 @@ test("platform admins list every organization and search them by name", async ({
 test("a user without platform-admin sees no Plataforma", async ({
   browser,
 }) => {
-  // carol is platform support, not a platform admin (hack/keycloak).
+  // carol has no platform role (hack/keycloak).
   const context = await browser.newContext({ storageState: undefined });
   const page = await context.newPage();
   await authenticateAs(page, { username: "carol", password: "carol" });

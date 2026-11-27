@@ -4,10 +4,10 @@ package io.github.projectopenubl.xhandler.security;
  * Who is calling: a person ({@code kind=user}, subject = token {@code sub}) or a machine client
  * ({@code kind=client}, subject = token {@code azp}, the client id).
  */
-public record Actor(String kind, String subject, boolean emailVerified, boolean platformSupport) {
+public record Actor(String kind, String subject, boolean emailVerified) {
 
     /** Platform work (workers, schedules, the admin API's jobs). */
-    public static final Actor PLATFORM = new Actor("platform", "worker", false, false);
+    public static final Actor PLATFORM = new Actor("platform", "worker", false);
 
     public boolean isUser() {
         return "user".equals(kind);

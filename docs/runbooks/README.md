@@ -3,8 +3,7 @@
 Every alert in `deploy/monitoring/prometheusrule.yaml` links to one of these (DESIGN.md §18, §26.4).
 They assume `kubectl` access to the namespace and a token for the admin API (`/api/admin/v1`,
 realm role `platform-admin`; in the dev realm, the `xhandler-admin` service account). Platform
-operators never read tenant data outside an approved support session (§26.1); the admin API shows
-identifiers and states, not content.
+operators never read tenant data (§26.1); the admin API shows identifiers and states, not content.
 
 Set up the `api` helper the runbooks use:
 

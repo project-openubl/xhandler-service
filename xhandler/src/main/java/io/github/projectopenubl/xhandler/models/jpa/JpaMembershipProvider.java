@@ -39,15 +39,6 @@ public class JpaMembershipProvider implements MembershipProvider {
     }
 
     @Override
-    public boolean hasSupportSession(UUID tenantId, String operator) {
-        Object active = em.createNativeQuery("SELECT xhandler.has_support_session(:tenant, :operator)")
-                .setParameter("tenant", tenantId)
-                .setParameter("operator", operator)
-                .getSingleResult();
-        return Boolean.TRUE.equals(active);
-    }
-
-    @Override
     public void setTenant(UUID tenantId) {
         em.createNativeQuery("SELECT set_config('app.tenant_id', :tenant, true)")
                 .setParameter("tenant", tenantId.toString())

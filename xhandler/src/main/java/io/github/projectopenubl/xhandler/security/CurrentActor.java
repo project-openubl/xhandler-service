@@ -9,8 +9,6 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
 @RequestScoped
 public class CurrentActor {
 
-    static final String PLATFORM_SUPPORT_ROLE = "platform-support";
-
     private final SecurityIdentity identity;
     private final JsonWebToken token;
 
@@ -30,10 +28,9 @@ public class CurrentActor {
         String azp = token.getClaim("azp");
         String username = token.getClaim("preferred_username");
         if (clientId != null && clientId.equals(azp) && ("service-account-" + azp).equals(username)) {
-            return new Actor("client", azp, false, false);
+            return new Actor("client", azp, false);
         }
         Object verified = token.getClaim("email_verified");
-        return new Actor("user", token.getSubject(), Boolean.TRUE.equals(verified) || "true".equals(String.valueOf(verified)),
-                identity.hasRole(PLATFORM_SUPPORT_ROLE));
+        return new Actor("user", token.getSubject(), Boolean.TRUE.equals(verified) || "true".equals(String.valueOf(verified)));
     }
 }

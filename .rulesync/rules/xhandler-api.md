@@ -57,7 +57,7 @@ design is `docs/DESIGN.md` §12; behaviour notes are in
 
 - The user's role per tenant comes from `GET /tenants`; gate actions with
   `useTenantRole().can(minimum)` / `disabledProps(minimum)`, whose order mirrors the service's
-  `Role#allows` (owner > admin > operator > viewer; support only reads). Use the same minimum
+  `Role#allows` (owner > admin > operator > viewer). Use the same minimum
   role the endpoint's `TenantAccess.enter` requires.
 
 ## Admin API (platform console)

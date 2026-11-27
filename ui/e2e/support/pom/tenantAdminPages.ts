@@ -86,13 +86,3 @@ export class AuditPage extends DataViewList {
     await this.page.goto(`/organizaciones/${tenantId}/auditoria`);
   }
 }
-
-export class SupportSessionsPage extends DataViewList {
-  constructor(page: Page) {
-    super(page, "Soporte", "Tabla de sesiones de soporte");
-  }
-
-  async goto(tenantId: string) {
-    await this.page.goto(`/organizaciones/${tenantId}/soporte`);
-  }
-}

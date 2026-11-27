@@ -32,6 +32,7 @@ issuing); its task ADRs become [0007](0007-job-reporting.md).
 | [0012](0012-platform-console-admin-api.md)        | Platform admins use the admin API through its own OpenAPI document  |
 | [0013](0013-support-sessions.md)                  | Support sessions: operators ask, organizations approve              |
 | [0014](0014-pse-first-no-ose.md)                  | PSE first: no OSE role and no OSE route until PSE is complete       |
+| [0015](0015-no-support-sessions.md)               | No support sessions: operators work through the admin API           |
 
 ## Template
 

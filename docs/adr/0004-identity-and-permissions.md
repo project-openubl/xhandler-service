@@ -12,7 +12,7 @@ Both backends trust one Keycloak realm. searchpe's old UI also managed its own b
 (a Users page: create, edit, delete, passwords) and a profile form that renamed them; with OIDC
 those users and forms have no meaning. Permissions differ per backend: searchpe grants `search`,
 `version:write` and `admin:app` (realm roles, reported by `whoami`); xhandler grants a role per
-tenant membership (owner, admin, operator, viewer; support reads only).
+tenant membership (owner, admin, operator, viewer).
 
 ## Rules
 

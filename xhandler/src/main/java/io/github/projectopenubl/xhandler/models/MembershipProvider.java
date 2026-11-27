@@ -19,8 +19,6 @@ public interface MembershipProvider {
     /** The caller's role in the tenant through its partner ({@code xhandler.partner_role}); empty if none. */
     Optional<String> getPartnerRole(UUID tenantId, String kind, String subject);
 
-    /** Whether the platform operator has an active support session on the tenant. */
-    boolean hasSupportSession(UUID tenantId, String operator);
 
     /** {@code set_config('app.tenant_id', tenantId, true)}: row-level security shows that tenant until the transaction ends. */
     void setTenant(UUID tenantId);
