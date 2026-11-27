@@ -53,14 +53,11 @@ public final class EngineModels {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Credentials(String username, String password, String clientId, String clientSecret) {}
 
-    /** Overrides the environment's URLs, e.g. for a third-party OSE (DESIGN.md §3.2). */
-    public record Urls(String invoice, String perceptionRetention, String despatch) {}
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record SendRequest(String xml, Environment environment, Credentials credentials) {}
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record SendRequest(String xml, Environment environment, Credentials credentials, Urls urls) {}
-
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record VerifyTicketRequest(String xml, String ticket, Environment environment, Credentials credentials, Urls urls) {}
+    public record VerifyTicketRequest(String xml, String ticket, Environment environment, Credentials credentials) {}
 
     /**
      * SUNAT's answer. {@code status}: accepted, rejected, exception, in_progress, unknown (SUNAT may

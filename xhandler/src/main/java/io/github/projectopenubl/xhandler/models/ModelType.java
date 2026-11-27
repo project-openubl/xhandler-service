@@ -9,7 +9,6 @@ public enum ModelType {
     DOCUMENT_EVENT,
     DOCUMENT_FILE,
     JOB,
-    OSE_ENDPOINT,
     SERIES,
     SIGNING_KEY,
     SUPPORT_SESSION,

@@ -116,7 +116,7 @@ public interface DocumentModel extends Model {
 
     void setDigestValue(String digestValue);
 
-    /** Where it is sent: {@code <env>:<service>} or {@code ose:<id>} (§24.2) */
+    /** Where it is sent: {@code <env>:<service>} (§24.2) */
     String getEndpoint();
 
     void setEndpoint(String endpoint);

@@ -1,12 +1,10 @@
 package io.github.projectopenubl.xhandler.managers;
 
 import io.github.projectopenubl.xhandler.models.CredentialProvider;
-import io.github.projectopenubl.xhandler.models.OseEndpointProvider;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
 import io.github.projectopenubl.xhandler.models.CompanyModel;
-import io.github.projectopenubl.xhandler.models.OseEndpointModel;
 import io.github.projectopenubl.xhandler.xml.EngineModels;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -17,19 +15,16 @@ import java.util.UUID;
 
 /**
  * Where and with which credentials a document is sent (DESIGN.md §3.2, §11.2), decided when the
- * document is created. The endpoint id groups documents for the reconciler's breakers and caps:
- * {@code <env>:<service>} for SUNAT, {@code ose:<id>} for a third-party OSE. GRE always goes to
- * SUNAT. The submission route is a regulatory status: an OSE-obligated company can't send directly.
+ * document is created. Every document goes to SUNAT directly; the endpoint id ({@code
+ * <env>:<service>}) groups documents for the reconciler's breakers and caps.
  */
 @ApplicationScoped
 public class RouteManager {
 
     private final CredentialProvider credentialProvider;
 
-    private final OseEndpointProvider oseEndpointProvider;
-
     /** Where to send, and as whom. Null credentials: the environment's shared user (beta, fake). */
-    public record Target(EngineModels.Environment environment, EngineModels.Credentials credentials, EngineModels.Urls urls) {}
+    public record Target(EngineModels.Environment environment, EngineModels.Credentials credentials) {}
 
     /** The endpoint and credential a new document is sent with. */
     public record Assignment(String endpoint, UUID credentialId) {}
@@ -40,9 +35,8 @@ public class RouteManager {
     private final io.github.projectopenubl.xhandler.managers.AuditManager auditor;
 
     public RouteManager(CredentialManager credentials, io.github.projectopenubl.xhandler.managers.PlatformCredentialManager platformCredentials,
-            io.github.projectopenubl.xhandler.managers.AuditManager auditor, OseEndpointProvider oseEndpointProvider, CredentialProvider credentialProvider) {
+            io.github.projectopenubl.xhandler.managers.AuditManager auditor, CredentialProvider credentialProvider) {
         this.credentialProvider = credentialProvider;
-        this.oseEndpointProvider = oseEndpointProvider;
         this.auditor = auditor;
         this.credentials = credentials;
         this.platformCredentials = platformCredentials;
@@ -74,22 +68,6 @@ public class RouteManager {
                     ApiException.invalid("no_credentials", "La plataforma no tiene usuarios SOL de PSE activos.", null));
             return new Assignment(endpoint(sunatEnv, tipoComprobante), member);
         }
-        // Test environments never reach a real OSE: only production documents go through it
-        boolean viaOse = "ose".equals(company.getSubmissionRoute()) && !"despatch".equals(service) && "production".equals(sunatEnv);
-        if (!viaOse && company.isOseObligated() && "production".equals(sunatEnv) && !"despatch".equals(service)) {
-            throw ApiException.invalid("invalid_route",
-                    "La empresa está obligada a emitir a través de un OSE: configure su OSE antes de emitir.", null);
-        }
-        if (viaOse) {
-            OseEndpointModel ose = oseEndpointProvider.getOseEndpointByCompany(company.getId()).orElseThrow(() ->
-                    ApiException.invalid("invalid_route", "La empresa usa un OSE pero no tiene uno configurado.", null));
-            if ("perception".equals(service) && ose.getPerceptionUrl() == null) {
-                throw ApiException.invalid("invalid_route", "El OSE de la empresa no tiene un servicio para percepciones y retenciones.", null);
-            }
-            UUID credential = credentialId(company, "ose").orElseThrow(() ->
-                    ApiException.invalid("no_credentials", "Registre las credenciales del OSE de la empresa.", null));
-            return new Assignment("ose:" + ose.getId() + ":" + service, credential);
-        }
         // A company's real SOL/GRE credentials go to SUNAT production only, never to beta or the fake
         Optional<UUID> credential = "production".equals(sunatEnv)
                 ? credentialId(company, "despatch".equals(service) ? "gre" : "sol")
@@ -103,14 +81,11 @@ public class RouteManager {
     }
 
     /**
-     * The route of a document that follows another (a voiding): the same route family as the
-     * original — an RA for a factura sent directly goes directly, whatever the company's route now.
+     * The route of a document that follows another (a voiding): a PSE document is voided by the
+     * PSE, whatever the company's emission mode now.
      */
     @Transactional(Transactional.TxType.MANDATORY)
     public Assignment assignLike(CompanyModel company, String sunatEnv, String tipoComprobante, DocumentModel original) {
-        if (original.getEndpoint().startsWith("ose:")) {
-            return assign(company, sunatEnv, tipoComprobante);
-        }
         if ("pse".equals(original.getEmissionMode()) && "production".equals(sunatEnv)) {
             // A PSE document is voided by the PSE too: the platform's pool
             UUID member = platformCredentials.pick("pse_sol").orElseThrow(() ->
@@ -133,33 +108,22 @@ public class RouteManager {
     @Transactional(Transactional.TxType.MANDATORY)
     public Target target(TenantScope scope, CompanyModel company, DocumentModel document) {
         EngineModels.Environment environment = EngineModels.Environment.of(document.getSunatEnv());
-        EngineModels.Urls urls = null;
         String kind = document.isGuia() ? "gre" : "sol";
-        if (document.getEndpoint().startsWith("ose:")) {
-            kind = "ose";
-            UUID oseId = UUID.fromString(document.getEndpoint().split(":")[1]);
-            OseEndpointModel ose = oseEndpointProvider.getOseEndpoint(oseId).orElse(null);
-            if (ose == null) {
-                throw new MissingCredentials("ose");
-            }
-            urls = new EngineModels.Urls(ose.getInvoiceUrl(), ose.getPerceptionUrl(), null);
-        }
         EngineModels.Credentials secret = null;
         if ("pse".equals(document.getEmissionMode()) && "production".equals(document.getSunatEnv()) && !document.isGuia()) {
             Map<String, String> fields = platformCredentials.read(document.getCredentialId(), "pse_sol", "send:" + document.getId());
             auditor.record(scope, "platform_credential.used", "document", document.getId(), Map.of("purpose", "pse_sol"));
-            return new Target(environment, new EngineModels.Credentials(fields.get("username"), fields.get("password"), null, null), null);
+            return new Target(environment, new EngineModels.Credentials(fields.get("username"), fields.get("password"), null, null));
         }
         if (document.getCredentialId() != null) {
             String purpose = "send:" + document.getId();
-            Map<String, String> fields = credentials.read(scope, company, kind, purpose).orElseThrow(() -> new MissingCredentials(
-                    document.getEndpoint().startsWith("ose:") ? "ose" : document.isGuia() ? "gre" : "sol"));
+            Map<String, String> fields = credentials.read(scope, company, kind, purpose).orElseThrow(() -> new MissingCredentials(kind));
             secret = new EngineModels.Credentials(fields.get("username"), fields.get("password"), fields.get("client_id"),
                     fields.get("client_secret"));
         } else if (environment == EngineModels.Environment.PRODUCTION) {
             throw new MissingCredentials(kind);
         }
-        return new Target(environment, secret, urls);
+        return new Target(environment, secret);
     }
 
     /** The company has no credential to send this document with. */

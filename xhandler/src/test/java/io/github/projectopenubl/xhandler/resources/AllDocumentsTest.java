@@ -29,7 +29,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** P4: voiding (RA, RC estado 3, RR), routes (third-party OSE, GRE), exchange rates, lost summary tickets. */
+/** P4: voiding (RA, RC estado 3, RR), routes (GRE), exchange rates, lost summary tickets. */
 @QuarkusTest
 @QuarkusTestResource(EngineStub.class)
 class AllDocumentsTest {
@@ -176,50 +176,6 @@ class AllDocumentsTest {
         awaitStatus(id, "voided");
     }
 
-    /** A production company with its own certificate (production never signs with the demo key). */
-    UUID productionCompany() throws Exception {
-        String ruc = io.github.projectopenubl.xhandler.Api.randomRuc();
-        UUID production = companies.verified(tenant, "production", ruc);
-        java.io.File pfx = io.github.projectopenubl.xhandler.keys.TestCertificates.generate(ruc);
-        io.restassured.RestAssured.given().auth().oauth2(new io.quarkus.test.keycloak.client.KeycloakTestClient().getAccessToken("alice"))
-                .multiPart("file", pfx, "application/x-pkcs12").multiPart("password", io.github.projectopenubl.xhandler.keys.TestCertificates.PASSWORD)
-                .put(base + "/companies/" + production + "/certificate").then().statusCode(200);
-        as("alice").body(Map.of("username", ruc + "USER", "password", "x")).put(base + "/companies/" + production + "/credentials/sol")
-                .then().statusCode(200);
-        return production;
-    }
-
-    @Test
-    void a_company_can_send_through_a_third_party_ose() throws Exception {
-        UUID production = productionCompany();
-        company = production;
-        as("alice").body(Map.of("submission_route", "ose", "ose", Map.of("name", "OSE Uno", "invoice_url", "http://127.0.0.1:1/ose/billService",
-                        "username", "20123456789OSEUSER", "password", "secreto")))
-                .put(base + "/companies/" + company + "/route").then().statusCode(200).body("submission_route", equalTo("ose"));
-        String id = emit(document("Invoice", Map.of()));
-        awaitStatus(id, "accepted");
-        assertTrue(((String) get(id).get("serie_numero")).startsWith("F001"));
-        String send = EngineStub.lastBody("/v1/send");
-        assertTrue(send.contains("http://127.0.0.1:1/ose/billService"), send);
-        assertTrue(send.contains("20123456789OSEUSER"), "sent with the OSE's credentials");
-        // GRE always goes to SUNAT, whatever the route
-        as("alice").body(Map.of("username", "20123456789GREUSER", "password", "x", "client_id", "c", "client_secret", "s"))
-                .put(base + "/companies/" + company + "/credentials/gre").then().statusCode(200);
-        String guia = emit(document("DespatchAdvice", Map.of()));
-        awaitStatus(guia, "accepted");
-        assertTrue(!EngineStub.lastBody("/v1/send").contains("/ose/"), "GRE never through the OSE");
-    }
-
-    @Test
-    void test_environments_never_use_the_ose_route() {
-        as("alice").body(Map.of("submission_route", "ose", "ose", Map.of("name", "OSE Uno", "invoice_url", "http://127.0.0.1:1/ose/billService",
-                        "username", "20123456789OSEUSER", "password", "secreto")))
-                .put(base + "/companies/" + company + "/route").then().statusCode(200);
-        String id = emit(document("Invoice", Map.of()));
-        awaitStatus(id, "accepted");
-        assertTrue(!EngineStub.lastBody("/v1/send").contains("/ose/"), "a sandbox document never reaches the real OSE");
-    }
-
     @Test
     void a_voiding_in_exception_keeps_the_original_voiding_until_canceled() {
         EngineStub.on("/v1/send", body -> body.contains("RA-")
@@ -263,21 +219,6 @@ class AllDocumentsTest {
                 .reduce((a, b) -> b).orElseThrow().body();
         assertTrue(lastRr.contains("\"numero\":" + firstNumero.split("-")[1]), lastRr);
         awaitStatus(second, "voided");
-    }
-
-    @Test
-    void an_ose_obligated_company_cannot_send_directly() {
-        as("olga").body(Map.of("ose_obligated", true))
-                .put("/api/admin/v1/tenants/" + tenant + "/companies/" + company + "/ose-obligated").then().statusCode(200);
-        as("alice").body(Map.of("submission_route", "sunat")).put(base + "/companies/" + company + "/route").then().statusCode(409)
-                .body("kind", equalTo("ose_obligated"));
-        UUID production = companies.verified(tenant, "production");
-        as("alice").body(Map.of("username", "20000000001USER", "password", "x"))
-                .put(base + "/companies/" + production + "/credentials/sol").then().statusCode(200);
-        as("olga").body(Map.of("ose_obligated", true))
-                .put("/api/admin/v1/tenants/" + tenant + "/companies/" + production + "/ose-obligated").then().statusCode(200);
-        as("alice").body(document("Invoice", Map.of())).post(base + "/companies/" + production + "/documents").then().statusCode(422)
-                .body("kind", equalTo("invalid_route"));
     }
 
     @Test

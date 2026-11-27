@@ -124,26 +124,6 @@ public class CompanyAdapter implements CompanyModel, JpaModel<CompanyEntity> {
     }
 
     @Override
-    public String getSubmissionRoute() {
-        return entity.getSubmissionRoute();
-    }
-
-    @Override
-    public void setSubmissionRoute(String submissionRoute) {
-        entity.setSubmissionRoute(submissionRoute);
-    }
-
-    @Override
-    public boolean isOseObligated() {
-        return entity.isOseObligated();
-    }
-
-    @Override
-    public void setOseObligated(boolean oseObligated) {
-        entity.setOseObligated(oseObligated);
-    }
-
-    @Override
     public String getPdfFormat() {
         return entity.getPdfFormat();
     }

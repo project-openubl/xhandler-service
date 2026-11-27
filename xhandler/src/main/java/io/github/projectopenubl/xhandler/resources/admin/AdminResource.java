@@ -29,13 +29,11 @@ import io.github.projectopenubl.xhandler.representations.idm.admin.AdminCompanyR
 import io.github.projectopenubl.xhandler.representations.idm.admin.AdminPartnerRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.AdminTenantRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.BillingIssuerRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.admin.CompanyOseObligatedRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.CompanySendingRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.EmailSuppressionRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.JobSummaryRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.KeyRotationRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.NewPartnerRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.admin.OseObligatedRequestRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.PartitionsRepairedRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.PartnerCreatedRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.admin.PartnerMemberAssignmentRepresentation;
@@ -177,7 +175,7 @@ public class AdminResource {
         return tenant(platform.getTenant(tenantId).orElseThrow(ApiException::notFound));
     }
 
-    /** The companies of a tenant, to hold them or set their OSE obligation; the read is in the tenant's audit log. */
+    /** The companies of a tenant, to hold them; the read is in the tenant's audit log. */
     @Operation(operationId = "adminListTenantCompanies", summary = "Empresas de una organización (queda en su auditoría)")
     @GET
     @Path("/tenants/{tenantId}/companies")
@@ -186,7 +184,7 @@ public class AdminResource {
         TenantScope scope = openTenant(tenantId);
         List<AdminCompanyRepresentation> companies = companyProvider.getCompanies(0, 1000).stream()
                 .map(c -> new AdminCompanyRepresentation(c.getId(), c.getRuc(), c.getRazonSocial(), c.getSunatEnv(), c.getEmissionMode(),
-                        c.getSubmissionRoute(), c.getRucVerifiedAt(), c.isSendingPaused(), c.isOseObligated()))
+                        c.getRucVerifiedAt(), c.isSendingPaused()))
                 .toList();
         auditor.record(scope, "tenant.companies_listed", "tenant", tenantId);
         return companies;
@@ -224,27 +222,6 @@ public class AdminResource {
     @Transactional
     public CompanySendingRepresentation releaseCompany(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId) {
         return pauseCompany(tenantId, companyId, false);
-    }
-
-    /** The OSE obligation is a regulatory status set by the platform (§3.2), not by the tenant. */
-    @Operation(operationId = "adminSetCompanyOseObligated", summary = "Marca si una empresa está obligada a enviar por un OSE")
-    @PUT
-    @Path("/tenants/{tenantId}/companies/{companyId}/ose-obligated")
-    @Transactional
-    public CompanyOseObligatedRepresentation oseObligated(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId,
-            OseObligatedRequestRepresentation body) {
-        TenantScope scope = openTenant(tenantId);
-        CompanyModel company = companyProvider.getCompanyForUpdate(companyId).orElse(null);
-        if (company == null) {
-            throw ApiException.notFound();
-        }
-        if (body == null || body.oseObligated() == null) {
-            throw ApiException.invalid("invalid_request", "Indique ose_obligated (true o false).", null);
-        }
-        boolean value = body.oseObligated();
-        company.setOseObligated(value);
-        auditor.record(scope, "company.ose_obligated", "company", companyId, Map.of("value", value));
-        return new CompanyOseObligatedRepresentation(companyId, value);
     }
 
     /** Bounce processing (§26.5): the platform's email provider reports hard bounces and complaints. */

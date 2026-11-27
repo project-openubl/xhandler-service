@@ -157,10 +157,6 @@ public class PseResource {
             if (!pseProvider.hasApprovedAuthorization(companyId)) {
                 throw ApiException.conflict("pse_not_authorized", "La autorización a la plataforma como PSE no está registrada o aún no fue aprobada.");
             }
-            if (company.isOseObligated() || "ose".equals(company.getSubmissionRoute())) {
-                // A company that sends through an OSE can't also send directly as PSE (RS 117-2017 art. 12.2)
-                throw ApiException.conflict("pse_not_allowed", "La empresa emite a través de un OSE: no puede usar a la plataforma como PSE.");
-            }
             if ("production".equals(company.getSunatEnv()) && platformKeys.active("pse").isEmpty()) {
                 throw ApiException.conflict("pse_unavailable", "La plataforma aún no opera como PSE en producción.");
             }

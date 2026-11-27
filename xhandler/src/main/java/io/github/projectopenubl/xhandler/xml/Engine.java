@@ -53,18 +53,17 @@ public class Engine {
     }
 
     public EngineModels.SendResponse send(String xml, EngineModels.Environment environment) {
-        return send(xml, environment, null, null);
+        return send(xml, environment, null);
     }
 
     public EngineModels.SendResponse send(
-            String xml, EngineModels.Environment environment, EngineModels.Credentials credentials, EngineModels.Urls urls) {
-        return call(() -> client.send(new EngineModels.SendRequest(xml, environment, credentials, urls)));
+            String xml, EngineModels.Environment environment, EngineModels.Credentials credentials) {
+        return call(() -> client.send(new EngineModels.SendRequest(xml, environment, credentials)));
     }
 
     public EngineModels.SendResponse verifyTicket(
-            String xml, String ticket, EngineModels.Environment environment, EngineModels.Credentials credentials,
-            EngineModels.Urls urls) {
-        return call(() -> client.verifyTicket(new EngineModels.VerifyTicketRequest(xml, ticket, environment, credentials, urls)));
+            String xml, String ticket, EngineModels.Environment environment, EngineModels.Credentials credentials) {
+        return call(() -> client.verifyTicket(new EngineModels.VerifyTicketRequest(xml, ticket, environment, credentials)));
     }
 
     public EngineModels.StatusCdrResponse statusCdr(

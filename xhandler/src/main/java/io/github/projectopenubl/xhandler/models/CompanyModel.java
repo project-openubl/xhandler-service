@@ -44,16 +44,6 @@ public interface CompanyModel extends Model {
 
     void setDeliveredOnEmitDefault(boolean deliveredOnEmitDefault);
 
-    /** sunat or ose (a third-party OSE, DESIGN.md §3.2) */
-    String getSubmissionRoute();
-
-    void setSubmissionRoute(String submissionRoute);
-
-    /** Must send through an OSE (a regulatory status, set by the platform) */
-    boolean isOseObligated();
-
-    void setOseObligated(boolean oseObligated);
-
     /** a4, ticket80 or ticket58 (DESIGN.md §11.6) */
     String getPdfFormat();
 

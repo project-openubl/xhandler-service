@@ -107,7 +107,7 @@ public class JpaNotificationProvider implements NotificationProvider {
         em.createNativeStatement("""
                         INSERT INTO xhandler.endpoint_alert (endpoint, state)
                         SELECT e.id, 'suspect' FROM xhandler.sunat_endpoint e
-                        WHERE (e.id LIKE 'production:%' OR e.id LIKE 'ose:%') AND e.breaker_state <> 'closed'
+                        WHERE e.id LIKE 'production:%' AND e.breaker_state <> 'closed'
                         ON CONFLICT (endpoint) DO UPDATE SET state = 'suspect', at = now()
                         WHERE endpoint_alert.state = 'up'""").execute();
         em.createNativeStatement("""

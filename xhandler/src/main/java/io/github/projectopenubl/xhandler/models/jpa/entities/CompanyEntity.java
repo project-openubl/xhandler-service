@@ -29,10 +29,6 @@ public class CompanyEntity extends PanacheEntityBase {
     private String email;
     /** Default of {@code delivered} on emit (usually true for POS, DESIGN.md §9.3) */
     private boolean deliveredOnEmitDefault;
-    /** sunat or ose (a third-party OSE, DESIGN.md §3.2) */
-    private String submissionRoute = "sunat";
-    /** Must send through an OSE (a regulatory status, set by the platform) */
-    private boolean oseObligated;
     /** a4, ticket80 or ticket58 (DESIGN.md §11.6) */
     private String pdfFormat = "a4";
 
@@ -140,22 +136,6 @@ public class CompanyEntity extends PanacheEntityBase {
 
     public void setDeliveredOnEmitDefault(boolean deliveredOnEmitDefault) {
         this.deliveredOnEmitDefault = deliveredOnEmitDefault;
-    }
-
-    public String getSubmissionRoute() {
-        return submissionRoute;
-    }
-
-    public void setSubmissionRoute(String submissionRoute) {
-        this.submissionRoute = submissionRoute;
-    }
-
-    public boolean isOseObligated() {
-        return oseObligated;
-    }
-
-    public void setOseObligated(boolean oseObligated) {
-        this.oseObligated = oseObligated;
     }
 
     public String getPdfFormat() {

@@ -65,7 +65,6 @@ class PlatformConsoleTest {
         as("olga").get("/api/admin/v1/tenants/" + tenant + "/companies").then().statusCode(200)
                 .body("id", equalTo(java.util.List.of(company.toString())))
                 .body("[0].ruc", equalTo(ruc))
-                .body("[0].ose_obligated", equalTo(false))
                 .body("[0].sending_paused", equalTo(false));
         as("alice").get("/api/v1/tenants/" + tenant + "/audit?limit=200").then().statusCode(200)
                 .body("items.action", hasItem("tenant.companies_listed"));

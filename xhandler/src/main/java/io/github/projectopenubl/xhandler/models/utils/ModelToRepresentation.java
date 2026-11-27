@@ -6,7 +6,6 @@ import io.github.projectopenubl.xhandler.models.CompanyModel;
 import io.github.projectopenubl.xhandler.models.DocumentDraftModel;
 import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.models.JobModel;
-import io.github.projectopenubl.xhandler.models.OseEndpointModel;
 import io.github.projectopenubl.xhandler.models.SeriesModel;
 import io.github.projectopenubl.xhandler.models.SigningKeyModel;
 import io.github.projectopenubl.xhandler.models.SupportSessionModel;
@@ -22,7 +21,6 @@ import io.github.projectopenubl.xhandler.representations.idm.DocumentStateRepres
 import io.github.projectopenubl.xhandler.representations.idm.DraftRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.JobRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.MemberRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.RouteRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.SeriesRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.SessionRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.TenantRepresentation;
@@ -43,19 +41,13 @@ public class ModelToRepresentation {
     public CompanyRepresentation toRepresentation(CompanyModel c) {
         return new CompanyRepresentation(c.getId(), c.getRuc(), c.getRazonSocial(), c.getNombreComercial(), c.getSunatEnv(), c.getEmissionMode(),
                 c.getRucVerifiedAt(), c.getEmail(), c.isDeliveredOnEmitDefault(), c.isSendingPaused(), c.getDireccion(), c.getPdfFormat(),
-                c.isEmailOnAccept(), c.getLogoRef() != null, c.getSubmissionRoute(), c.getLibroReclamacionesUrl(), c.getEmailSubject(),
+                c.isEmailOnAccept(), c.getLogoRef() != null, c.getLibroReclamacionesUrl(), c.getEmailSubject(),
                 c.getEmailBody());
     }
 
     public SeriesRepresentation toRepresentation(SeriesModel s) {
         return new SeriesRepresentation(s.getId(), s.getSunatEnv(), s.getTipoComprobante(), s.getSerie(), s.getNextNumber(), s.isDefault(),
                 s.isActive());
-    }
-
-    /** The company's submission route; {@code ose} is its third-party OSE, if any. */
-    public RouteRepresentation toRepresentation(CompanyModel company, OseEndpointModel ose) {
-        return new RouteRepresentation(company.getSubmissionRoute(), company.isOseObligated(), ose == null ? null : ose.getName(),
-                ose == null ? null : ose.getInvoiceUrl(), ose == null ? null : ose.getPerceptionUrl());
     }
 
     /** The company's certificate; {@code matchesRuc} when it was issued to the company's RUC. */

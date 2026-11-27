@@ -82,7 +82,6 @@ public class StatusResource {
                 sunat());
     }
 
-    /** SUNAT's endpoints only: a third-party OSE ({@code ose:…}) is no platform-wide status. */
     private List<SunatEnvironmentRepresentation> sunat() {
         List<StatusProvider.EndpointState> rows = statusProvider.getSunatEndpoints();
         return ENVIRONMENTS.stream().map(env -> {
