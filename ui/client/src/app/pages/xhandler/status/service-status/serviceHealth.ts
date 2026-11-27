@@ -5,9 +5,11 @@ import {
   SUNAT_SERVICE_LABELS,
 } from "@app/utils/sunatEndpointPresentation";
 
-/** Job priority classes (DESIGN.md §10.5), as the status endpoint numbers them. */
+/**
+ * Job priority classes (DESIGN.md §10.5), as the status endpoint numbers them. Class 1 has no
+ * jobs now; a queue in a class without a label shows its number.
+ */
 export const PRIORITY_CLASS_LABELS: Record<number, string> = {
-  1: "1 · Reenvío OSE",
   2: "2 · Envíos a SUNAT",
   3: "3 · Webhooks y correos",
   4: "4 · Reportes, SIRE y exportaciones",

@@ -38,7 +38,7 @@ public interface DocumentProvider {
 
     List<DocumentModel> getReversedDocuments(List<UUID> reversalIds, String tipoComprobante, LocalDate fechaEmision);
 
-    /** A document the company issued (not an OSE-inbound one) with that number. */
+    /** A document the company issued with that number. */
     Optional<DocumentModel> getIssuedDocument(UUID companyId, String sunatEnv, String tipoComprobante, String serie, long numero);
 
     List<DocumentModel> getDocumentsByNumber(UUID companyId, String sunatEnv, String tipoComprobante, String serie, long numero);

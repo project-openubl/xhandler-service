@@ -45,9 +45,6 @@ test("shows a company's administration tabs", async ({
   const credentials = page.getByRole("grid", { name: "Tabla de credenciales" });
   await expect(credentials.getByText("Clave SOL")).toBeVisible();
 
-  await page.getByRole("tab", { name: "Envío a SUNAT" }).click();
-  await expect(page.getByText("Obligada a emitir mediante OSE")).toBeVisible();
-
   await page.getByRole("tab", { name: "Certificado" }).click();
   await expect(
     page.getByRole("heading", { name: "Certificado digital", exact: true }),

@@ -26,7 +26,7 @@ opentelemetry-otlp = "0.33"
 opentelemetry_sdk = "0.33"
 quick-xml = "0.39"
 regex = "1"
-# XMLDSig verification of signed documents (OSE, uploads): the same crates as xhandler-rust's signer
+# XMLDSig verification of signed documents (uploads, validation): the same crates as xhandler-rust's signer
 rsa = { version = "0.10", features = ["pkcs1v15", "sha1"] }
 sha1 = "0.11"
 x509-cert = "0.3"

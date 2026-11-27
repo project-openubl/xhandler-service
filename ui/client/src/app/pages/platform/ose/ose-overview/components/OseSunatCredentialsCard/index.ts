@@ -1,1 +1,0 @@
-export { OseSunatCredentialsCard } from "./OseSunatCredentialsCard";

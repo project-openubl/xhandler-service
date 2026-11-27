@@ -18,6 +18,6 @@ public interface StatusProvider {
     /** Job queue depth per priority class. */
     List<QueueStats> getQueueStats();
 
-    /** SUNAT's endpoints, without third-party OSEs ({@code ose:…}), ordered by id. */
+    /** SUNAT's endpoints, ordered by id. */
     List<EndpointState> getSunatEndpoints();
 }

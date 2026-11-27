@@ -45,10 +45,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use xhandler::prelude::UblFile;
 
-use crate::cdr::escape;
-
-#[path = "sunat_fake_ose.rs"]
-mod ose;
 #[path = "sunat_fake_sire.rs"]
 mod sire;
 
@@ -97,8 +93,6 @@ pub fn router(options: Options) -> Router {
             get(gre_ticket),
         )
         .route("/fake/sire", get(sire::submitted))
-        .route("/fake/ose-forwards", get(ose::forwards))
-        .route("/ol-ti-itcpgem-ose/billService", post(ose::bill_service))
         .route(
             "/v1/contribuyente/migeigv/libros/rvie/propuesta/web/propuesta/{period}/exportapropuesta",
             get(sire::export_rvie),
@@ -144,7 +138,6 @@ struct Inner {
     /// Bearer token → SOL username (SIRE answers per RUC)
     tokens: HashMap<String, String>,
     sire: sire::SireState,
-    ose: ose::OseState,
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Deserialize, Serialize, Debug)]
@@ -955,6 +948,22 @@ async fn gre_ticket(
         }))
         .into_response(),
     }
+}
+
+/// XML text escaping for the CDRs and faults the fake writes
+fn escape(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&apos;"),
+            c => escaped.push(c),
+        }
+    }
+    escaped
 }
 
 #[cfg(test)]

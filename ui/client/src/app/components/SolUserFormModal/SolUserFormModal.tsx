@@ -30,7 +30,7 @@ interface ISolUserFormModalProps {
   onClose: () => void;
 }
 
-/** A platform SOL user (PSE pool or the OSE's own); the password is sealed and never shown back. */
+/** A SOL user of the platform's PSE pool; the password is sealed and never shown back. */
 export const SolUserFormModal: React.FC<ISolUserFormModalProps> = ({
   title,
   description,

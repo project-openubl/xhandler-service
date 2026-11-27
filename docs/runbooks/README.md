@@ -20,7 +20,6 @@ api() { # api METHOD PATH [JSON]
 
 | Runbook | When |
 |---|---|
-| [ose-forwarding.md](ose-forwarding.md) | `OseForwardingSlaAtRisk`, `OseForwardingLate`, `OseIntakeErrors` |
 | [documents-stuck.md](documents-stuck.md) | `DocumentsPastDeadline`, `DocumentsNeedAttention` |
 | [sunat-outage.md](sunat-outage.md) | `SunatBacklogGrowing`, SUNAT announces maintenance |
 | [workers.md](workers.md) | `JobBacklogOld`, `ApiErrorRate` |

@@ -1,7 +1,6 @@
-# Egress proxy (DESIGN.md §16, §26.4): the only way out to SUNAT and
-# third-party OSEs. HTTPS CONNECT only, to port 443 of public addresses;
-# private, loopback, link-local and metadata ranges denied. The cluster's NAT
-# gives it the static egress IPs SUNAT's OSE service is restricted to.
+# Egress proxy (DESIGN.md §16, §26.4): the only way out to SUNAT. HTTPS
+# CONNECT only, to port 443 of public addresses; private, loopback, link-local
+# and metadata ranges denied. The cluster's NAT gives it static egress IPs.
 apiVersion: v1
 kind: ConfigMap
 metadata:

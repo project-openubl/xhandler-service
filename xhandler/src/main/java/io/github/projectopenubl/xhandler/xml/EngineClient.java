@@ -56,10 +56,6 @@ public interface EngineClient {
     EngineModels.ValidityResponse validity(EngineModels.ValidityRequest request);
 
     @POST
-    @Path("/ose/forward")
-    EngineModels.OseForwardResponse oseForward(EngineModels.OseForwardRequest request);
-
-    @POST
     @Path("/sire/proposal")
     EngineModels.SireTicketResponse sireProposal(EngineModels.SireProposalRequest request);
 
@@ -78,10 +74,6 @@ public interface EngineClient {
     @POST
     @Path("/validity/file")
     EngineModels.ValidityResponse validityFile(EngineModels.ValidityFileRequest request);
-
-    @POST
-    @Path("/cdr")
-    EngineModels.XmlResponse cdr(EngineModels.CdrRequest request);
 
     @GET
     @Path("/info")

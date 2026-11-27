@@ -501,7 +501,6 @@ func TestXHandlerSpec(t *testing.T) {
 			SecretKeySecret: secret("s3", "secret-key"),
 		},
 		SunatFakeURL: "http://sunat-fake:8099",
-		OSE:          &xhandlerv1alpha1.OSESpec{RUC: "20123456789", Environment: "beta", ForwardURL: "https://ose.sunat.gob.pe/billService"},
 		Hostname:     "xhandler.example.com",
 		TLS:          &xhandlerv1alpha1.TLSSpec{Secret: "xhandler-tls"},
 		AdditionalOptions: []xhandlerv1alpha1.ValueOrSecret{
@@ -559,9 +558,6 @@ func TestXHandlerSpec(t *testing.T) {
 		"XHANDLER_STORAGE_S3_ENDPOINT":        "https://s3.example.com",
 		"XHANDLER_STORAGE_S3_BUCKET":          "documents",
 		"XHANDLER_STORAGE_S3_REGION":          "sa-east-1",
-		"XHANDLER_OSE_RUC":                    "20123456789",
-		"XHANDLER_OSE_ENVIRONMENT":            "beta",
-		"XHANDLER_OSE_FORWARD_URL":            "https://ose.sunat.gob.pe/billService",
 		"XHANDLER_SUNAT_FAKE_URL":             "http://sunat-fake:8099",
 		"XHANDLER_EMIT_PERMITS":               "8",
 		"XHANDLER_PUBLIC_URL":                 "https://facturas.example.com",
@@ -624,16 +620,14 @@ func TestXHandlerSpec(t *testing.T) {
 		t.Errorf("ingress host %q", rule.Host)
 	}
 	want := map[string]string{
-		"Prefix /":                "xh-ui",
-		"Prefix /api/xhandler":    "xh-ui",
-		"Prefix /api/searchpe":    "xh-ui",
-		"Prefix /api/v1":          "xh-api",
-		"Prefix /api/admin":       "xh-api",
-		"Prefix /ose":             "xh-api",
-		"Prefix /ol-ti-itcpfegem": "xh-api",
-		"Prefix /q/openapi":       "xh-api",
-		"Exact /q/openapi.json":   "xh-api",
-		"Prefix /q/swagger-ui":    "xh-api",
+		"Prefix /":              "xh-ui",
+		"Prefix /api/xhandler":  "xh-ui",
+		"Prefix /api/searchpe":  "xh-ui",
+		"Prefix /api/v1":        "xh-api",
+		"Prefix /api/admin":     "xh-api",
+		"Prefix /q/openapi":     "xh-api",
+		"Exact /q/openapi.json": "xh-api",
+		"Prefix /q/swagger-ui":  "xh-api",
 	}
 	if got := ingressBackends(ingress); !maps.Equal(got, want) {
 		t.Errorf("ingress paths %v, want %v", got, want)
@@ -679,13 +673,11 @@ func TestXHandlerIngressAndUIToggles(t *testing.T) {
 	get(ctx, t, cr.Namespace, "xh-xhandler", ingress)
 	// Only the APIs: not / nor the rest of /q (metrics, health)
 	want := map[string]string{
-		"Prefix /api/v1":          "xh-api",
-		"Prefix /api/admin":       "xh-api",
-		"Prefix /ose":             "xh-api",
-		"Prefix /ol-ti-itcpfegem": "xh-api",
-		"Prefix /q/openapi":       "xh-api",
-		"Exact /q/openapi.json":   "xh-api",
-		"Prefix /q/swagger-ui":    "xh-api",
+		"Prefix /api/v1":        "xh-api",
+		"Prefix /api/admin":     "xh-api",
+		"Prefix /q/openapi":     "xh-api",
+		"Exact /q/openapi.json": "xh-api",
+		"Prefix /q/swagger-ui":  "xh-api",
 	}
 	if got := ingressBackends(ingress); !maps.Equal(got, want) {
 		t.Errorf("ingress paths %v without the UI, want %v", got, want)
@@ -918,9 +910,13 @@ func TestXHandlerUISearchpe(t *testing.T) {
 		"OIDC_CLIENT_ID":          "xhandler-ui",
 		"NODE_EXTRA_CA_CERTS":     "/etc/xhandler-ui/ca/ca.crt",
 		"LIBRO_RECLAMACIONES_URL": "https://example.com/libro",
-		"CAPTCHA_PROVIDER":        "turnstile",
-		"CAPTCHA_SITE_KEY":        "site-key",
 	})
+	// The UI has no CAPTCHA page: only the app verifies tokens
+	for _, env := range container.Env {
+		if env.Name == "CAPTCHA_PROVIDER" || env.Name == "CAPTCHA_SITE_KEY" {
+			t.Errorf("UI env has %s, want no CAPTCHA settings", env.Name)
+		}
+	}
 	if container.ReadinessProbe.HTTPGet == nil || container.ReadinessProbe.HTTPGet.Path != "/healthz" ||
 		container.LivenessProbe.HTTPGet == nil || container.LivenessProbe.HTTPGet.Path != "/healthz" {
 		t.Errorf("UI probes %+v, %+v, want GET /healthz", container.ReadinessProbe, container.LivenessProbe)
@@ -1004,22 +1000,6 @@ func TestXHandlerValidation(t *testing.T) {
 		"long name":   {ObjectMeta: metav1.ObjectMeta{Name: strings.Repeat("x", 41), Namespace: namespace}, Spec: xhandlerv1alpha1.XHandlerSpec{OIDC: oidc}},
 		"digit first": {ObjectMeta: metav1.ObjectMeta{Name: "1xhandler", Namespace: namespace}, Spec: xhandlerv1alpha1.XHandlerSpec{OIDC: oidc}},
 		"dot":         {ObjectMeta: metav1.ObjectMeta{Name: "x.handler", Namespace: namespace}, Spec: xhandlerv1alpha1.XHandlerSpec{OIDC: oidc}},
-		"environment": {
-			ObjectMeta: metav1.ObjectMeta{Name: "environment", Namespace: namespace},
-			Spec:       xhandlerv1alpha1.XHandlerSpec{OIDC: oidc, OSE: &xhandlerv1alpha1.OSESpec{Environment: "staging"}},
-		},
-		"ruc": {
-			ObjectMeta: metav1.ObjectMeta{Name: "ruc", Namespace: namespace},
-			Spec:       xhandlerv1alpha1.XHandlerSpec{OIDC: oidc, OSE: &xhandlerv1alpha1.OSESpec{RUC: "123"}},
-		},
-		"ruc on the fake": {
-			ObjectMeta: metav1.ObjectMeta{Name: "ruc-fake", Namespace: namespace},
-			Spec:       xhandlerv1alpha1.XHandlerSpec{OIDC: oidc, OSE: &xhandlerv1alpha1.OSESpec{RUC: "20123456789", Environment: "fake"}},
-		},
-		"ruc without environment": {
-			ObjectMeta: metav1.ObjectMeta{Name: "ruc-none", Namespace: namespace},
-			Spec:       xhandlerv1alpha1.XHandlerSpec{OIDC: oidc, OSE: &xhandlerv1alpha1.OSESpec{RUC: "20123456789"}},
-		},
 		"option without name": {
 			ObjectMeta: metav1.ObjectMeta{Name: "option", Namespace: namespace},
 			Spec:       xhandlerv1alpha1.XHandlerSpec{OIDC: oidc, AdditionalOptions: []xhandlerv1alpha1.ValueOrSecret{{Value: "x"}}},
@@ -1043,10 +1023,6 @@ func TestXHandlerValidation(t *testing.T) {
 		"no UI without OIDC": {
 			ObjectMeta: metav1.ObjectMeta{Name: "no-ui", Namespace: namespace},
 			Spec:       xhandlerv1alpha1.XHandlerSpec{UI: &xhandlerv1alpha1.UISpec{Enabled: ptr.To(false)}},
-		},
-		"ruc on beta": {
-			ObjectMeta: metav1.ObjectMeta{Name: "ruc-beta", Namespace: namespace},
-			Spec:       xhandlerv1alpha1.XHandlerSpec{OIDC: oidc, OSE: &xhandlerv1alpha1.OSESpec{RUC: "20123456789", Environment: "beta"}},
 		},
 		"disabled network policies": {
 			ObjectMeta: metav1.ObjectMeta{Name: "no-policies", Namespace: namespace},

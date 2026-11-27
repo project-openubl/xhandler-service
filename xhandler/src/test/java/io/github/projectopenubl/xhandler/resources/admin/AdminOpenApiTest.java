@@ -31,7 +31,7 @@ import tools.jackson.databind.json.JsonMapper;
 class AdminOpenApiTest {
 
     /** Every resource of the admin API; a new one must be added here and carry the admin profile. */
-    private static final List<Class<?>> ADMIN_RESOURCES = List.of(AdminResource.class, OseAdminResource.class, PseAdminResource.class,
+    private static final List<Class<?>> ADMIN_RESOURCES = List.of(AdminResource.class, PseAdminResource.class,
             SireCalendarAdminResource.class, TenantLifecycleAdminResource.class);
 
     private static final Set<String> METHODS = Set.of("get", "put", "post", "delete");

@@ -1,8 +1,8 @@
 # Network policies (DESIGN.md §16): deny by default; the pods reach only what
-# they need. Tenant-supplied hosts (webhooks, SMTP, lookup URLs, third-party
-# OSEs) are reached only on public addresses: private, link-local, CGNAT and
-# metadata ranges are excluded here, on top of the app's and the engine's own
-# checks. SUNAT and third-party OSEs go through the egress proxy (static IPs).
+# they need. Tenant-supplied hosts (webhooks, SMTP, lookup URLs) are reached
+# only on public addresses: private, link-local, CGNAT and metadata ranges are
+# excluded here, on top of the app's and the engine's own checks. SUNAT goes
+# through the egress proxy (static IPs).
 # Labels of the neighbours (gateway, monitoring, database, collector) come from
 # the environment's overlay if they differ.
 #
@@ -82,7 +82,7 @@ spec:
       ports:
         - { port: 4317, protocol: TCP }
         - { port: 4318, protocol: TCP }
-    # Egress proxy (SUNAT, third-party OSEs)
+    # Egress proxy (SUNAT)
     - to:
         - podSelector:
             matchLabels:

@@ -1,5 +1,5 @@
 # The worker role (DESIGN.md §10, §25.1): claims and runs jobs (SUNAT sends,
-# OSE forwarding, webhooks, reports...) and the singleton activities. No
+# webhooks, reports...) and the singleton activities. No
 # Service: it takes no traffic. Same images as the api deployment.
 apiVersion: apps/v1
 kind: Deployment
@@ -56,7 +56,7 @@ spec:
               value: 127.0.0.1:8090
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: http://otel-collector:4318
-            # SUNAT and third-party OSEs through the egress proxy (§16): static
+            # SUNAT through the egress proxy (§16): static
             # egress IPs, private ranges denied
             - name: HTTPS_PROXY
               value: http://egress-proxy:3128

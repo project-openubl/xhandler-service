@@ -60,7 +60,7 @@ public class DocumentEntity extends PanacheEntityBase {
     private String codeClass;
     private String ticket;
     private String digestValue;
-    /** Where it is sent: {@code <env>:<service>} or {@code ose:<id>} (§24.2) */
+    /** Where it is sent: {@code <env>:<service>} (§24.2) */
     private String endpoint;
     /** SOL credential used to send (credential slots, §10.2); null = the environment's shared user */
     private UUID credentialId;

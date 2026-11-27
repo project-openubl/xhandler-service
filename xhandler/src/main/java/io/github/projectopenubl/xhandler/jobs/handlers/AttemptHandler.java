@@ -84,13 +84,12 @@ public class AttemptHandler implements JobHandler {
             Instant sendStartedAt,
             String endpoint,
             List<Line> lines,
-            boolean viaOse,
             boolean ticketLost,
             Instant firstSentAt) {
 
-        /** Consult and validity services are SUNAT's, with SOL credentials: not for documents sent through an OSE. */
+        /** Consult and validity services are SUNAT's, with SOL credentials: production and the fake. */
         boolean canConsult() {
-            return target.environment().hasConsultServices() && !viaOse;
+            return target.environment().hasConsultServices();
         }
     }
 
@@ -258,16 +257,15 @@ public class AttemptHandler implements JobHandler {
         // Renew the lease: the attempt may have waited in the queue (§24.2)
         doc.setNextAttemptAt(now.plus(lease));
         doc.setUpdatedAt(now);
-        boolean viaOse = doc.getEndpoint().startsWith("ose:");
         // validaCDPcriterios doesn't cover percepciones and retenciones: RR lines can't be checked
         List<Line> lines = action == Action.RESOLVE && doc.isSummary() && doc.getTicket() == null && target.environment().hasConsultServices()
-                && !viaOse && !"RR".equals(doc.getTipoComprobante())
+                && !"RR".equals(doc.getTipoComprobante())
                 ? summaryLines(company, doc, target)
                 : List.of();
         boolean ticketLost = doc.getLastOutcome() != null && doc.getLastOutcome().startsWith("TICKET_LOST");
         return new Plan(doc.getId(), doc.getTenantId(), doc.getAttempts(), action, target, xml.getStorageKey(), doc.getTicket(),
                 new EngineModels.DocumentKey(company.getRuc(), doc.getTipoComprobante(), doc.getSerie(), doc.getNumero()), doc.isFacturaFamily(),
-                doc.isSummary(), doc.getSendStartedAt(), doc.getEndpoint(), lines, viaOse, ticketLost, doc.getFirstSentAt());
+                doc.isSummary(), doc.getSendStartedAt(), doc.getEndpoint(), lines, ticketLost, doc.getFirstSentAt());
     }
 
     /** The lines of a summary: documents it adds (RC estado 1) and documents it voids (RA, RR, RC estado 3). */
@@ -297,8 +295,8 @@ public class AttemptHandler implements JobHandler {
         RouteManager.Target t = plan.target();
         try {
             return switch (plan.action()) {
-                case SEND -> afterSend(plan, xml, engine.send(xml, t.environment(), t.credentials(), t.urls()));
-                case VERIFY_TICKET -> Outcome.ofSend(engine.verifyTicket(xml, plan.ticket(), t.environment(), t.credentials(), t.urls()));
+                case SEND -> afterSend(plan, xml, engine.send(xml, t.environment(), t.credentials()));
+                case VERIFY_TICKET -> Outcome.ofSend(engine.verifyTicket(xml, plan.ticket(), t.environment(), t.credentials()));
                 case RESOLVE -> resolve(plan, xml, lineStates);
             };
         } catch (EngineException e) {
@@ -318,10 +316,7 @@ public class AttemptHandler implements JobHandler {
     private Outcome resolve(Plan plan, String xml, Map<UUID, String> lineStates) {
         RouteManager.Target t = plan.target();
         if (plan.summary() && plan.ticket() != null) {
-            return Outcome.ofSend(engine.verifyTicket(xml, plan.ticket(), t.environment(), t.credentials(), t.urls()));
-        }
-        if (plan.summary() && plan.ticket() == null && plan.viaOse() && plan.attempt() > 1) {
-            return Outcome.of(Outcome.Kind.PERMANENT, null, "Resumen sin ticket enviado por el OSE: resuélvalo con su OSE");
+            return Outcome.ofSend(engine.verifyTicket(xml, plan.ticket(), t.environment(), t.credentials()));
         }
         if (plan.summary() && plan.ticket() == null && "RR".equals(plan.key().tipoComprobante()) && plan.attempt() > 1) {
             return Outcome.of(Outcome.Kind.PERMANENT, null, "Resumen de reversiones sin ticket: revise su estado en SUNAT Operaciones en Línea");
@@ -354,12 +349,12 @@ public class AttemptHandler implements JobHandler {
                 case "rejected" -> Outcome.of(Outcome.Kind.REJECTED, null, status.description());
                 case "voided" -> Outcome.of(Outcome.Kind.VOIDED, null, status.description());
                 // SUNAT doesn't have it: the same bytes go again
-                case "not_found" -> afterSend(plan, xml, engine.send(xml, t.environment(), t.credentials(), t.urls()));
+                case "not_found" -> afterSend(plan, xml, engine.send(xml, t.environment(), t.credentials()));
                 case "not_delivered" -> Outcome.of(Outcome.Kind.NOT_DELIVERED, null, status.description());
                 default -> Outcome.of(Outcome.Kind.AMBIGUOUS, null, status.description());
             };
         }
-        return afterSend(plan, xml, engine.send(xml, t.environment(), t.credentials(), t.urls()));
+        return afterSend(plan, xml, engine.send(xml, t.environment(), t.credentials()));
     }
 
     private Outcome afterSend(Plan plan, String xml, EngineModels.SendResponse response) {
@@ -385,7 +380,7 @@ public class AttemptHandler implements JobHandler {
     private Outcome digestCheck(Plan plan, String xml, Outcome sunat) {
         RouteManager.Target t = plan.target();
         if (!plan.canConsult()) {
-            // Beta, or a third-party OSE: no consult service to ask with these credentials
+            // Beta: no consult service to ask
             return plan.attempt() > 1
                     ? new Outcome(Outcome.Kind.ACCEPTED, 0, null, "Registrado previamente (SUNAT beta, sin verificación)", List.of(),
                             null, null)

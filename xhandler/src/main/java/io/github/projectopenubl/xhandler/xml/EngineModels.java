@@ -53,14 +53,11 @@ public final class EngineModels {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Credentials(String username, String password, String clientId, String clientSecret) {}
 
-    /** Overrides the environment's URLs, e.g. for a third-party OSE (DESIGN.md §3.2). */
-    public record Urls(String invoice, String perceptionRetention, String despatch) {}
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record SendRequest(String xml, Environment environment, Credentials credentials) {}
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record SendRequest(String xml, Environment environment, Credentials credentials, Urls urls) {}
-
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record VerifyTicketRequest(String xml, String ticket, Environment environment, Credentials credentials, Urls urls) {}
+    public record VerifyTicketRequest(String xml, String ticket, Environment environment, Credentials credentials) {}
 
     /**
      * SUNAT's answer. {@code status}: accepted, rejected, exception, in_progress, unknown (SUNAT may
@@ -134,22 +131,6 @@ public final class EngineModels {
             String gravada, String igv, String exonerada, String inafecta, String exportacion, String gratuita, String ivapBase,
             String ivap, String isc, String icbper, String otros) {}
 
-    // --- OSE forwarding (§11.4) ---
-
-    public record OseCredentials(String username, String password) {
-        @Override
-        public String toString() {
-            return "OseCredentials[username=" + username + "]";
-        }
-    }
-
-    /** {@code operation}: send_bill (comprobantes) or send_summary (resúmenes, bajas). */
-    public record OseForwardRequest(
-            Environment environment, String url, OseCredentials credentials, String name, String xml, String cdrXml, String operation) {}
-
-    /** {@code status}: accepted, rejected, unknown, not_delivered. */
-    public record OseForwardResponse(String status, String code, String description) {}
-
     // --- SIRE and conformity (§11.7, §11.8) ---
 
     /** The tenant's SUNAT API client plus its SOL user (RUC + user). */
@@ -181,13 +162,6 @@ public final class EngineModels {
 
     /** {@code conformity}: pending, agreed, objected, silent_agreement, not_found, unknown. */
     public record ConformityResponse(String state, String conformity, String description) {}
-
-    public record CdrNote(String code, String message) {}
-
-    public record CdrRequest(
-            String xml, String oseRuc, String responseCode, String description, List<CdrNote> notes, String issuedAt) {}
-
-    public record XmlResponse(String xml) {}
 
     public record InfoResponse(String engineVersion, String xhandlerRustRev) {}
 

@@ -1,1 +1,0 @@
-export { OseListsCard } from "./OseListsCard";

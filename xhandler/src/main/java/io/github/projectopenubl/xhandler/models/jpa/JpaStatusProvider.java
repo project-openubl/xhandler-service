@@ -40,7 +40,7 @@ public class JpaStatusProvider implements StatusProvider {
     public List<EndpointState> getSunatEndpoints() {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery("""
-                        SELECT id, breaker_state, breaker_until, paused FROM xhandler.sunat_endpoint WHERE id NOT LIKE 'ose:%' ORDER BY id""")
+                        SELECT id, breaker_state, breaker_until, paused FROM xhandler.sunat_endpoint ORDER BY id""")
                 .getResultList();
         return rows.stream().map(r -> new EndpointState((String) r[0], (String) r[1], Times.toInstant(r[2]), (Boolean) r[3])).toList();
     }

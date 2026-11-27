@@ -5,7 +5,6 @@ import static io.github.projectopenubl.xhandler.Api.createCompany;
 import static io.github.projectopenubl.xhandler.Api.randomRuc;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
@@ -66,7 +65,6 @@ class PlatformConsoleTest {
         as("olga").get("/api/admin/v1/tenants/" + tenant + "/companies").then().statusCode(200)
                 .body("id", equalTo(java.util.List.of(company.toString())))
                 .body("[0].ruc", equalTo(ruc))
-                .body("[0].ose_obligated", equalTo(false))
                 .body("[0].sending_paused", equalTo(false));
         as("alice").get("/api/v1/tenants/" + tenant + "/audit?limit=200").then().statusCode(200)
                 .body("items.action", hasItem("tenant.companies_listed"));
@@ -113,30 +111,9 @@ class PlatformConsoleTest {
         // Unset, or whatever another test set: always both or neither
         Map<String, String> issuer = as("olga").get("/api/admin/v1/billing/issuer").then().statusCode(200).extract().jsonPath().getMap("$");
         org.junit.jupiter.api.Assertions.assertEquals(issuer.get("tenant_id") == null, issuer.get("company_id") == null, issuer.toString());
-        // Platform certificates: 404 until imported, never the key
+        // The platform certificate: 404 until imported, never the key
         int pse = as("olga").get("/api/admin/v1/pse/certificate").then().extract().statusCode();
         org.junit.jupiter.api.Assertions.assertTrue(pse == 200 || pse == 404, "pse certificate: " + pse);
-        int cdr = as("olga").get("/api/admin/v1/ose/cdr-certificate").then().extract().statusCode();
-        org.junit.jupiter.api.Assertions.assertTrue(cdr == 200 || cdr == 404, "cdr certificate: " + cdr);
-    }
-
-    @Test
-    void ose_client_actions_keep_their_paths_and_show_a_reset_password_once() {
-        String ruc = randomRuc();
-        String id = as("olga").body(Map.of("issuer_ruc", ruc)).post("/api/admin/v1/ose/clients").then().statusCode(200)
-                .body("password", notNullValue()).extract().path("id");
-        as("olga").post("/api/admin/v1/ose/clients/" + id + "/suspend").then().statusCode(200)
-                .body("action", equalTo("suspend"))
-                .body("$", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasKey("password")));
-        as("olga").post("/api/admin/v1/ose/clients/" + id + "/activate").then().statusCode(200).body("action", equalTo("activate"));
-        as("olga").post("/api/admin/v1/ose/clients/" + id + "/reset-password").then().statusCode(200)
-                .body("action", equalTo("reset-password"))
-                .body("password", notNullValue());
-        as("olga").get("/api/admin/v1/ose/clients").then().statusCode(200)
-                .body("find { it.id == '" + id + "' }.issuer_ruc", equalTo(ruc))
-                .body("find { it.id == '" + id + "' }.status", equalTo("active"));
-        as("olga").queryParam("month", "2026-13").get("/api/admin/v1/ose/usage").then().statusCode(422);
-        as("olga").get("/api/admin/v1/ose/usage").then().statusCode(200).body("validations", everyItem(notNullValue()));
     }
 
     private static UUID newPartner(String name) {

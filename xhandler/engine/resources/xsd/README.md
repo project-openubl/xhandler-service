@@ -5,7 +5,7 @@ embedded in the engine binary (`src/xsd.rs`), and imports resolve only among
 these files: the engine never reads schemas from disk or the network.
 
 - `2.1/`: OASIS UBL 2.1 (Invoice, CreditNote, DebitNote, DespatchAdvice,
-  ApplicationResponse for the OSE CDR), as published by SUNAT.
+  ApplicationResponse, the CDR), as published by SUNAT.
 - `2.0/`: OASIS UBL 2.0 plus SUNAT's `UBLPE-*` extensions (SummaryDocuments,
   VoidedDocuments, Perception, Retention).
 

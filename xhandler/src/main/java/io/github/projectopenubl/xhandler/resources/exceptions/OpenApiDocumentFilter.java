@@ -35,12 +35,8 @@ public class OpenApiDocumentFilter implements OASFilter {
     static final String SECURITY_SCHEME = "bearer";
     static final String ERROR_SCHEMA = "ApiError";
 
-    /**
-     * Paths without login: keep in step with {@code quarkus.http.auth.permission.public.paths}.
-     * The SOAP endpoints ({@code /ose/billService}, SUNAT's path) are outside {@code /api/} and
-     * authenticate in the message (WS-Security).
-     */
-    static final List<String> PUBLIC_PREFIXES = List.of("/api/v1/status", "/api/v1/public/", "/api/v1/ose/");
+    /** Paths without login: keep in step with {@code quarkus.http.auth.permission.public.paths}. */
+    static final List<String> PUBLIC_PREFIXES = List.of("/api/v1/status", "/api/v1/public/");
 
     static boolean isPublic(String path) {
         return !path.startsWith("/api/") || PUBLIC_PREFIXES.stream().anyMatch(path::startsWith);

@@ -56,12 +56,12 @@ The name of an `XHandler` is a DNS-1035 label (it starts with a letter) of at mo
   `zoneSpread: Preferred` (default, `ScheduleAnyway`) or `Required` (`DoNotSchedule`: label your nodes on clusters
   without zones, such as kind).
 - **Ingress.** With the UI, `/` and the APIs the UI server proxies (`/api/xhandler`, `/api/searchpe`) go to the UI, and
-  what other clients call to the api: `/api/v1`, `/api/admin`, `/ose`, SUNAT's SOAP path `/ol-ti-itcpfegem`,
-  `/q/openapi` (and `/q/openapi.json`) and `/q/swagger-ui`. Without the UI, only those API paths: never `/` nor the
+  what other clients call to the api: `/api/v1`, `/api/admin`, `/q/openapi` (and `/q/openapi.json`) and
+  `/q/swagger-ui`. Without the UI, only those API paths: never `/` nor the
   rest of `/q` (metrics, health). `ingress.className` sets the IngressClass; the ingress-nginx annotations allow 16 MB
-  bodies (the OSE's SOAP intake) and 150 s reads and sends (a synchronous SUNAT send). `tls.secret` terminates TLS at
+  bodies (document uploads and receptions) and 150 s reads and sends (a synchronous SUNAT send). `tls.secret` terminates TLS at
   the ingress. `publicUrl` defaults to the URL of `hostname`.
-- **Egress proxy.** With `egressProxy.enabled`, the engine reaches SUNAT and the third-party OSEs, and the app the
+- **Egress proxy.** With `egressProxy.enabled`, the engine reaches SUNAT, and the app the
   webhooks, through Squid, which allows only HTTPS to public addresses. Without it the app refuses webhooks, unless
   `XHANDLER_EGRESS_REQUIRE_PROXY=false` in `additionalOptions`. Enabled, the proxy starts before the pods that use it;
   disabled, it stays until the api and worker Deployments no longer refer to it (after a pending migration, if any).
@@ -92,15 +92,15 @@ The name of an `XHandler` is a DNS-1035 label (it starts with a letter) of at mo
   (Node.js) must trust: put its CA in a ConfigMap and set `ui.caBundleConfigMap` (`name`, `key`), which the UI gets as
   `NODE_EXTRA_CA_CERTS`. `ui.libroReclamacionesUrl` shows the platform's Libro de Reclamaciones link. Its probes are
   `GET /healthz`.
-- **CAPTCHA.** `captcha` (`provider` hcaptcha or turnstile, `siteKey`, `secretKeySecret`) gives the UI its widget
-  (`CAPTCHA_PROVIDER`, `CAPTCHA_SITE_KEY`) and the app the provider's verify URL and secret; without it the public
-  validity lookup refuses every request.
+- **CAPTCHA.** `captcha` (`provider` hcaptcha or turnstile, `secretKeySecret`) gives the app the provider's verify
+  URL and secret; without it the public document lookup (`POST /api/v1/public/lookup`) refuses every request. The UI
+  has no CAPTCHA page; `siteKey` is optional and unused by the operator.
 - **Configuration.** The spec maps to the app's properties (`QUARKUS_DATASOURCE_*`, `QUARKUS_OIDC_*`,
-  `XHANDLER_VAULT_PKCS11_*`, `XHANDLER_STORAGE_S3_*`, `XHANDLER_OSE_*`, `XHANDLER_PUBLIC_URL`) and to the engine's
+  `XHANDLER_VAULT_PKCS11_*`, `XHANDLER_STORAGE_S3_*`, `XHANDLER_PUBLIC_URL`) and to the engine's
   (`XHANDLER_SUNAT_FAKE_URL`). `vault.moduleVolume` mounts the HSM vendor's PKCS#11 module at `vault.moduleMountPath`
   (`/opt/hsm`). `additionalOptions` sets any other variable of the app, and of the migration Job (except the variables
   that make it migrate and log in as the owner), replacing the operator's of the same name; `engine.additionalOptions`
-  does the same for the engine. `ose.ruc` needs `ose.environment` `beta` or `production`.
+  does the same for the engine.
 - **Telemetry.** `otel.endpoint`, an OTLP over HTTP endpoint (`http://otel-collector:4318`), is the engine's
   `OTEL_EXPORTER_OTLP_ENDPOINT` and the app's `QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT` (with the `http/protobuf`
   protocol). Without it the app's OpenTelemetry SDK is disabled (`QUARKUS_OTEL_SDK_DISABLED`) and the engine exports

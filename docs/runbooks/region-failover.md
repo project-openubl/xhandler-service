@@ -12,6 +12,5 @@ so the last seconds before the disaster may be missing there.
 6. Reconcile: documents emitted in the lost window may exist at SUNAT but not here. Tenants retry
    with their `Idempotency-Key`; SUNAT answers 1033 for numbers it already has, and the
    service's 1033 check (digest comparison) adopts them.
-7. OSE: forwards resume from `ose_submission`; report the window to SUNAT's OSE contact.
 
-Drill it twice a year (staging), recording timings (ISO 27001 and OSE availability evidence).
+Drill it twice a year (staging), recording timings (ISO 27001 evidence).

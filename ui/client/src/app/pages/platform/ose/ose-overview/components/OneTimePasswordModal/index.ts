@@ -1,1 +1,0 @@
-export { OneTimePasswordModal } from "./OneTimePasswordModal";

@@ -57,8 +57,6 @@ comment at the call):
 - admin `adminListMigrations` (the database migrations, a few dozen);
 - admin `adminListPseSolUsers` (the PSE pool, a handful of SOL users);
 - admin `adminListPendingPseAuthorizations` (authorizations waiting for approval, a few);
-- admin `adminListOseClients` (one OSE user per issuer RUC);
-- admin `adminGetOseUsage` (one row per OSE user in the month);
 - admin `adminListSireCalendar` (ten rows per period, filtered by period).
 
 ## Checklist

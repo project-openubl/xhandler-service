@@ -6,37 +6,6 @@ metadata:
   name: xhandler-slo
 spec:
   groups:
-    - name: xhandler-ose
-      rules:
-        - alert: OseForwardingSlaAtRisk
-          # RS 117-2017 art. 7.5: forward within 1 hour of the CDR-OSE; fines per late document
-          expr: max(xhandler_ose_forward_oldest_seconds) > 2700
-          for: 1m
-          labels: { severity: page }
-          annotations:
-            summary: "A CDR-OSE has waited {{ $value | humanizeDuration }} to be forwarded to SUNAT (limit: 1 hour)"
-            runbook_url: https://github.com/project-openubl/xhandler-service/blob/main/docs/runbooks/ose-forwarding.md
-        - alert: OseForwardingLate
-          # Forwards acknowledged after the 1-hour bucket (le="3600.0" is a service-level boundary of the timer)
-          expr: (sum(increase(xhandler_ose_forward_delay_seconds_count[15m])) - sum(increase(xhandler_ose_forward_delay_seconds_bucket{le="3600.0"}[15m]))) > 0
-          for: 5m
-          labels: { severity: page }
-          annotations:
-            summary: "OSE forwards are taking longer than 1 hour"
-            runbook_url: https://github.com/project-openubl/xhandler-service/blob/main/docs/runbooks/ose-forwarding.md
-        - alert: OseIntakeErrors
-          # 99.96% availability for OSE intake
-          # Only our own failures (fault 0109): wrong passwords, bad ZIPs and invalid documents are SOAP
-          # faults too (HTTP 500 by SOAP's rules) but they are the client's
-          expr: |
-            sum(rate(xhandler_ose_faults_total{code="0109"}[5m]))
-              / (sum(rate(http_server_requests_seconds_count{uri=~"/ose/billService|/ol-ti-itcpfegem/billService|/api/v1/ose/documents"}[5m])) > 0)
-              > 0.0004
-          for: 10m
-          labels: { severity: page }
-          annotations:
-            summary: "OSE intake error rate above the 99.96% availability budget"
-            runbook_url: https://github.com/project-openubl/xhandler-service/blob/main/docs/runbooks/ose-forwarding.md
     - name: xhandler-documents
       rules:
         - alert: DocumentsPastDeadline
@@ -70,9 +39,8 @@ spec:
             summary: "The oldest waiting job is {{ $value | humanizeDuration }} old: workers can't keep up or are down"
             runbook_url: https://github.com/project-openubl/xhandler-service/blob/main/docs/runbooks/workers.md
         - alert: ApiErrorRate
-          # SOAP faults (OSE intake) answer 500 by protocol and are excluded
           expr: |
-            sum(rate(http_server_requests_seconds_count{outcome="SERVER_ERROR",uri!~"/ose/billService|/ol-ti-itcpfegem/billService"}[5m]))
+            sum(rate(http_server_requests_seconds_count{outcome="SERVER_ERROR"}[5m]))
               / (sum(rate(http_server_requests_seconds_count[5m])) > 0) > 0.01
           for: 10m
           labels: { severity: page }

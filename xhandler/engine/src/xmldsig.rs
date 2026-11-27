@@ -1,6 +1,6 @@
-//! XMLDSig verification of signed SUNAT documents (DESIGN.md §11.4 step 4,
-//! §5): the OSE must not issue a CDR for a document altered after signing,
-//! and pre-signed uploads are checked too.
+//! XMLDSig verification of signed SUNAT documents (DESIGN.md §5): a
+//! pre-signed upload altered after signing is refused before SUNAT sees it
+//! (SUNAT would reject it with 2335).
 //!
 //! SUNAT's profile: one enveloped `ds:Signature` with inclusive C14N 1.0,
 //! RSA with SHA-256 (or SHA-1 in older documents), one `Reference URI=""`

@@ -14,13 +14,9 @@ import {
   type CreateCompany,
   createCompany,
   getCompany,
-  getRoute,
   listCompanies,
   type ListCompaniesData,
   type PageCompanyView,
-  type RouteChange,
-  type RouteView,
-  setRoute,
   type Settings,
   updateCompanySettings,
   uploadCompanyLogo,
@@ -41,8 +37,6 @@ export const companyKeys = {
   list: (tenantId: string) => [...companyKeys.all(), tenantId, "list"] as const,
   detail: (tenantId: string, companyId: string) =>
     [...companyKeys.all(), tenantId, "detail", companyId] as const,
-  route: (tenantId: string, companyId: string) =>
-    [...companyKeys.detail(tenantId, companyId), "route"] as const,
 
   listQuery: (tenantId: string, params: ICompanyListParams) =>
     [...companyKeys.list(tenantId), params] as const,
@@ -124,9 +118,6 @@ export const isSunatEnv = (value: string): value is SunatEnv =>
 
 /** PDF formats of `Settings.pdf_format`. */
 export const PDF_FORMATS = ["a4", "ticket80", "ticket58"] as const;
-
-/** Submission routes of `RouteChange.submission_route`. */
-export const SUBMISSION_ROUTES = ["sunat", "ose"] as const;
 
 /** Writes answering the company: refresh its detail and every list page. */
 const useCompanyWrite = <TVars>({
@@ -250,59 +241,3 @@ export const useCompanyVerifyMutation = (
       ).data,
     options,
   });
-
-export const companyRouteQueryOptions = ({
-  tenantId,
-  companyId,
-}: {
-  tenantId: string;
-  companyId: string;
-}) =>
-  queryOptions<RouteView, XhandlerAxiosError>({
-    queryKey: companyKeys.route(tenantId, companyId),
-    queryFn: async () =>
-      (
-        await getRoute({
-          path: { tenantId, companyId },
-          throwOnError: true,
-        })
-      ).data,
-  });
-
-/** `GET …/route`: the submission route and whether SUNAT lists the company as OSE-obligated. */
-export const useCompanyRouteQuery = ({ companyId }: { companyId: string }) => {
-  const tenantId = useSelectedTenantId();
-  return useQuery({
-    ...companyRouteQueryOptions({ tenantId, companyId }),
-    enabled: !!tenantId && !!companyId,
-  });
-};
-
-/** `PUT …/route` (admin): SUNAT or a third-party OSE with its credentials. */
-export const useCompanyRouteMutation = (
-  companyId: string,
-  options?: IMutationCallbacks<RouteView, RouteChange, XhandlerAxiosError>,
-) => {
-  const tenantId = useSelectedTenantId();
-  const queryClient = useQueryClient();
-  return useMutation<RouteView, XhandlerAxiosError, RouteChange>({
-    mutationFn: async (body) =>
-      (
-        await setRoute({
-          path: { tenantId, companyId },
-          body,
-          throwOnError: true,
-        })
-      ).data,
-    onSuccess: async (data, variables) => {
-      queryClient.setQueryData(companyKeys.route(tenantId, companyId), data);
-      // The company's `submission_route` changes with it.
-      await queryClient.invalidateQueries({
-        queryKey: companyKeys.detail(tenantId, companyId),
-        exact: true,
-      });
-      await options?.onSuccess?.(data, variables);
-    },
-    onError: options?.onError,
-  });
-};

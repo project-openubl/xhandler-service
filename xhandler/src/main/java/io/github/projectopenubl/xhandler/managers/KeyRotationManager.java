@@ -55,7 +55,7 @@ public class KeyRotationManager {
             credentials += counts[0];
             keys += counts[1];
         }
-        // The platform's own secrets and keys (PSE SOL pool, validity, OSE; PSE and OSE CDR keys)
+        // The platform's own secrets and keys (PSE SOL pool, validity; the PSE key)
         int[] platform = QuarkusTransaction.requiringNew().call(this::rewrapPlatform);
         credentials += platform[0];
         keys += platform[1];

@@ -74,7 +74,7 @@ public class PseAdminResource {
     @Path("/certificate")
     public PlatformCertificateRepresentation getCertificate() {
         admin.require();
-        return keys.active("pse").map(OseAdminResource::certificate).orElseThrow(ApiException::notFound);
+        return keys.active("pse").map(PseAdminResource::certificate).orElseThrow(ApiException::notFound);
     }
 
     @Operation(operationId = "adminImportPseCertificate", summary = "Importa el certificado PSE de la plataforma (.pfx y contraseña)")
@@ -89,7 +89,7 @@ public class PseAdminResource {
         }
         PlatformKeys.Key key = keys.importKey("pse", Files.readAllBytes(file.uploadedFile()), password.toCharArray());
         AdminLog.PLATFORM_AUDIT.infof("admin %s imported the PSE certificate %s", who, key.subject());
-        return OseAdminResource.certificate(key);
+        return certificate(key);
     }
 
     @Operation(operationId = "adminAddPseSolUser", summary = "Agrega un usuario SOL al grupo PSE de la plataforma")
@@ -106,7 +106,7 @@ public class PseAdminResource {
         String label = body.label() == null ? username : body.label();
         PlatformCredentialManager.Entry entry = credentials.add("pse_sol", label, Map.of("username", username, "password", password));
         AdminLog.PLATFORM_AUDIT.infof("admin %s added PSE SOL user %s", who, entry.label());
-        return OseAdminResource.credential(entry);
+        return credential(entry);
     }
 
     @Operation(operationId = "adminListPseSolUsers", summary = "Usuarios SOL del grupo PSE")
@@ -115,7 +115,7 @@ public class PseAdminResource {
     @Transactional
     public List<PlatformCredentialRepresentation> solUsers() {
         admin.require();
-        return credentials.list("pse_sol").stream().map(OseAdminResource::credential).toList();
+        return credentials.list("pse_sol").stream().map(PseAdminResource::credential).toList();
     }
 
     @Operation(operationId = "adminDeactivatePseSolUser", summary = "Deja de usar un usuario SOL del grupo PSE")
@@ -210,5 +210,13 @@ public class PseAdminResource {
         boolean firstYear = registeredOn.map(d -> from.isBefore(d.plusYears(1))).orElse(false);
         BigDecimal limit = firstYear ? new BigDecimal("0.10") : new BigDecimal("0.05");
         return new PseRejectedRateRepresentation(period, accepted, rejected, rate, limit, rate.compareTo(limit) > 0);
+    }
+
+    static PlatformCertificateRepresentation certificate(PlatformKeys.Key key) {
+        return new PlatformCertificateRepresentation(key.subject(), key.ruc(), key.validUntil());
+    }
+
+    static PlatformCredentialRepresentation credential(PlatformCredentialManager.Entry entry) {
+        return new PlatformCredentialRepresentation(entry.id(), entry.purpose(), entry.label(), entry.active());
     }
 }

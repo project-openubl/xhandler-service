@@ -1,7 +1,5 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.representations.idm.OseLookupResultRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.OseLookupRequestRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.LookupResultRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.LookupRequestRepresentation;
 import io.github.projectopenubl.xhandler.utils.PublicStatus;
@@ -70,35 +68,6 @@ public class PublicLookupResource {
     }
 
 
-
-    /**
-     * The OSE's public validity query (RS 242-2018, RS 117-2017 art. 7.15): during the retention
-     * period, whether a factura or nota got a CDR-OSE or an inconsistency notice, and for boletas
-     * whether and when they were checked. Status only.
-     */
-    @Operation(operationId = "lookupOseDocument")
-    @POST
-    @jakarta.ws.rs.Path("/ose")
-    public OseLookupResultRepresentation ose(@Valid OseLookupRequestRepresentation request) {
-        if (!captchaValid(request.captcha())) {
-            throw new ApiException(403, "captcha_failed", "Verificación CAPTCHA inválida.");
-        }
-        return QuarkusTransaction.requiringNew().call(() -> {
-            int hits = lookups.countLookup("ose:" + request.ruc());
-            if (hits > perRucPerHour) {
-                throw new ApiException(429, "too_many_requests", "Demasiadas consultas para este RUC. Intente más tarde.");
-            }
-            Optional<PublicLookupProvider.OseSubmission> rows =
-                    lookups.getOseSubmission(request.ruc(), request.tipoComprobante(), request.serie(), request.numero());
-            if (rows.isEmpty()) {
-                return new OseLookupResultRepresentation("no_encontrado", null);
-            }
-            PublicLookupProvider.OseSubmission r = rows.get();
-            boolean cdr = "cdr".equals(r.result());
-            return new OseLookupResultRepresentation(cdr ? "con_cdr" : "con_inconsistencia",
-                    String.valueOf(cdr ? r.cdrIssuedAt() : r.receivedAt()));
-        });
-    }
 
     /** hCaptcha/Turnstile-style verification (POST secret + response, JSON {"success": true}). */
     private boolean captchaValid(String token) {

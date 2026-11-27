@@ -25,8 +25,7 @@ generated folders are gitignored and rebuilt by `npm run generate` (`prepare` ru
 - **Paths are rebased** from `/api/...` to `/...`, so the client's `baseURL` is the proxy prefix
   and the proxies rewrite `/api/xhandler` → `/api`. searchpe's generated function names
   follow (`getContribuyentes`); xhandler's come from its `operationId`s.
-- **xhandler: only `/api/v1/*`.** The SOAP endpoints (`/ose/billService`, …) aren't for the UI.
-  The admin API is excluded from the public spec by the service itself.
+- **xhandler: only `/api/v1/*`.** The admin API is excluded from the public spec by the service itself.
 - **xhandler-admin: only `/api/admin/v1/*`.**
 - **searchpe: no `/admin/*`, `/current-user/*`.** Basic-auth user management
   ([ADR 0004](../../adr/0004-identity-and-permissions.md)).

@@ -480,12 +480,6 @@ func appConfig(cr *xhandlerv1alpha1.XHandler, component string) (*serverConfig, 
 		c.secret("XHANDLER_STORAGE_S3_SECRET_KEY", storage.SecretKeySecret)
 	}
 
-	if ose := cr.Spec.OSE; ose != nil {
-		c.value("XHANDLER_OSE_RUC", ose.RUC)
-		c.value("XHANDLER_OSE_ENVIRONMENT", ose.Environment)
-		c.value("XHANDLER_OSE_FORWARD_URL", ose.ForwardURL)
-	}
-
 	c.value("XHANDLER_PUBLIC_URL", xhPublicURL(cr))
 	c.value("XHANDLER_SUNAT_FAKE_URL", cr.Spec.SunatFakeURL)
 	if endpoint := xhOTelEndpoint(cr); endpoint != "" {
@@ -614,10 +608,6 @@ func uiDeployment(cr *xhandlerv1alpha1.XHandler, image string, pullPolicy corev1
 		c.value("OIDC_SERVER_URL", oidc.ServerURL)
 	}
 	c.value("OIDC_CLIENT_ID", uiOIDCClientID(cr))
-	if captcha := cr.Spec.Captcha; captcha != nil {
-		c.value("CAPTCHA_PROVIDER", captchaProvider(captcha))
-		c.value("CAPTCHA_SITE_KEY", captcha.SiteKey)
-	}
 	if cr.Spec.UI != nil && cr.Spec.UI.LibroReclamacionesURL != "" {
 		c.value("LIBRO_RECLAMACIONES_URL", cr.Spec.UI.LibroReclamacionesURL)
 	}
@@ -702,7 +692,7 @@ func xhIngress(cr *xhandlerv1alpha1.XHandler) *networkingv1ac.IngressApplyConfig
 			paths = append(paths, path(networkingv1.PathTypePrefix, prefix, xhUIName(cr)))
 		}
 	}
-	for _, prefix := range []string{"/api/v1", "/api/admin", "/ose", "/ol-ti-itcpfegem", "/q/openapi", "/q/swagger-ui"} {
+	for _, prefix := range []string{"/api/v1", "/api/admin", "/q/openapi", "/q/swagger-ui"} {
 		paths = append(paths, path(networkingv1.PathTypePrefix, prefix, xhAPIName(cr)))
 	}
 	paths = append(paths, path(networkingv1.PathTypeExact, "/q/openapi.json", xhAPIName(cr)))
@@ -734,7 +724,7 @@ func xhIngress(cr *xhandlerv1alpha1.XHandler) *networkingv1ac.IngressApplyConfig
 	return networkingv1ac.Ingress(xhIngressName(cr), cr.Namespace).
 		WithLabels(xhLabels(cr, appName, component)).
 		WithAnnotations(map[string]string{
-			// The OSE's SOAP intake carries ZIPs of up to 10 MB in base64
+			// Document uploads and receptions carry files of up to 10 MB
 			"nginx.ingress.kubernetes.io/proxy-body-size": "16m",
 			// A synchronous SUNAT send takes up to 120 s
 			"nginx.ingress.kubernetes.io/proxy-read-timeout": xhIngressTimeout,
@@ -783,7 +773,7 @@ func egressProxyDeployment(cr *xhandlerv1alpha1.XHandler, image string) *appsv1a
 }
 
 // networkPolicies deny the xhandler pods everything they don't need. Tenant-supplied hosts are
-// reached on public addresses only; SUNAT and third-party OSEs through the egress proxy, when
+// reached on public addresses only; SUNAT through the egress proxy, when
 // proxy (which is true while the egress proxy runs, even disabled, until no pod uses it).
 func networkPolicies(cr *xhandlerv1alpha1.XHandler, proxy bool) ([]*networkingv1ac.NetworkPolicyApplyConfiguration, error) {
 	spec := cr.Spec.NetworkPolicies

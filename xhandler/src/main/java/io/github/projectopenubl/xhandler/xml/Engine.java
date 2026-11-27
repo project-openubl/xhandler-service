@@ -4,7 +4,6 @@ import tools.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.ProcessingException;
 import java.util.Base64;
-import java.util.List;
 import java.util.function.Supplier;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
@@ -54,18 +53,17 @@ public class Engine {
     }
 
     public EngineModels.SendResponse send(String xml, EngineModels.Environment environment) {
-        return send(xml, environment, null, null);
+        return send(xml, environment, null);
     }
 
     public EngineModels.SendResponse send(
-            String xml, EngineModels.Environment environment, EngineModels.Credentials credentials, EngineModels.Urls urls) {
-        return call(() -> client.send(new EngineModels.SendRequest(xml, environment, credentials, urls)));
+            String xml, EngineModels.Environment environment, EngineModels.Credentials credentials) {
+        return call(() -> client.send(new EngineModels.SendRequest(xml, environment, credentials)));
     }
 
     public EngineModels.SendResponse verifyTicket(
-            String xml, String ticket, EngineModels.Environment environment, EngineModels.Credentials credentials,
-            EngineModels.Urls urls) {
-        return call(() -> client.verifyTicket(new EngineModels.VerifyTicketRequest(xml, ticket, environment, credentials, urls)));
+            String xml, String ticket, EngineModels.Environment environment, EngineModels.Credentials credentials) {
+        return call(() -> client.verifyTicket(new EngineModels.VerifyTicketRequest(xml, ticket, environment, credentials)));
     }
 
     public EngineModels.StatusCdrResponse statusCdr(
@@ -82,10 +80,6 @@ public class Engine {
         return call(() -> client.validityFile(new EngineModels.ValidityFileRequest(xml, environment, credentials)));
     }
 
-    public EngineModels.OseForwardResponse oseForward(EngineModels.OseForwardRequest request) {
-        return call(() -> client.oseForward(request));
-    }
-
     public EngineModels.SireTicketResponse sireProposal(EngineModels.SireProposalRequest request) {
         return call(() -> client.sireProposal(request));
     }
@@ -100,13 +94,6 @@ public class Engine {
 
     public EngineModels.ConformityResponse conformity(EngineModels.ConformityRequest request) {
         return call(() -> client.conformity(request));
-    }
-
-    /** Builds an unsigned OSE CDR for a received document (OSE role, R4). */
-    public String cdr(String xml, String oseRuc, String responseCode, String description, List<EngineModels.CdrNote> notes,
-            java.time.Instant issuedAt) {
-        return call(() -> client.cdr(new EngineModels.CdrRequest(xml, oseRuc, responseCode, description, notes, issuedAt.toString())))
-                .xml();
     }
 
     public EngineModels.InfoResponse info() {
