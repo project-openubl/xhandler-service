@@ -40,7 +40,7 @@ pub struct SolCredentials {
     pub client_secret: Option<String>,
 }
 
-/// Replaces the environment's send/ticket URLs, e.g. a third-party OSE
+/// Replaces the environment's send/ticket URLs, e.g. the SUNAT fake in tests
 #[derive(Deserialize, Default)]
 pub struct UrlsOverride {
     pub invoice: Option<String>,
@@ -728,8 +728,10 @@ mod tests {
     #[test]
     fn production_urls_must_be_https_and_not_loopback() {
         let check = |url: &str| check_url(url, Environment::Production).is_ok();
-        assert!(check("https://ose.example.com/ol-ti-itcpfegem/billService"));
-        assert!(!check("http://ose.example.com/billService"));
+        assert!(check(
+            "https://sunat.example.com/ol-ti-itcpfegem/billService"
+        ));
+        assert!(!check("http://sunat.example.com/billService"));
         assert!(!check("https://localhost/billService"));
         assert!(!check("https://127.0.0.1:8443/billService"));
         assert!(!check("https://[::1]/billService"));
@@ -752,7 +754,7 @@ mod tests {
                 "xml": "<x/>",
                 "environment": "production",
                 "credentials": { "username": "20123456789USER", "password": "x" },
-                "urls": { "invoice": "http://ose.example.com/billService" },
+                "urls": { "invoice": "http://sunat.example.com/billService" },
             }),
         )
         .await;

@@ -3,7 +3,6 @@
 //! once at startup and never changed.
 
 mod documents;
-mod ose;
 mod sire;
 mod sunat;
 
@@ -69,8 +68,6 @@ pub fn router_with(config: Config) -> Router {
         .route("/v1/validity/file", post(sunat::validity_file))
         .route("/v1/validate", post(documents::validate))
         .route("/v1/inspect", post(documents::inspect))
-        .route("/v1/cdr", post(documents::cdr))
-        .route("/v1/ose/forward", post(ose::forward))
         .route("/v1/sire/proposal", post(sire::proposal))
         .route("/v1/sire/ticket", post(sire::ticket))
         .route(
