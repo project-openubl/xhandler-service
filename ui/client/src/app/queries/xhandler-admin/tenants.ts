@@ -14,7 +14,6 @@ import {
   adminGetTenant,
   adminHoldCompanySending,
   adminHoldTenantSending,
-  adminListPlans,
   adminListTenantCompanies,
   adminListTenants,
   type AdminListTenantsData,
@@ -24,7 +23,6 @@ import {
   adminRetryTenantDocuments,
   adminSetTenantArchivePlan,
   adminSetTenantAuditHold,
-  adminSetTenantPlan,
   adminSuppressEmail,
   type AdminTenant,
   type BulkRetry,
@@ -34,10 +32,8 @@ import {
   type EmailSuppression,
   type NewRequest,
   type PageAdminTenant,
-  type Plan,
   type TenantArchivePlan,
   type TenantAuditHold,
-  type TenantPlan,
   type TenantSending,
   type TenantStatus,
 } from "@app/client/xhandler-admin";
@@ -60,7 +56,6 @@ export const adminTenantKeys = {
     [...adminTenantKeys.all(), "detail", tenantId] as const,
   companies: (tenantId: string) =>
     [...adminTenantKeys.detail(tenantId), "companies"] as const,
-  plans: () => [...adminTenantKeys.all(), "plans"] as const,
 };
 
 type AdminTenantListOptions = Omit<
@@ -100,7 +95,7 @@ type AdminTenantOptions = Omit<
   "queryKey" | "queryFn"
 >;
 
-/** `GET /api/admin/v1/tenants/{id}`: one tenant, its plan, holds and number of companies. */
+/** `GET /api/admin/v1/tenants/{id}`: one tenant, its holds and number of companies. */
 export const adminTenantDetailQueryOptions = ({
   tenantId,
   options,
@@ -169,22 +164,6 @@ export const useAdminTenantCompaniesQuery = ({
   options?: AdminCompaniesOptions;
 }) => useQuery(adminTenantCompaniesQueryOptions({ tenantId, options }));
 
-/** `GET /api/admin/v1/plans`: the service's plans and their quotas; unpaged. */
-export const adminPlansQueryOptions = queryOptions<Plan[], XhandlerAxiosError>({
-  queryKey: adminTenantKeys.plans(),
-  queryFn: async () => (await adminListPlans({ throwOnError: true })).data,
-  staleTime: 5 * 60 * 1000,
-});
-
-export const useAdminPlansQuery = ({
-  options,
-}: {
-  options?: Omit<
-    UseQueryOptions<Plan[], XhandlerAxiosError>,
-    "queryKey" | "queryFn"
-  >;
-} = {}) => useQuery({ ...options, ...adminPlansQueryOptions });
-
 /** Re-reads the tenant (detail and lists) after a write that changes what the platform sees. */
 const useInvalidateAdminTenant = () => {
   const queryClient = useQueryClient();
@@ -194,29 +173,6 @@ const useInvalidateAdminTenant = () => {
     });
     await queryClient.invalidateQueries({ queryKey: adminTenantKeys.list() });
   };
-};
-
-/** `PUT …/tenants/{id}/plan`: a plan set by hand (contracts outside Lago); the sync keeps it. */
-export const useAdminSetTenantPlanMutation = (
-  tenantId: string,
-  options?: IMutationCallbacks<TenantPlan, string, XhandlerAxiosError>,
-) => {
-  const invalidate = useInvalidateAdminTenant();
-  return useMutation<TenantPlan, XhandlerAxiosError, string>({
-    mutationFn: async (plan) =>
-      (
-        await adminSetTenantPlan({
-          path: { tenantId },
-          body: { plan },
-          throwOnError: true,
-        })
-      ).data,
-    onSuccess: async (data, plan) => {
-      await invalidate(tenantId);
-      await options?.onSuccess?.(data, plan);
-    },
-    onError: options?.onError,
-  });
 };
 
 /** `POST …/tenants/{id}/hold` or `…/release`: pauses or resumes every send of the tenant. */

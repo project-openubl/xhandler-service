@@ -87,12 +87,6 @@ export const TenantSettings: React.FC = () => {
           </DescriptionListDescription>
         </DescriptionListGroup>
         <DescriptionListGroup>
-          <DescriptionListTerm>Plan</DescriptionListTerm>
-          <DescriptionListDescription>
-            {tenant.plan ?? "-"}
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
           <DescriptionListTerm>
             Conservación de comprobantes
           </DescriptionListTerm>

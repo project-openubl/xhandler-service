@@ -74,7 +74,7 @@ test("prepares a factura as a draft, saves it and issues it", async ({
   await expect(issued.or(refused)).toBeVisible();
   test.skip(
     await refused.isVisible(),
-    "the company can't issue yet (certificate or plan)",
+    "the company can't issue yet (no certificate)",
   );
   await expect(
     page.getByLabel("Comprobante emitido").getByText(/^F\w{3}-\d+$/),

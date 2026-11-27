@@ -1,6 +1,5 @@
 import type { UseQueryOptions } from "@tanstack/react-query";
 import {
-  keepPreviousData,
   queryOptions,
   useMutation,
   useQuery,
@@ -15,12 +14,11 @@ import {
   getPartnerBranding,
   listMyPartners,
   listPartnerTenants,
-  type ListPartnerTenantsData,
   type PartnerBrandingView,
   type PartnerTenant,
+  type PartnerTenantSummary,
   type PartnerView,
   setPartnerBranding,
-  type TenantUsage,
   uploadPartnerLogo,
 } from "@app/client/xhandler";
 
@@ -29,11 +27,6 @@ import type { XhandlerAxiosError } from "../utils/openapiErrorTypes";
 import { tenantKeys } from "./tenants";
 
 export const PartnersQueryKey = "partners";
-
-/** `month` (`AAAA-MM`); without it the server answers the current month in Lima. */
-export type IPartnerTenantsParams = NonNullable<
-  ListPartnerTenantsData["query"]
->;
 
 /** The roles of a partner membership (DESIGN.md §1.2): admins manage, viewers look. */
 export const PARTNER_ROLES = ["admin", "viewer"] as const;
@@ -55,9 +48,6 @@ export const partnerKeys = {
     [...partnerKeys.all(), partnerId, "tenants"] as const,
   branding: (partnerId: string) =>
     [...partnerKeys.all(), partnerId, "branding"] as const,
-
-  tenantsQuery: (partnerId: string, params: IPartnerTenantsParams) =>
-    [...partnerKeys.tenants(partnerId), params] as const,
 };
 
 /**
@@ -84,32 +74,28 @@ export const useMyPartnersQuery = ({
 } = {}) => useQuery({ ...options, ...myPartnersQueryOptions });
 
 type PartnerTenantsOptions = Omit<
-  UseQueryOptions<TenantUsage[], XhandlerAxiosError>,
+  UseQueryOptions<PartnerTenantSummary[], XhandlerAxiosError>,
   "queryKey" | "queryFn"
 >;
 
 /**
- * `GET /api/v1/partners/{id}/tenants`: the partner's tenants with their documents in a month.
+ * `GET /api/v1/partners/{id}/tenants`: the partner's tenants (name and status).
  * Unpaged by the API, so it is read whole and paged on screen. An unknown partner is a 404.
  */
 export const partnerTenantsQueryOptions = ({
   partnerId,
-  params,
   options,
 }: {
   partnerId: string;
-  params: IPartnerTenantsParams;
   options?: PartnerTenantsOptions;
 }) =>
-  queryOptions<TenantUsage[], XhandlerAxiosError>({
-    placeholderData: keepPreviousData,
+  queryOptions<PartnerTenantSummary[], XhandlerAxiosError>({
     ...options,
-    queryKey: partnerKeys.tenantsQuery(partnerId, params),
+    queryKey: partnerKeys.tenants(partnerId),
     queryFn: async () =>
       (
         await listPartnerTenants({
           path: { partnerId },
-          query: params,
           throwOnError: true,
         })
       ).data,
@@ -117,13 +103,11 @@ export const partnerTenantsQueryOptions = ({
 
 export const usePartnerTenantsQuery = ({
   partnerId,
-  params,
   options,
 }: {
   partnerId: string;
-  params: IPartnerTenantsParams;
   options?: PartnerTenantsOptions;
-}) => useQuery(partnerTenantsQueryOptions({ partnerId, params, options }));
+}) => useQuery(partnerTenantsQueryOptions({ partnerId, options }));
 
 /** `POST /api/v1/partners/{id}/tenants` (partner admins): `201` with the new tenant. */
 export const useCreatePartnerTenantMutation = (

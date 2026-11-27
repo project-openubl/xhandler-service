@@ -61,12 +61,6 @@
           "name" : {
             "type" : "string"
           },
-          "plan" : {
-            "type" : "string"
-          },
-          "plan_source" : {
-            "type" : "string"
-          },
           "status" : {
             "type" : "string"
           },
@@ -113,17 +107,6 @@
         "properties" : {
           "audit_hold" : {
             "type" : "boolean"
-          }
-        }
-      },
-      "BillingIssuer" : {
-        "type" : "object",
-        "properties" : {
-          "tenant_id" : {
-            "type" : "string"
-          },
-          "company_id" : {
-            "type" : "string"
           }
         }
       },
@@ -460,43 +443,6 @@
           }
         }
       },
-      "Plan" : {
-        "type" : "object",
-        "properties" : {
-          "code" : {
-            "type" : "string"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "production_per_month" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "beta_per_day" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "sandbox_per_day" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "custom_smtp" : {
-            "type" : "boolean"
-          },
-          "webhooks" : {
-            "type" : "boolean"
-          }
-        }
-      },
-      "PlanAssignment" : {
-        "type" : "object",
-        "properties" : {
-          "plan" : {
-            "type" : "string"
-          }
-        }
-      },
       "PlatformCertificate" : {
         "type" : "object",
         "properties" : {
@@ -639,17 +585,6 @@
           }
         }
       },
-      "TenantPlan" : {
-        "type" : "object",
-        "properties" : {
-          "tenant_id" : {
-            "$ref" : "#/components/schemas/UUID"
-          },
-          "plan" : {
-            "type" : "string"
-          }
-        }
-      },
       "TenantSending" : {
         "type" : "object",
         "properties" : {
@@ -731,111 +666,7 @@
     }
   },
   "openapi" : "3.1.0",
-  "tags" : [ {
-    "name" : "Webhook"
-  } ],
   "paths" : {
-    "/api/admin/v1/billing/issuer" : {
-      "get" : {
-        "summary" : "Empresa que emite las facturas de la plataforma",
-        "operationId" : "adminGetBillingIssuer",
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/BillingIssuer"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Sin token o con un token inválido (sin cuerpo)."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "tags" : [ "Admin Resource" ],
-        "security" : [ {
-          "bearer" : [ ]
-        } ]
-      },
-      "put" : {
-        "summary" : "Cambia la empresa que emite las facturas de la plataforma",
-        "operationId" : "adminSetBillingIssuer",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/BillingIssuer"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/BillingIssuer"
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "Bad Request"
-          },
-          "401" : {
-            "description" : "Sin token o con un token inválido (sin cuerpo)."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "tags" : [ "Admin Resource" ],
-        "security" : [ {
-          "bearer" : [ ]
-        } ]
-      }
-    },
     "/api/admin/v1/data-protection/tenants/{tenantId}/archive-plan" : {
       "put" : {
         "summary" : "Activa o quita el plan de archivo de una organización",
@@ -2002,54 +1833,6 @@
         } ]
       }
     },
-    "/api/admin/v1/plans" : {
-      "get" : {
-        "summary" : "Planes del servicio",
-        "operationId" : "adminListPlans",
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/Plan"
-                  }
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Sin token o con un token inválido (sin cuerpo)."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "tags" : [ "Admin Resource" ],
-        "security" : [ {
-          "bearer" : [ ]
-        } ]
-      }
-    },
     "/api/admin/v1/pse/authorizations/pending" : {
       "get" : {
         "summary" : "Autorizaciones PSE por revisar",
@@ -3161,72 +2944,6 @@
                 }
               }
             }
-          },
-          "401" : {
-            "description" : "Sin token o con un token inválido (sin cuerpo)."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "tags" : [ "Admin Resource" ],
-        "security" : [ {
-          "bearer" : [ ]
-        } ]
-      }
-    },
-    "/api/admin/v1/tenants/{tenantId}/plan" : {
-      "put" : {
-        "summary" : "Asigna a mano el plan de una organización",
-        "operationId" : "adminSetTenantPlan",
-        "parameters" : [ {
-          "name" : "tenantId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "$ref" : "#/components/schemas/UUID"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/PlanAssignment"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/TenantPlan"
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "Bad Request"
           },
           "401" : {
             "description" : "Sin token o con un token inválido (sin cuerpo)."

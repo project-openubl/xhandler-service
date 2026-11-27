@@ -71,7 +71,7 @@ const SIGN_UP_REFUSALS = new Set([400, 403, 409, 422, 429]);
  * - a company (a random RUC; every company starts on the SUNAT fake) when it has none;
  * - a factura the company issues to itself (the fake accepts it), whose buyer link is the
  *   public portal's, and whose XML the company then receives as a reception;
- * - a webhook, when the organization has none and its plan allows it;
+ * - a webhook, when the organization has none;
  * - a partner the user belongs to, when they belong to none and are a platform admin.
  *
  * Writes the ids to `FIXTURES_PATH`.
@@ -191,10 +191,7 @@ export const ensureFixtures = async (page: Page): Promise<IE2eFixtures> => {
         },
       },
     );
-    // 402/409: a free plan without a verified RUC has no webhooks (its spec then skips).
-    if (![402, 409].includes(created.status())) {
-      await ok(created, "POST a webhook");
-    }
+    await ok(created, "POST a webhook");
   }
 
   // A partner (the admin API is for platform admins: anyone else's partner specs skip)

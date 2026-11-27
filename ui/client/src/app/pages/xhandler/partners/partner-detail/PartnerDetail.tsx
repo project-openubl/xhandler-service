@@ -50,7 +50,7 @@ const ADMIN_TOOLTIP = {
 };
 
 /**
- * The partner console (U3, DESIGN.md §1.2): the partner's tenants and their usage per month,
+ * The partner console (U3, DESIGN.md §1.2): the partner's tenants
  * and the white-label branding. Partner admins manage; partner viewers only look.
  */
 export const PartnerDetail: React.FC<IPartnerDetailProps> = ({ partnerId }) => {

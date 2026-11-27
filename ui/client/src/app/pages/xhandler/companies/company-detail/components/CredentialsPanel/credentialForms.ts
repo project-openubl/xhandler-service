@@ -98,8 +98,7 @@ export const CREDENTIAL_PRESENTATION: Record<
   },
   smtp: {
     title: "Servidor de correo (SMTP)",
-    description:
-      "Tu propio servidor para enviar los comprobantes por correo; según tu plan.",
+    description: "Tu propio servidor para enviar los comprobantes por correo.",
     fields: {
       host: { label: "Servidor", isRequired: true },
       port: { label: "Puerto", isRequired: true },

@@ -58,7 +58,7 @@ const setUp = ({ isAdmin }: { isAdmin: boolean }) => {
     addNotification: vi.fn(),
   } as unknown as ReturnType<typeof useNotifications>);
   vi.mocked(useTenantDetailQuery).mockReturnValue({
-    data: { id: "t1", name: "Bodega SAC", status: "active", plan: "free" },
+    data: { id: "t1", name: "Bodega SAC", status: "active" },
     isLoading: false,
     error: null,
   } as unknown as ReturnType<typeof useTenantDetailQuery>);

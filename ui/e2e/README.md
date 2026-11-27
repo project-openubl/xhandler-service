@@ -23,7 +23,7 @@ hack/ui-e2e-stack.sh down           # stops the processes; `down --compose` also
 | Keycloak         | 8180 | the shared dev realm, with the UI's public client `xhandler-ui`                              |
 | SUNAT fake       | 8099 | `sunat-fake`: every company starts on it (environment `fake`)                                |
 | engine           | 8090 | `xhandler-engine`, signs and sends                                                           |
-| xhandler-service | 8080 | production mode with dev conveniences (software vault, CAPTCHA test mode, `enterprise` plan) |
+| xhandler-service | 8080 | production mode with dev conveniences (software vault, file storage, mailer mock)            |
 | searchpe         | 8081 | OIDC and authorization on, advanced search on                                                |
 
 Logs go to `/tmp/xhandler-ui-e2e/*.log` (`STACK_DIR` to change). `COMPOSE=docker compose` if you

@@ -84,7 +84,7 @@ export const useExportsListQuery = ({
   return useQuery(exportsListQueryOptions({ tenantId, options }));
 };
 
-/** `POST /exports`: `202`, a job builds the ZIPs; one per hour (409 `export_recent`). */
+/** `POST /exports`: `202`, a job builds the ZIPs; one at a time (409 `export_in_progress`). */
 export const useExportCreateMutation = (
   options?: IMutationCallbacks<ExportView, string, XhandlerAxiosError>,
 ) => {

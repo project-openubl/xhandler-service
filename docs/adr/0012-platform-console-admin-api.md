@@ -8,7 +8,7 @@ status: Accepted
 
 ## Context
 
-Platform operations (partners and their members, plans set by hand, PSE authorizations and the
+Platform operations (partners and their members, PSE authorizations and the
 PSE pool, the SIRE calendar, holds per tenant, company and SUNAT endpoint,
 data-protection holds) live in the admin API, `/api/admin/v1`, which only the realm role
 `platform-admin` may call. DESIGN.md §15 and §26.2 keep it out of the public OpenAPI document
@@ -27,7 +27,7 @@ document and the SDKs are unchanged.
       platform admins.
 - [ ] Its pages carry what they act on in the address (`/plataforma/organizaciones/<tenant>`,
       `/plataforma/socios/<partner>`), like tenant pages (ADR 0002).
-- [ ] It reads tenants as the platform sees them (name, plan, status, partner, holds, number of
+- [ ] It reads tenants as the platform sees them (name, status, partner, holds, number of
       companies); it never shows a tenant's documents. Listing a tenant's companies is
       recorded in that tenant's audit log, and the screen says so.
 - [ ] Destructive or wide actions (holding a tenant, a company or a SUNAT endpoint, key rotation,
