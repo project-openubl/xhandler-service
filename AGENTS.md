@@ -3,6 +3,10 @@
 Guide for AI coding agents (and humans) in this monorepo: the xhandler services for SUNAT (Peru)
 electronic documents, built, tested and deployed together. This is the only agent guide.
 
+**Scope: SUNAT SEE-Del Contribuyente and PSE only** ([ADR 0016](docs/adr/0016-scope-see-del-pse.md)),
+plus the platform admin side that runs them. OSE, billing and plans, data-subject requests, support
+sessions and an audit table, API or page are out of scope: don't add them back without an ADR.
+
 **Behavior is defined in [docs/DESIGN.md](docs/DESIGN.md)** (UI: the ADRs in
 [docs/adr/](docs/adr/)). Read the relevant section before changing behavior; a behavior
 change updates DESIGN.md or an ADR in the same commit. How to run the stack locally:

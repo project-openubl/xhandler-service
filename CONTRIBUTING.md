@@ -51,7 +51,7 @@ app that started it.
 | Keycloak      | http://localhost:8180 (`admin`/`admin`) |
 
 **Dev users** (password = username): `olga` (platform admin, sees everything), `alice`, `bob`,
-`carol` (platform support) and `dave` (email not verified).
+`carol` (no platform role) and `dave` (email not verified).
 
 ## First steps in the app
 

@@ -2575,7 +2575,7 @@
     },
     "/api/admin/v1/tenants/{tenantId}/companies" : {
       "get" : {
-        "summary" : "Empresas de una organización (queda en su auditoría)",
+        "summary" : "Empresas de una organización (queda auditado)",
         "operationId" : "adminListTenantCompanies",
         "parameters" : [ {
           "name" : "tenantId",

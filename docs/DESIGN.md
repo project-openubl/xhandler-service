@@ -1,7 +1,8 @@
 # xhandler-service — Design
 
 Multi-tenant SaaS for SUNAT (Peru) electronic documents: create, sign, validate, send,
-track, deliver and report them. Client systems (ERP, POS, xhandler-ui, later
+track, deliver and report them. **Its scope is SEE-Del Contribuyente and PSE only** (§1.1, ADR
+0016), plus the platform admin side that runs them. Client systems (ERP, POS, xhandler-ui, later
 xhandler-mobile) use a REST API. The fiscal core is
 [xhandler-rust](https://github.com/project-openubl/xhandler-rust); everything else is a
 Quarkus application.
@@ -23,7 +24,7 @@ Inputs to this design:
 
 ### 1.1 Roles
 
-The service operates in two roles in v1:
+The service operates in two roles, and only these (ADR 0016):
 
 | Role | Who signs | Who submits | Legal basis |
 |---|---|---|---|
@@ -68,6 +69,9 @@ The service operates in two roles in v1:
 - Redis in xhandler-service (§10.9).
 - **Billing, plans, quotas and usage rate limits** (§14): external systems (a billing platform, the API gateway)
   own them. The service does SUNAT work and keeps no plan, quota or usage counter.
+- **Legal, support and compliance workflows** (ADR 0016): data-subject requests (Ley 29733; forwarded
+  outside the service, §16), support sessions for platform operators (ADR 0015) and an audit log with its own
+  table, API or page (audit records are `xhandler.audit` log lines, §16).
 - **The OSE role** (RS 117-2017: validating issuers' documents, the CDR-OSE, forwarding to SUNAT, the public
   validity page) **and sending through a third-party OSE.** The service is software (SEE-Del) and PSE only
   until the PSE system is complete; the OSE work built earlier is kept in branch `archive/ose` and the law
