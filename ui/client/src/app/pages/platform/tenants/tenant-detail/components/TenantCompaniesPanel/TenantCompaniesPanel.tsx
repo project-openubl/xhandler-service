@@ -192,7 +192,7 @@ export const TenantCompaniesPanel: React.FC<ITenantCompaniesPanelProps> = ({
           isInline
           isPlain
           variant="info"
-          title="Cada consulta de las empresas queda registrada en la auditoría de la organización."
+          title="Cada consulta de las empresas queda registrada en la auditoría de la plataforma."
         />
         {isShown ? (
           <DataView activeState={activeState}>

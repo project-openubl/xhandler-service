@@ -113,7 +113,7 @@ class TenancyTest {
     }
 
     @Test
-    void the_app_runs_as_xhandler_app_and_the_audit_log_is_append_only() {
+    void the_app_runs_as_xhandler_app_and_cant_read_platform_tables() {
         UUID tenant = tenantOf("alice");
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
@@ -126,7 +126,7 @@ class TenancyTest {
         RuntimeException e = org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, () ->
                 QuarkusTransaction.requiringNew().run(() -> {
                     access.enterAsPlatform(tenant);
-                    em.createNativeStatement("UPDATE xhandler.audit_log SET action = 'x'").execute();
+                    em.createNativeQuery("SELECT count(*) FROM xhandler.ruc_verification_failure").getSingleResult();
                 }));
         assertTrue(rootMessage(e).contains("permission denied"), rootMessage(e));
     }

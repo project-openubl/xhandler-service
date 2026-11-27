@@ -1,7 +1,6 @@
 package io.github.projectopenubl.xhandler.models;
 
 public enum ModelType {
-    AUDIT_LOG,
     COMPANY,
     CREDENTIAL,
     DOCUMENT,

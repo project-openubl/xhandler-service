@@ -240,8 +240,11 @@ public class CompanyEnvironmentResource {
             throw new ApiException(503, "sunat_unavailable", "No se pudo consultar a SUNAT. Intente nuevamente.");
         }
         if (answer.code() != null && SOL_ERRORS.contains(answer.code())) {
-            QuarkusTransaction.requiringNew().run(() -> auditor.record(access.enter(tenantId, Role.ADMIN),
-                    "company.ruc_verification_failed", "company", companyId, Map.of("ruc", check.ruc(), "code", answer.code())));
+            QuarkusTransaction.requiringNew().run(() -> {
+                TenantScope scope = access.enter(tenantId, Role.ADMIN);
+                companyProvider.recordFailedVerification(check.ruc());
+                auditor.record(scope, "company.ruc_verification_failed", "company", companyId, Map.of("ruc", check.ruc(), "code", answer.code()));
+            });
             throw ApiException.invalid("sol_invalid", "SUNAT rechazó el usuario SOL: " + answer.description(), answer.code());
         }
         if (!Set.of("accepted", "rejected", "voided", "not_found").contains(answer.status())) {

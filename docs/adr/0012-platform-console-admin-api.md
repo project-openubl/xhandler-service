@@ -29,7 +29,7 @@ document and the SDKs are unchanged.
       `/plataforma/socios/<partner>`), like tenant pages (ADR 0002).
 - [ ] It reads tenants as the platform sees them (name, status, partner, holds, number of
       companies); it never shows a tenant's documents. Listing a tenant's companies is
-      recorded in that tenant's audit log, and the screen says so.
+      audited, and the screen says so.
 - [ ] Destructive or wide actions (holding a tenant, a company or a SUNAT endpoint, key rotation,
       purging jobs) ask for confirmation naming what they affect.
 - [ ] Passwords the API shows once are shown once, with a copy
@@ -38,8 +38,7 @@ document and the SDKs are unchanged.
 - [ ] Errors are shown as everywhere else: "No se pudo …" plus the server's `message` and
       `detail` (ADR 0006).
 - [ ] The UI decides nothing about platform access on its own: every action is checked and
-      audited by the server (the tenant's audit log for tenant data, the platform log for the
-      rest).
+      audited by the server (its audit log lines).
 
 ## Consequences
 

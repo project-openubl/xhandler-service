@@ -69,30 +69,6 @@
         },
         "required" : [ "kind", "message", "detail" ]
       },
-      "AuditEntry" : {
-        "type" : "object",
-        "properties" : {
-          "at" : {
-            "$ref" : "#/components/schemas/Instant"
-          },
-          "actor" : {
-            "type" : "string"
-          },
-          "action" : {
-            "type" : "string"
-          },
-          "object_type" : {
-            "type" : "string"
-          },
-          "object_id" : {
-            "type" : "string"
-          },
-          "details" : {
-            "type" : "object",
-            "additionalProperties" : { }
-          }
-        }
-      },
       "Authorization" : {
         "type" : "object",
         "required" : [ "authorized_at", "evidence_base64" ],
@@ -1853,30 +1829,6 @@
           }
         }
       },
-      "PageAuditEntry" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/AuditEntry"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
       "PageCompanyView" : {
         "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
         "type" : "object",
@@ -3085,73 +3037,6 @@
         },
         "summary" : "Get",
         "tags" : [ "Tenant Resource" ],
-        "security" : [ {
-          "bearer" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/tenants/{tenantId}/audit" : {
-      "get" : {
-        "operationId" : "listAuditEntries",
-        "parameters" : [ {
-          "name" : "tenantId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "$ref" : "#/components/schemas/UUID"
-          }
-        }, {
-          "name" : "limit",
-          "in" : "query",
-          "schema" : {
-            "type" : "integer",
-            "format" : "int32"
-          }
-        }, {
-          "name" : "offset",
-          "in" : "query",
-          "schema" : {
-            "type" : "integer",
-            "format" : "int32"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/PageAuditEntry"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Sin token o con un token inválido (sin cuerpo)."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "summary" : "List",
-        "tags" : [ "Audit Resource" ],
         "security" : [ {
           "bearer" : [ ]
         } ]

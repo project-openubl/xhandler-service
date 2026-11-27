@@ -92,6 +92,13 @@ public class JpaCompanyProvider implements CompanyProvider {
         return ((Number) failures).intValue();
     }
 
+    @Override
+    public void recordFailedVerification(String ruc) {
+        repository.getEntityManager().createNativeQuery("SELECT xhandler.record_failed_verification(:ruc)")
+                .setParameter("ruc", ruc)
+                .getSingleResult();
+    }
+
 
     private static List<CompanyModel> wrap(List<CompanyEntity> entities) {
         return entities.stream().map(e -> (CompanyModel) new CompanyAdapter(e)).toList();

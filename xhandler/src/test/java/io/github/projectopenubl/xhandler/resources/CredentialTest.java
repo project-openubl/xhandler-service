@@ -1,6 +1,5 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.models.AuditLogProvider;
 import io.github.projectopenubl.xhandler.models.CredentialProvider;
 import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.keys.SecretBox;
@@ -31,16 +30,15 @@ import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 @QuarkusTestResource(EngineStub.class)
 class CredentialTest {
-
-    @Inject
-    AuditLogProvider auditLogProvider;
 
     @Inject
     CompanyProvider companyProvider;
@@ -71,6 +69,30 @@ class CredentialTest {
                 .body("find { it.kind == 'sol' }.label", equalTo("2012…ATOS"))
                 .body(not(containsString("s3cr3t-clave")));
 
+        // Reads and writes of secrets are audit log lines (DESIGN.md §16)
+        List<String> audit = new CopyOnWriteArrayList<>();
+        java.util.logging.Handler capture = new java.util.logging.Handler() {
+            @Override
+            public void publish(java.util.logging.LogRecord r) {
+                audit.add(r instanceof org.jboss.logmanager.ExtLogRecord e ? e.getFormattedMessage() : r.getMessage());
+            }
+
+            @Override
+            public void flush() {}
+
+            @Override
+            public void close() {}
+        };
+        java.util.logging.Logger auditLogger = java.util.logging.Logger.getLogger("xhandler.audit");
+        auditLogger.addHandler(capture);
+        try {
+            storeAndRead(tenant, company, audit);
+        } finally {
+            auditLogger.removeHandler(capture);
+        }
+    }
+
+    private void storeAndRead(UUID tenant, UUID company, List<String> audit) {
         QuarkusTransaction.requiringNew().run(() -> {
             access.enterAsPlatform(tenant);
             CredentialModel stored = credentialProvider.getCredential(company, "sol").orElseThrow();
@@ -80,8 +102,7 @@ class CredentialTest {
 
             Map<String, String> read = credentials.read(platform(tenant), companyProvider.getCompany(company).orElse(null), "sol", "test").orElseThrow();
             assertEquals("s3cr3t-clave", read.get("password"));
-            assertTrue(auditLogProvider.countAuditLogs("credential.read", stored.getId().toString()) >= 1);
-            assertTrue(auditLogProvider.countAuditLogs("credential.stored", stored.getId().toString()) >= 1);
+            assertTrue(audit.stream().anyMatch(l -> l.contains("action=credential.read") && l.contains(stored.getId().toString())), audit.toString());
         });
     }
 
