@@ -52,7 +52,9 @@ comment at the call):
 - admin `adminListTenantCompanies` (one tenant's companies, read on demand);
 - admin `adminListPlans` (the service's four plans);
 - admin `adminListPartners` (the platform has a few partners);
-- admin `adminListPartnerMembers` (one row per member of the partner).
+- admin `adminListPartnerMembers` (one row per member of the partner);
+- admin `adminListEndpoints` (one row per SUNAT environment and service);
+- admin `adminListMigrations` (the database migrations, a few dozen).
 
 ## Checklist
 

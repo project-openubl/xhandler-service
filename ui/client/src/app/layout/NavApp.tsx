@@ -118,6 +118,7 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
   const platformLinks = [
     { to: "/plataforma/organizaciones", label: "Organizaciones" },
     { to: "/plataforma/socios", label: "Socios" },
+    { to: "/plataforma/envios", label: "Envío a SUNAT" },
   ] as const;
 
   const group = useLocation({

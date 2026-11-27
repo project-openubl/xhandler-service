@@ -24,6 +24,10 @@ import { ClearFiltersButton } from "@app/components/ClearFiltersButton";
 import { ConfirmActionModal } from "@app/components/ConfirmActionModal";
 import { dataViewBodyStates } from "@app/components/dataViewStates";
 import { DocumentTitle } from "@app/components/DocumentTitle";
+import {
+  JOB_STATE_PRESENTATION,
+  JobStateLabel,
+} from "@app/components/JobStateLabel";
 import { ListPagination } from "@app/components/ListPagination";
 import { SingleSelectFilter } from "@app/components/SingleSelectFilter";
 import { TableEmptyState } from "@app/components/TableEmptyState";
@@ -48,10 +52,6 @@ import { getMutationErrorMessage } from "@app/utils/apiError";
 import type { DataViewTh } from "@app/utils/dataViewTypes";
 import { estimateItemCount, toPageParams } from "@app/utils/listState";
 
-import {
-  JOB_STATE_PRESENTATION,
-  JobStateLabel,
-} from "./components/JobStateLabel";
 import { JOB_LIST_STATE } from "./jobListState";
 
 const STATE_OPTIONS = JOB_STATES.map((state) => ({

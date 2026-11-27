@@ -30,6 +30,7 @@ import {
 import { ConfirmActionModal } from "@app/components/ConfirmActionModal";
 import { DocumentTitle } from "@app/components/DocumentTitle";
 import { GatedButton } from "@app/components/GatedButton";
+import { JobStateLabel } from "@app/components/JobStateLabel";
 import {
   DEFAULT_REFETCH_INTERVAL,
   RENDER_DATETIME_FORMAT,
@@ -45,8 +46,6 @@ import {
   useSuspenseJobDetailQuery,
 } from "@app/queries/xhandler/jobs";
 import { getMutationErrorMessage } from "@app/utils/apiError";
-
-import { JobStateLabel } from "../job-list/components/JobStateLabel";
 
 const formatTime = (value: string | undefined): string =>
   value ? dayjs(value).format(RENDER_DATETIME_FORMAT) : "-";

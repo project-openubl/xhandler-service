@@ -1,0 +1,1 @@
+export { EndpointsCard } from "./EndpointsCard";
