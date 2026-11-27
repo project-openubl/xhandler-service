@@ -505,7 +505,7 @@ func TestXHandlerSpec(t *testing.T) {
 		TLS:          &xhandlerv1alpha1.TLSSpec{Secret: "xhandler-tls"},
 		AdditionalOptions: []xhandlerv1alpha1.ValueOrSecret{
 			{Name: "XHANDLER_EMIT_PERMITS", Value: "8"},
-			{Name: "XHANDLER_LAGO_API_KEY", Secret: secret("lago", "api-key")},
+			{Name: "QUARKUS_MAILER_PASSWORD", Secret: secret("mail", "password")},
 			// Replaces the operator's value
 			{Name: "XHANDLER_PUBLIC_URL", Value: "https://facturas.example.com"},
 			// Not in the migration Job: it logs in as the owner
@@ -576,7 +576,7 @@ func TestXHandlerSpec(t *testing.T) {
 		"XHANDLER_VAULT_PKCS11_PIN":       "hsm",
 		"XHANDLER_STORAGE_S3_ACCESS_KEY":  "s3",
 		"XHANDLER_STORAGE_S3_SECRET_KEY":  "s3",
-		"XHANDLER_LAGO_API_KEY":           "lago",
+		"QUARKUS_MAILER_PASSWORD":         "mail",
 	} {
 		if ref := env[name].ValueFrom; ref == nil || ref.SecretKeyRef == nil || ref.SecretKeyRef.Name != secretName {
 			t.Errorf("%s from %+v, want secret %s", name, ref, secretName)
@@ -868,11 +868,6 @@ func TestXHandlerUISearchpe(t *testing.T) {
 	ctx := t.Context()
 	cr := newXHandler(t, xhandlerv1alpha1.XHandlerSpec{
 		OIDC: &xhandlerv1alpha1.OIDCSpec{ServerURL: testOIDCServer, ClientID: "xhandler-service"},
-		Captcha: &xhandlerv1alpha1.CaptchaSpec{
-			Provider:        "turnstile",
-			SiteKey:         "site-key",
-			SecretKeySecret: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "captcha"}, Key: "secret"},
-		},
 		UI: &xhandlerv1alpha1.UISpec{
 			SearchpeRef:           "searchpe",
 			Instances:             ptr.To[int32](1),
@@ -911,12 +906,6 @@ func TestXHandlerUISearchpe(t *testing.T) {
 		"NODE_EXTRA_CA_CERTS":     "/etc/xhandler-ui/ca/ca.crt",
 		"LIBRO_RECLAMACIONES_URL": "https://example.com/libro",
 	})
-	// The UI has no CAPTCHA page: only the app verifies tokens
-	for _, env := range container.Env {
-		if env.Name == "CAPTCHA_PROVIDER" || env.Name == "CAPTCHA_SITE_KEY" {
-			t.Errorf("UI env has %s, want no CAPTCHA settings", env.Name)
-		}
-	}
 	if container.ReadinessProbe.HTTPGet == nil || container.ReadinessProbe.HTTPGet.Path != "/healthz" ||
 		container.LivenessProbe.HTTPGet == nil || container.LivenessProbe.HTTPGet.Path != "/healthz" {
 		t.Errorf("UI probes %+v, %+v, want GET /healthz", container.ReadinessProbe, container.LivenessProbe)
@@ -926,17 +915,6 @@ func TestXHandlerUISearchpe(t *testing.T) {
 			v.ConfigMap.Items[0].Key == "service-ca.crt" && v.ConfigMap.Items[0].Path == "ca.crt"
 	}) {
 		t.Errorf("UI volumes %+v, want the CA bundle", ui.Spec.Template.Spec.Volumes)
-	}
-	api := &appsv1.Deployment{}
-	get(ctx, t, cr.Namespace, "xh-api", api)
-	assertEnv(t, api.Spec.Template.Spec.Containers[0], map[string]string{
-		"XHANDLER_CAPTCHA_VERIFY_URL": "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-	})
-	if !slices.ContainsFunc(api.Spec.Template.Spec.Containers[0].Env, func(e corev1.EnvVar) bool {
-		return e.Name == "XHANDLER_CAPTCHA_SECRET" && e.ValueFrom != nil && e.ValueFrom.SecretKeyRef != nil &&
-			e.ValueFrom.SecretKeyRef.Name == "captcha"
-	}) {
-		t.Errorf("api env %+v, want XHANDLER_CAPTCHA_SECRET from the secret", api.Spec.Template.Spec.Containers[0].Env)
 	}
 
 	if err := k8sClient.Delete(ctx, searchpe); err != nil {

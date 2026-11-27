@@ -92,9 +92,6 @@ The name of an `XHandler` is a DNS-1035 label (it starts with a letter) of at mo
   (Node.js) must trust: put its CA in a ConfigMap and set `ui.caBundleConfigMap` (`name`, `key`), which the UI gets as
   `NODE_EXTRA_CA_CERTS`. `ui.libroReclamacionesUrl` shows the platform's Libro de Reclamaciones link. Its probes are
   `GET /healthz`.
-- **CAPTCHA.** `captcha` (`provider` hcaptcha or turnstile, `secretKeySecret`) gives the app the provider's verify
-  URL and secret; without it the public document lookup (`POST /api/v1/public/lookup`) refuses every request. The UI
-  has no CAPTCHA page; `siteKey` is optional and unused by the operator.
 - **Configuration.** The spec maps to the app's properties (`QUARKUS_DATASOURCE_*`, `QUARKUS_OIDC_*`,
   `XHANDLER_VAULT_PKCS11_*`, `XHANDLER_STORAGE_S3_*`, `XHANDLER_PUBLIC_URL`) and to the engine's
   (`XHANDLER_SUNAT_FAKE_URL`). `vault.moduleVolume` mounts the HSM vendor's PKCS#11 module at `vault.moduleMountPath`
