@@ -63,7 +63,7 @@ public final class PlatformNotices {
                     notified++;
                 }
             }
-            // The platform's own keys (PSE, OSE CDR): their expiry stops every company using them
+            // The platform's own keys (PSE): their expiry stops every company using them
             QuarkusTransaction.requiringNew().run(() -> {
                 for (NotificationProvider.ExpiringPlatformKey key : notificationProvider.getExpiringPlatformKeys()) {
                     org.jboss.logging.Logger.getLogger("xhandler.audit.platform").errorf("platform %s certificate expires at %s: replace it", key.purpose(),

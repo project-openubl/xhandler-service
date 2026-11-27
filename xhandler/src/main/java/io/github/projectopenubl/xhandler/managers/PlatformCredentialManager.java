@@ -18,8 +18,8 @@ import org.jboss.logging.Logger;
 import tools.jackson.core.JacksonException;
 
 /**
- * The platform's own credentials (DESIGN.md §7.1): the pool of PSE SOL users, the OSE's SUNAT
- * credentials, the validity API. Sealed like tenant secrets; every read is logged (no tenant audit
+ * The platform's own credentials (DESIGN.md §7.1): the pool of PSE SOL users and the validity
+ * API. Sealed like tenant secrets; every read is logged (no tenant audit
  * log owns them). PSE documents spread over the pool, so no single SOL user is a bottleneck (§10.2).
  */
 @ApplicationScoped

@@ -163,7 +163,7 @@ public class VoidingManager {
         if (request == null || request.motivo() == null || request.motivo().isBlank()) {
             throw ApiException.invalid("invalid_request", "Indique el motivo de la anulación.", null);
         }
-        if (original.isSummary() || "ose_inbound".equals(original.getOrigin()) || "reception".equals(original.getOrigin())) {
+        if (original.isSummary() || "reception".equals(original.getOrigin())) {
             throw ApiException.conflict("not_voidable", "Este documento no se anula por este medio.");
         }
         if (!DocumentModel.ACCEPTED.contains(original.getStatus()) || original.getVoidedByDocumentId() != null) {

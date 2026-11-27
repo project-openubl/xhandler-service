@@ -23,7 +23,6 @@ public class JpaDocumentProvider implements DocumentProvider {
     /** Lines a resumen diario may take: SUNAT can't have them and no attempt is in flight (§9.2.4). */
     static final String SUMMARY_CANDIDATES = """
             companyId = ?1 and sunatEnv = ?2 and fechaEmision = ?3 and summaryDocumentId is null
-            and origin <> 'ose_inbound'
             and (tipoComprobante = '03' or (tipoComprobante in ('07', '08') and serie like 'B%'))
             and (fechaEmision < ?4 or codeClass = 'route_change')
             and (status = 'pending_send' or (status = 'exception' and codeClass = 'route_change'))
@@ -104,7 +103,7 @@ public class JpaDocumentProvider implements DocumentProvider {
     @Override
     public Optional<DocumentModel> getIssuedDocument(UUID companyId, String sunatEnv, String tipoComprobante, String serie, long numero) {
         return repository.find(
-                        "companyId = ?1 and sunatEnv = ?2 and tipoComprobante = ?3 and serie = ?4 and numero = ?5 and origin <> 'ose_inbound'",
+                        "companyId = ?1 and sunatEnv = ?2 and tipoComprobante = ?3 and serie = ?4 and numero = ?5",
                         companyId, sunatEnv, tipoComprobante, serie, numero)
                 .firstResultOptional().map(DocumentAdapter::new);
     }

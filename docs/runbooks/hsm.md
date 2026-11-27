@@ -1,7 +1,7 @@
 # HSM restart, signing failures, key rotation
 
-Tenant keys are wrapped in Postgres and unwrapped only inside the HSM; platform keys (PSE, OSE
-CDR) are HSM objects (DESIGN.md §6).
+Tenant keys are wrapped in Postgres and unwrapped only inside the HSM; the platform's PSE
+key is an HSM object (DESIGN.md §6).
 
 - **HSM restart / cluster member lost**: signing calls fail fast and emits answer 503 `busy`;
   documents already accepted keep flowing (sends don't sign). Sessions are re-opened on the next
@@ -11,6 +11,5 @@ CDR) are HSM objects (DESIGN.md §6).
 - **Master key rotation**: `api POST /api/admin/v1/keys/rotate` re-wraps every secret, tenant key,
   platform credential and platform key with the current master key. Run it after adding the new
   master key, before retiring the old one.
-- **Platform certificate expiring** (alert 30 days before): import the new PSE or OSE CDR
-  certificate (`POST /api/admin/v1/pse/certificate`, `POST /api/admin/v1/ose/cdr-certificate`) and
-  register it in SOL first.
+- **Platform certificate expiring** (alert 30 days before): import the new PSE certificate
+  (`POST /api/admin/v1/pse/certificate`) and register it in SOL first.

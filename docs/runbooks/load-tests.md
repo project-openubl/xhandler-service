@@ -27,20 +27,10 @@ client), and the backlog drains after the burst.
    (~1.2M at peak figures) drains earliest deadline first in about 3 hours; no document is sent
    twice (fake's `GET /fake/received` count = documents accepted) and none is lost.
 
-## 4. OSE intake and forwarding
-
-```bash
-./hack/load/make-ose-docs.sh $ISSUER_RUC 20000 /tmp/ose-docs
-k6 run -e URL=$URL -e OSE_USER=$U -e OSE_PASSWORD=$P -e DOCS=/tmp/ose-docs -e COUNT=20000 -e VUS=50 hack/load/ose-intake.js
-```
-
-Pass: ≥ 99.96% CDR-OSE answers, p99 < 2 s, `xhandler_ose_forward_oldest_seconds` < 600 during the
-run and back to 0 after, `late` = 0 in `GET /api/admin/v1/ose/forwarding`.
-
-## 5. Failover under load (chaos, §25.1)
+## 4. Failover under load (chaos, §25.1)
 
 While test 1 runs: delete the Postgres primary pod, a worker pod, and an api pod; restart the HSM
 (staging). Pass: no lost or duplicated documents (compare the fake's received count with accepted
 documents), recovery within a minute.
 
-Record results and dates: they are ISO 27001 and OSE availability evidence.
+Record results and dates: they are ISO 27001 evidence.

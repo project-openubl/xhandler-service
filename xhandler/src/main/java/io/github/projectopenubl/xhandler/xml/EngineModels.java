@@ -134,22 +134,6 @@ public final class EngineModels {
             String gravada, String igv, String exonerada, String inafecta, String exportacion, String gratuita, String ivapBase,
             String ivap, String isc, String icbper, String otros) {}
 
-    // --- OSE forwarding (§11.4) ---
-
-    public record OseCredentials(String username, String password) {
-        @Override
-        public String toString() {
-            return "OseCredentials[username=" + username + "]";
-        }
-    }
-
-    /** {@code operation}: send_bill (comprobantes) or send_summary (resúmenes, bajas). */
-    public record OseForwardRequest(
-            Environment environment, String url, OseCredentials credentials, String name, String xml, String cdrXml, String operation) {}
-
-    /** {@code status}: accepted, rejected, unknown, not_delivered. */
-    public record OseForwardResponse(String status, String code, String description) {}
-
     // --- SIRE and conformity (§11.7, §11.8) ---
 
     /** The tenant's SUNAT API client plus its SOL user (RUC + user). */
@@ -181,13 +165,6 @@ public final class EngineModels {
 
     /** {@code conformity}: pending, agreed, objected, silent_agreement, not_found, unknown. */
     public record ConformityResponse(String state, String conformity, String description) {}
-
-    public record CdrNote(String code, String message) {}
-
-    public record CdrRequest(
-            String xml, String oseRuc, String responseCode, String description, List<CdrNote> notes, String issuedAt) {}
-
-    public record XmlResponse(String xml) {}
 
     public record InfoResponse(String engineVersion, String xhandlerRustRev) {}
 

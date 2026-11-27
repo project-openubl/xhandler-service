@@ -12,7 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The platform's own keys (DESIGN.md §6): the PSE signing key and the OSE CDR key. Separate,
+ * The platform's own keys (DESIGN.md §6): the PSE signing key. Separate,
  * permanent vault objects (an HSM in production), never mixed with tenant keys. Replacing one keeps
  * the old reference for retention, marked replaced.
  */

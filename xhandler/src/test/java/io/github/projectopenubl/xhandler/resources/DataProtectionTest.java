@@ -195,8 +195,7 @@ class DataProtectionTest {
     @Test
     void health_metrics_are_exposed() {
         String metrics = given().get("/q/metrics").then().statusCode(200).extract().asString();
-        assertTrue(metrics.contains("xhandler_documents_exception") && metrics.contains("xhandler_jobs_oldest_waiting_seconds")
-                && metrics.contains("xhandler_ose_forward_oldest_seconds"), "SLO gauges");
+        assertTrue(metrics.contains("xhandler_documents_exception") && metrics.contains("xhandler_jobs_oldest_waiting_seconds"), "SLO gauges");
     }
 
     /** Counts with the tenant opened, as row-level security requires. */

@@ -4,7 +4,6 @@ import tools.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.ProcessingException;
 import java.util.Base64;
-import java.util.List;
 import java.util.function.Supplier;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
@@ -82,10 +81,6 @@ public class Engine {
         return call(() -> client.validityFile(new EngineModels.ValidityFileRequest(xml, environment, credentials)));
     }
 
-    public EngineModels.OseForwardResponse oseForward(EngineModels.OseForwardRequest request) {
-        return call(() -> client.oseForward(request));
-    }
-
     public EngineModels.SireTicketResponse sireProposal(EngineModels.SireProposalRequest request) {
         return call(() -> client.sireProposal(request));
     }
@@ -100,13 +95,6 @@ public class Engine {
 
     public EngineModels.ConformityResponse conformity(EngineModels.ConformityRequest request) {
         return call(() -> client.conformity(request));
-    }
-
-    /** Builds an unsigned OSE CDR for a received document (OSE role, R4). */
-    public String cdr(String xml, String oseRuc, String responseCode, String description, List<EngineModels.CdrNote> notes,
-            java.time.Instant issuedAt) {
-        return call(() -> client.cdr(new EngineModels.CdrRequest(xml, oseRuc, responseCode, description, notes, issuedAt.toString())))
-                .xml();
     }
 
     public EngineModels.InfoResponse info() {
