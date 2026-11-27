@@ -1,6 +1,6 @@
 package io.github.projectopenubl.xhandler.resources;
 
-import io.github.projectopenubl.xhandler.representations.idm.TenantUsageRepresentation;
+import io.github.projectopenubl.xhandler.representations.idm.PartnerTenantSummaryRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.PartnerTenantRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.PartnerRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.PartnerCreateTenantRepresentation;
@@ -21,11 +21,8 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
-import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -84,23 +81,14 @@ public class PartnerResource {
         return Response.status(201).entity(new PartnerTenantRepresentation(id, request.name().strip(), partnerId)).build();
     }
 
-    /** The partner's tenants with their documents in a month (default: this month, Lima). */
+    /** The partner's tenants. */
     @Operation(operationId = "listPartnerTenants")
     @GET
     @Path("/{partnerId}/tenants")
     @Transactional
-    public List<TenantUsageRepresentation> tenants(@PathParam("partnerId") UUID partnerId, @QueryParam("month") String month) {
+    public List<PartnerTenantSummaryRepresentation> tenants(@PathParam("partnerId") UUID partnerId) {
         require(partnerId, "viewer");
-        YearMonth period;
-        try {
-            period = month == null ? YearMonth.now(io.github.projectopenubl.xhandler.utils.Deadlines.LIMA) : YearMonth.parse(month);
-        } catch (java.time.format.DateTimeParseException e) {
-            throw ApiException.invalid("invalid_request", "month debe tener el formato AAAA-MM.", null);
-        }
-        Instant from = period.atDay(1).atStartOfDay(io.github.projectopenubl.xhandler.utils.Deadlines.LIMA).toInstant();
-        Instant to = period.plusMonths(1).atDay(1).atStartOfDay(io.github.projectopenubl.xhandler.utils.Deadlines.LIMA).toInstant();
-        return partners.getPartnerTenants(partnerId, from, to).stream().map(r -> new TenantUsageRepresentation(r.id(), r.name(), r.status(), r.plan(),
-                r.productionDocuments(), r.otherDocuments())).toList();
+        return partners.getPartnerTenants(partnerId).stream().map(r -> new PartnerTenantSummaryRepresentation(r.id(), r.name(), r.status())).toList();
     }
 
     @Operation(operationId = "getPartnerBranding")

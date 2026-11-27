@@ -36,7 +36,7 @@ public final class Api {
         return given().auth().oauth2(token).contentType("application/json");
     }
 
-    /** The user's tenant, created on first use (one free tenant per person). */
+    /** The user's first tenant, created on first use. */
     public static UUID tenantOf(String user) {
         List<String> ids = as(user).get("/api/v1/tenants").then().statusCode(200).extract().path("id");
         if (!ids.isEmpty()) {

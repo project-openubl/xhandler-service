@@ -58,16 +58,14 @@ public class DocumentEmailJob implements JobHandler {
     private final EmailSender sender;
     private final EmailProvider emailProvider;
     private final io.github.projectopenubl.xhandler.clients.Egress egress;
-    private final io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements;
 
     public DocumentEmailJob(TenantAccess access, DocumentPdf pdf, FileStore files, AccessLinkManager links, CredentialManager credentials,
             EmailSender sender, EmailProvider emailProvider, io.github.projectopenubl.xhandler.clients.Egress egress,
-            io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
+            CompanyProvider companyProvider, DocumentEventProvider documentEventProvider, DocumentFileProvider documentFileProvider, DocumentProvider documentProvider) {
         this.documentProvider = documentProvider;
         this.documentFileProvider = documentFileProvider;
         this.documentEventProvider = documentEventProvider;
         this.companyProvider = companyProvider;
-        this.entitlements = entitlements;
         this.egress = egress;
         this.access = access;
         this.pdf = pdf;
@@ -124,10 +122,7 @@ public class DocumentEmailJob implements JobHandler {
             }
             String subject = subject(company.getEmailSubject(), doc, company);
             String body = HtmlSanitizer.sanitize(render(company.getEmailBody(), DEFAULT_BODY, doc, company, link));
-            // The plan may have changed since the SMTP server was saved (downgrade, stale entitlement)
-            EmailSender.Smtp smtp = entitlements.usage(doc.getTenantId()).plan().customSmtp()
-                    ? credentials.read(scope, company, "smtp", "email:" + doc.getId()).map(EmailSender::smtp).orElse(null)
-                    : null;
+            EmailSender.Smtp smtp = credentials.read(scope, company, "smtp", "email:" + doc.getId()).map(EmailSender::smtp).orElse(null);
             return new Prepared(new EmailSender.Message(sender(company), company.getEmail(), recipients, ccKept, subject, body, attachments),
                     smtp, skipped);
         });

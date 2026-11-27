@@ -1,6 +1,5 @@
 package io.github.projectopenubl.xhandler.models;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -9,7 +8,7 @@ public interface PartnerProvider {
 
     record PartnerMembership(UUID id, String name, String role) {}
 
-    record PartnerTenantUsage(UUID id, String name, String status, String plan, long productionDocuments, long otherDocuments) {}
+    record PartnerTenant(UUID id, String name, String status) {}
 
     /** The partner's branding as JSON text (null when never set), and whether it has a logo. */
     record PartnerBranding(String brandingJson, boolean hasLogo) {}
@@ -20,8 +19,8 @@ public interface PartnerProvider {
     /** Creates a tenant of the partner; {@code ownerKind}/{@code ownerSubject} may be null (no owner). */
     void createPartnerTenant(UUID partnerId, UUID id, String name, String by, String ownerKind, String ownerSubject);
 
-    /** The partner's tenants with their documents in {@code [from, to)}. */
-    List<PartnerTenantUsage> getPartnerTenants(UUID partnerId, Instant from, Instant to);
+    /** The partner's live tenants, by name. */
+    List<PartnerTenant> getPartnerTenants(UUID partnerId);
 
     void setPartnerBranding(UUID partnerId, String brandingJson);
 

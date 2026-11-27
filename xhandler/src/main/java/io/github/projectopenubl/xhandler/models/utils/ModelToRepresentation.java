@@ -57,7 +57,7 @@ public class ModelToRepresentation {
     }
 
     public TenantRepresentation toRepresentation(TenantModel tenant) {
-        return new TenantRepresentation(tenant.getId(), tenant.getName(), tenant.getPlan(), tenant.getStatus(), tenant.getRetentionYears());
+        return new TenantRepresentation(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getRetentionYears());
     }
 
     public MemberRepresentation toRepresentation(TenantMemberModel m) {

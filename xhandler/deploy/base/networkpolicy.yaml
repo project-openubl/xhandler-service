@@ -9,7 +9,7 @@
 # REQUIRED overlay patches (see deploy/examples/networkpolicy-private-deps.yaml):
 # private-address dependencies are denied here on purpose and must be allowed
 # one by one — the network HSM (e.g. 1792 Luna, 9004 nShield, 2223-2225
-# CloudHSM), a VPC-private Keycloak, Lago, S3/MinIO interface endpoints, and a
+# CloudHSM), a VPC-private Keycloak, S3/MinIO interface endpoints, and a
 # collector in another namespace. IPv4 only; tenant webhooks on ports other
 # than 443 are not reachable.
 apiVersion: networking.k8s.io/v1
@@ -89,7 +89,7 @@ spec:
               app.kubernetes.io/name: egress-proxy
       ports:
         - { port: 3128, protocol: TCP }
-    # Public internet only: Keycloak, S3, Lago, webhooks (443), tenant SMTP (25, 465, 587, 2525)
+    # Public internet only: Keycloak, S3, webhooks (443), tenant SMTP (25, 465, 587, 2525)
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

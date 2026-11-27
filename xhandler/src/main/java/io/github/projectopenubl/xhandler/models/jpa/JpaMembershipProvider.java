@@ -63,12 +63,4 @@ public class JpaMembershipProvider implements MembershipProvider {
                 .getResultList();
         return rows.stream().map(r -> new MemberTenant((UUID) r[0], (String) r[1], (String) r[2])).toList();
     }
-
-    @Override
-    public long countFreeTenantsCreatedBy(String subject) {
-        Number created = (Number) em.createNativeQuery("SELECT xhandler.free_tenants_created_by(:subject)")
-                .setParameter("subject", subject)
-                .getSingleResult();
-        return created.longValue();
-    }
 }

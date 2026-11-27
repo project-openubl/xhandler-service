@@ -35,7 +35,6 @@ public class NotificationManager {
     public static final String REJECTED_AFTER_DELIVERY = "document.rejected_after_delivery";
     public static final String CERTIFICATE_EXPIRING = "certificate.expiring";
     public static final String SUNAT_OUTAGE = "sunat.outage";
-    public static final String QUOTA = "quota";
     public static final String PSE_AUTHORIZATION = "pse.authorization_revoked";
     public static final String CONFORMITY_OBJECTED = "conformity.objected";
     public static final String SIRE_DEADLINE = "sire.deadline";

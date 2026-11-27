@@ -50,7 +50,7 @@ up() {
   wait_for http://localhost:8090/health engine
 
   # Production mode with the dev conveniences the UI's specs rely on: the software key vault,
-  # file storage, the mailer mock and the CAPTCHA test mode (token "test-pass").
+  # file storage and the mailer mock.
   start xhandler env \
     QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/xhandler \
     QUARKUS_DATASOURCE_USERNAME=xhandler_login \
@@ -61,7 +61,6 @@ up() {
     QUARKUS_OIDC_CREDENTIALS_SECRET=secret \
     QUARKUS_OTEL_SDK_DISABLED=true \
     QUARKUS_MAILER_MOCK=true \
-    XHANDLER_CAPTCHA_TEST_MODE=true \
     XHANDLER_VAULT_KIND=software \
     XHANDLER_VAULT_SOFTWARE_ALLOW_IN_PRODUCTION=true \
     XHANDLER_VAULT_SOFTWARE_CURRENT_MASTER_KEY=e2e \
@@ -69,8 +68,6 @@ up() {
     XHANDLER_STORAGE_KIND=filesystem \
     XHANDLER_STORAGE_DIR="$STACK_DIR/files" \
     XHANDLER_STORAGE_S3_ALLOW_FILESYSTEM_IN_PRODUCTION=true \
-    XHANDLER_LIMITS_MAX_UNVERIFIED_COMPANIES=100000 \
-    XHANDLER_BILLING_DEFAULT_PLAN=enterprise \
     XHANDLER_EGRESS_REQUIRE_PROXY=false \
     java -jar "$ROOT/xhandler/target/quarkus-app/quarkus-run.jar"
 

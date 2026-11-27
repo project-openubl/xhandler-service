@@ -66,9 +66,4 @@ public class JpaTenantProvider implements TenantProvider {
     public void refresh(TenantModel tenant) {
         repository.getEntityManager().refresh(TenantAdapter.toEntity(tenant));
     }
-
-    @Override
-    public void flush() {
-        repository.flush();
-    }
 }

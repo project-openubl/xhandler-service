@@ -108,8 +108,8 @@ public class UblUploadManager {
             throw ApiException.invalid("invalid_document", "El documento no cumple las validaciones de SUNAT.", detail);
         }
         UUID documentId = Ids.newId();
-        // The same gates as any emit (§5): quota, permits, bounded series waits, company checks, issue date
-        return emit.admitted(tenantId, companyId, false, true, () -> QuarkusTransaction.requiringNew().call(() -> {
+        // The same gates as any emit (§5): permits, bounded series waits, company checks, issue date
+        return emit.admitted(() -> QuarkusTransaction.requiringNew().call(() -> {
             TenantScope scope = access.enter(tenantId, Role.OPERATOR);
             emit.boundLockWaits();
             CompanyModel company = companyProvider.getCompanyForShare(companyId).orElse(null);

@@ -19,7 +19,7 @@ public interface PlatformProvider {
     record JobSummary(String name, String state, String worker, String error) {}
 
     /** A tenant as the platform sees it: account metadata, not its documents. */
-    record TenantRow(UUID id, String name, String plan, String planSource, String status, UUID partnerId, String partnerName,
+    record TenantRow(UUID id, String name, String status, UUID partnerId, String partnerName,
             String createdBy, Instant createdAt, boolean sendingPaused, boolean auditHold, boolean archivePlan, Instant deleteAfter,
             long companies) {}
 
@@ -51,9 +51,6 @@ public interface PlatformProvider {
 
     /** False when the partner or the member does not exist. */
     boolean removePartnerMember(UUID partnerId, String kind, String subject);
-
-    /** Inserts or overwrites a {@code platform_setting}. */
-    void setPlatformSetting(String key, String value);
 
     List<EndpointRow> getEndpoints();
 

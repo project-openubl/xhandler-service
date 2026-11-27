@@ -79,8 +79,8 @@ public class TenantExit {
     @Transactional
     public Response export(@PathParam("tenantId") UUID tenantId) {
         TenantScope scope = access.enter(tenantId, Role.ADMIN);
-        if (exits.hasRecentExport()) {
-            throw ApiException.conflict("export_recent", "Ya hay una exportación en curso o de la última hora. Use esa.");
+        if (exits.hasPendingExport()) {
+            throw ApiException.conflict("export_in_progress", "Ya hay una exportación en curso. Espere a que termine.");
         }
         UUID id = Ids.newId();
         exits.addExport(id, tenantId, scope.actor().auditName());

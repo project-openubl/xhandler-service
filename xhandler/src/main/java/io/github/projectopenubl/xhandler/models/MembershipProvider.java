@@ -27,7 +27,4 @@ public interface MembershipProvider {
 
     /** The tenants of the caller ({@code xhandler.tenants_of}). */
     List<MemberTenant> getTenantsOf(String kind, String subject);
-
-    /** Free tenants the person created ({@code xhandler.free_tenants_created_by}). */
-    long countFreeTenantsCreatedBy(String subject);
 }

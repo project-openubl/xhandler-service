@@ -63,7 +63,7 @@ class ConsoleApiTest {
         return UUID.fromString(partner);
     }
 
-    /** A fresh tenant owned by alice (users have one free tenant each; more come through a partner). */
+    /** A fresh tenant owned by alice, created through a partner. */
     static UUID newTenant() {
         UUID partner = newPartner();
         return UUID.fromString(as("alice").body(Map.of("name", "Consola " + UUID.randomUUID(), "owner_kind", "user",

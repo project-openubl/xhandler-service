@@ -32,10 +32,6 @@ public interface CompanyProvider {
     /** Writes pending changes now, so constraint violations surface here. */
     void flush();
 
-    long countUnverifiedCompanies();
-
-    long countVerifiedCompanies();
-
     /** Every company row the open tenant can see, deleted ones included. */
     long countCompanies();
 

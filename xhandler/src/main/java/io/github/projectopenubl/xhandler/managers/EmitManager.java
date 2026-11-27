@@ -32,7 +32,6 @@ import io.github.projectopenubl.xhandler.security.TenantAccess;
 import io.github.projectopenubl.xhandler.security.TenantScope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Instance;
 import io.github.projectopenubl.xhandler.models.NumberingProvider;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -98,7 +97,6 @@ public class EmitManager {
     private final AuditManager auditor;
     private final NumberingProvider numberingProvider;
     private final ObjectMapper json;
-    private final Instance<EmitQuota> quota;
     private final io.github.projectopenubl.xhandler.managers.ExchangeRateManager rates;
     private final Semaphore permits;
     private final long permitTimeoutMillis;
@@ -117,7 +115,6 @@ public class EmitManager {
             AuditManager auditor,
             NumberingProvider numberingProvider,
             ObjectMapper json,
-            Instance<EmitQuota> quota,
             io.github.projectopenubl.xhandler.managers.ExchangeRateManager rates,
             @ConfigProperty(name = "xhandler.emit.permits", defaultValue = "32") int permits,
             @ConfigProperty(name = "xhandler.emit.permit-timeout", defaultValue = "5s") Duration permitTimeout,
@@ -142,7 +139,6 @@ public class EmitManager {
         this.auditor = auditor;
         this.numberingProvider = numberingProvider;
         this.json = json;
-        this.quota = quota;
         this.rates = rates;
         this.permits = new Semaphore(permits);
         this.permitTimeoutMillis = permitTimeout.toMillis();
@@ -199,7 +195,7 @@ public class EmitManager {
         UUID owned = claim;
         try {
             UUID documentId = Ids.newId();
-            JsonNode body = admitted(tenantId, companyId, platform, !platform || "adapter".equals(origin), () -> QuarkusTransaction.requiringNew()
+            JsonNode body = admitted(() -> QuarkusTransaction.requiringNew()
                     .call(() -> emitInTransaction(tenantId, companyId, documentId, idempotencyKey, owned, request, correlationId, platform,
                             numeroDado, origin, draft)));
             return new Emitted(201, body);
@@ -210,27 +206,10 @@ public class EmitManager {
     }
 
     /**
-     * The gates every new document passes, whatever its input (API, adapters, UBL upload, §5): the
-     * quota (a replay never gets here; the platform's own invoices don't count, §14), then an emit
+     * The gate every new document passes, whatever its input (API, adapters, UBL upload, §5): an emit
      * permit. Waits on a series row beyond the lock timeout are answered as busy.
      */
-    public <T> T admitted(UUID tenantId, UUID companyId, boolean platform, boolean countQuota, java.util.function.Supplier<T> work) {
-        if (countQuota) {
-            QuarkusTransaction.requiringNew().run(() -> {
-                if (platform) {
-                    access.enterAsPlatform(tenantId);
-                } else {
-                    access.enter(tenantId, Role.OPERATOR);
-                }
-                CompanyModel company = companyProvider.getCompany(companyId).orElse(null);
-                if (company == null || company.getDeletedAt() != null) {
-                    throw ApiException.notFound();
-                }
-                for (EmitQuota q : quota) {
-                    q.checkEmit(tenantId, company.getSunatEnv());
-                }
-            });
-        }
+    public <T> T admitted(java.util.function.Supplier<T> work) {
         boolean acquired = false;
         try {
             acquired = permits.tryAcquire(permitTimeoutMillis, TimeUnit.MILLISECONDS);

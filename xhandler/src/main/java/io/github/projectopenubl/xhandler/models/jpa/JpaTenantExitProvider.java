@@ -21,8 +21,8 @@ public class JpaTenantExitProvider implements TenantExitProvider {
     }
 
     @Override
-    public boolean hasRecentExport() {
-        return !em.createNativeQuery("SELECT 1 FROM xhandler.tenant_export WHERE status = 'pending' OR created_at > now() - interval '1 hour'")
+    public boolean hasPendingExport() {
+        return !em.createNativeQuery("SELECT 1 FROM xhandler.tenant_export WHERE status = 'pending'")
                 .getResultList().isEmpty();
     }
 

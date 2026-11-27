@@ -13,10 +13,6 @@ public interface TenantModel extends Model {
 
     void setName(String name);
 
-    String getPlan();
-
-    void setPlan(String plan);
-
     String getStatus();
 
     void setStatus(String status);
@@ -42,18 +38,6 @@ public interface TenantModel extends Model {
     String getNotificationEmail();
 
     void setNotificationEmail(String notificationEmail);
-
-    String getBillingRuc();
-
-    void setBillingRuc(String billingRuc);
-
-    String getBillingName();
-
-    void setBillingName(String billingName);
-
-    String getBillingEmail();
-
-    void setBillingEmail(String billingEmail);
 
     /** Exit (DESIGN.md §13): kept past the exit period instead of deleted */
     boolean isArchivePlan();

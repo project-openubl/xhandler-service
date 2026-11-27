@@ -18,13 +18,13 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
-/** The admin reads behind the platform console (DESIGN.md §15): tenants, partners, plans, settings. */
+/** The admin reads behind the platform console (DESIGN.md §15): tenants, partners, the PSE certificate. */
 @QuarkusTest
 class PlatformConsoleTest {
 
     @Test
     void only_platform_admins_read_the_platform() {
-        for (String path : new String[] {"/api/admin/v1/tenants", "/api/admin/v1/partners", "/api/admin/v1/plans", "/api/admin/v1/billing/issuer"}) {
+        for (String path : new String[] {"/api/admin/v1/tenants", "/api/admin/v1/partners"}) {
             as("alice").get(path).then().statusCode(403);
             given().get(path).then().statusCode(401);
         }
@@ -44,8 +44,7 @@ class PlatformConsoleTest {
                 .body("items", hasSize(1))
                 .body("items[0].id", equalTo(tenant.toString()))
                 .body("items[0].partner_id", equalTo(partner.toString()))
-                .body("items[0].plan", equalTo("free"))
-                .body("items[0].plan_source", equalTo("default"))
+                .body("items[0]", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasKey("plan")))
                 .body("items[0].status", equalTo("active"))
                 .body("items[0].companies", equalTo(1))
                 .body("limit", equalTo(50));
@@ -68,12 +67,6 @@ class PlatformConsoleTest {
                 .body("[0].sending_paused", equalTo(false));
         as("alice").get("/api/v1/tenants/" + tenant + "/audit?limit=200").then().statusCode(200)
                 .body("items.action", hasItem("tenant.companies_listed"));
-
-        // A plan set by hand shows as the admin's
-        as("olga").body(Map.of("plan", "business")).put("/api/admin/v1/tenants/" + tenant + "/plan").then().statusCode(200);
-        as("olga").get("/api/admin/v1/tenants/" + tenant).then().statusCode(200)
-                .body("plan", equalTo("business"))
-                .body("plan_source", equalTo("admin"));
     }
 
     @Test
@@ -103,14 +96,7 @@ class PlatformConsoleTest {
     }
 
     @Test
-    void reads_the_plans_and_platform_settings() {
-        as("olga").get("/api/admin/v1/plans").then().statusCode(200)
-                .body("code", hasItem("free"))
-                .body("code", hasItem("enterprise"))
-                .body("[0].code", equalTo("free"));
-        // Unset, or whatever another test set: always both or neither
-        Map<String, String> issuer = as("olga").get("/api/admin/v1/billing/issuer").then().statusCode(200).extract().jsonPath().getMap("$");
-        org.junit.jupiter.api.Assertions.assertEquals(issuer.get("tenant_id") == null, issuer.get("company_id") == null, issuer.toString());
+    void reads_the_platform_certificate() {
         // The platform certificate: 404 until imported, never the key
         int pse = as("olga").get("/api/admin/v1/pse/certificate").then().extract().statusCode();
         org.junit.jupiter.api.Assertions.assertTrue(pse == 200 || pse == 404, "pse certificate: " + pse);

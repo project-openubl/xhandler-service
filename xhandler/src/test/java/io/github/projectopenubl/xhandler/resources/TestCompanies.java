@@ -14,10 +14,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Verified companies for tests. They don't count toward the unverified-company limit, so tests can
- * create them on every run against a database that outlives the run.
- */
+/** Verified companies for tests, created on every run against a database that outlives the run. */
 @ApplicationScoped
 public class TestCompanies {
 

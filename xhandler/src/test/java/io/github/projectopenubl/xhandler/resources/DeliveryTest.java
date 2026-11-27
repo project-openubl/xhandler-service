@@ -234,7 +234,7 @@ class DeliveryTest {
     }
 
     @Test
-    void the_public_lookup_needs_a_captcha_and_answers_only_the_status() {
+    void the_public_lookup_answers_only_the_status() {
         UUID production = companies.verified(tenant, "production");
         String ruc = as("alice").get(base + "/companies/" + production).then().extract().path("ruc");
         TestDocuments.Created doc = docs.pending(tenant, production, "t-" + UUID.randomUUID() + ":invoice", d -> {
@@ -245,9 +245,7 @@ class DeliveryTest {
         });
         DocumentModel stored = docs.get(tenant, doc.id());
         Map<String, Object> request = new HashMap<>(Map.of("ruc", ruc, "tipo_comprobante", "01", "serie", "F001", "numero", stored.getNumero(),
-                "fecha_emision", stored.getFechaEmision().toString(), "total", "118.00", "captcha", "wrong"));
-        given().contentType("application/json").body(request).post("/api/v1/public/lookup").then().statusCode(403);
-        request.put("captcha", "test-pass");
+                "fecha_emision", stored.getFechaEmision().toString(), "total", "118.00"));
         given().contentType("application/json").body(request).post("/api/v1/public/lookup").then().statusCode(200)
                 .body("status", equalTo("aceptado"))
                 .body("$", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasKey("files")));

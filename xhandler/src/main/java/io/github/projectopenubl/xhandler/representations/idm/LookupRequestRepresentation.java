@@ -14,5 +14,4 @@ public record LookupRequestRepresentation(
         @NotBlank @Pattern(regexp = "[A-Z0-9]{4}") String serie,
         @NotNull Long numero,
         @NotNull LocalDate fechaEmision,
-        @NotNull BigDecimal total,
-        @NotBlank String captcha) {}
+        @NotNull BigDecimal total) {}

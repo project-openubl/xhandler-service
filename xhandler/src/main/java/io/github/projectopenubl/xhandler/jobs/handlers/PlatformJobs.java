@@ -84,9 +84,7 @@ public final class PlatformJobs {
         @Override
         public Map<String, Object> run(JobContext context) {
             int purged = QuarkusTransaction.requiringNew().call(maintenance::purgeIdempotencyKeys);
-            // Rate-limit buckets older than a day are useless (public lookups, RUC/DNI lookups)
-            int buckets = QuarkusTransaction.requiringNew().call(maintenance::deleteOldRateBuckets);
-            return Map.of("purged", purged, "rate_buckets", buckets);
+            return Map.of("purged", purged);
         }
     }
 }

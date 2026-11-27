@@ -40,8 +40,5 @@ public interface EmailProvider {
 
     boolean isSenderDomainVerified(String domain);
 
-    /** Emails logged in the last 24 hours. */
-    long countEmailsSentLastDay();
-
     void addEmailDelivery(UUID id, UUID tenantId, UUID documentId, String recipient, String result, String detail);
 }

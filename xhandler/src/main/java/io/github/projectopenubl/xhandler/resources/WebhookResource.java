@@ -5,7 +5,6 @@ import io.github.projectopenubl.xhandler.models.utils.ModelToRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.WebhookRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.DeliveryRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.CreateWebhookRepresentation;
-import io.github.projectopenubl.xhandler.models.CompanyProvider;
 import io.github.projectopenubl.xhandler.models.WebhookSubscriptionProvider;
 import io.github.projectopenubl.xhandler.models.WebhookDeliveryProvider;
 import io.github.projectopenubl.xhandler.clients.Egress;
@@ -55,7 +54,6 @@ public class WebhookResource {
 
     private final ModelToRepresentation modelToRepresentation;
 
-    private final CompanyProvider companyProvider;
 
     private final WebhookSubscriptionProvider webhookSubscriptionProvider;
 
@@ -71,17 +69,14 @@ public class WebhookResource {
     private final Egress egress;
     private final WebhookEvents events;
     private final AuditManager auditor;
-    private final io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements;
     private final IdempotencyManager idempotency;
 
     public WebhookResource(TenantAccess access, SecretBox box, Egress egress, WebhookEvents events, AuditManager auditor,
-            io.github.projectopenubl.xhandler.managers.EntitlementManager entitlements, IdempotencyManager idempotency, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider, CompanyProvider companyProvider, ModelToRepresentation modelToRepresentation, RepresentationToModel representationToModel) {
+            IdempotencyManager idempotency, WebhookDeliveryProvider webhookDeliveryProvider, WebhookSubscriptionProvider webhookSubscriptionProvider, ModelToRepresentation modelToRepresentation, RepresentationToModel representationToModel) {
         this.representationToModel = representationToModel;
         this.modelToRepresentation = modelToRepresentation;
-        this.companyProvider = companyProvider;
         this.webhookSubscriptionProvider = webhookSubscriptionProvider;
         this.webhookDeliveryProvider = webhookDeliveryProvider;
-        this.entitlements = entitlements;
         this.idempotency = idempotency;
         this.access = access;
         this.box = box;
@@ -93,7 +88,7 @@ public class WebhookResource {
     @APIResponse(responseCode = "201", description = "Webhook creado; el secreto se muestra solo esta vez (la respuesta repetida de una "
             + "Idempotency-Key ya usada no lo trae).",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = WebhookRepresentation.class)))
-    @APIResponse(responseCode = "409", description = "Idempotency-Key en proceso, o RUC sin verificar.",
+    @APIResponse(responseCode = "409", description = "Idempotency-Key en proceso.",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @Operation(operationId = "createWebhook")
     @POST
@@ -101,14 +96,6 @@ public class WebhookResource {
             @Valid CreateWebhookRepresentation request) {
         return idempotency.create(tenantId, Role.ADMIN, idempotencyKey, idempotency.hash("webhook", tenantId, request), () -> {
             TenantScope scope = access.enter(tenantId, Role.ADMIN);
-            if (!entitlements.usage(tenantId).plan().webhooks()) {
-                throw new ApiException(402, "plan_required", "Su plan no incluye webhooks.");
-            }
-            // Free tenants without a verified RUC can't point webhooks at arbitrary hosts (§26.8)
-            if ("free".equals(entitlements.usage(tenantId).plan().code())
-                    && companyProvider.countVerifiedCompanies() == 0) {
-                throw ApiException.conflict("ruc_not_verified", "Verifique el RUC de una empresa para usar webhooks.");
-            }
             egress.check(request.url());
             byte[] raw = new byte[32];
             RANDOM.nextBytes(raw);

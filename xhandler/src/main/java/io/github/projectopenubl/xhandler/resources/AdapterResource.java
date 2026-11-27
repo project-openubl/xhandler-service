@@ -84,8 +84,6 @@ public class AdapterResource {
     /** SUNAT SFS TXT files (.CAB/.NOT + .DET) converted to native JSON; the document keeps its number. */
     @APIResponse(responseCode = "201", description = "Documento emitido (también la respuesta repetida de una Idempotency-Key ya usada, sin access_url).",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = DocumentRepresentation.class)))
-    @APIResponse(responseCode = "402", description = "Sin cuota de documentos en el plan (quota_exceeded).",
-            content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @APIResponse(responseCode = "409", description = "Conflicto: Idempotency-Key en proceso, número ya usado, empresa desactivada o no autorizada.",
             content = @Content(mediaType = "application/json", schema = @Schema(ref = "ApiError")))
     @APIResponse(responseCode = "422", description = "Documento o solicitud inválidos, o Idempotency-Key reutilizada con otra solicitud.",

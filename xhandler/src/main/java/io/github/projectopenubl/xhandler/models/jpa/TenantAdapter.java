@@ -54,16 +54,6 @@ public class TenantAdapter implements TenantModel, JpaModel<TenantEntity> {
     }
 
     @Override
-    public String getPlan() {
-        return entity.getPlan();
-    }
-
-    @Override
-    public void setPlan(String plan) {
-        entity.setPlan(plan);
-    }
-
-    @Override
     public String getStatus() {
         return entity.getStatus();
     }
@@ -121,36 +111,6 @@ public class TenantAdapter implements TenantModel, JpaModel<TenantEntity> {
     @Override
     public void setNotificationEmail(String notificationEmail) {
         entity.setNotificationEmail(notificationEmail);
-    }
-
-    @Override
-    public String getBillingRuc() {
-        return entity.getBillingRuc();
-    }
-
-    @Override
-    public void setBillingRuc(String billingRuc) {
-        entity.setBillingRuc(billingRuc);
-    }
-
-    @Override
-    public String getBillingName() {
-        return entity.getBillingName();
-    }
-
-    @Override
-    public void setBillingName(String billingName) {
-        entity.setBillingName(billingName);
-    }
-
-    @Override
-    public String getBillingEmail() {
-        return entity.getBillingEmail();
-    }
-
-    @Override
-    public void setBillingEmail(String billingEmail) {
-        entity.setBillingEmail(billingEmail);
     }
 
     @Override
