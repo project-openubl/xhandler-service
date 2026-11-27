@@ -1,7 +1,8 @@
 # xhandler-service
 
 Multi-tenant SaaS for SUNAT (Peru) electronic documents: create, sign, validate, send,
-track, deliver and report them. It works as the issuer's own software and as a PSE.
+track, deliver and report them. It works as the issuer's own software (SEE-Del Contribuyente)
+and as a PSE, and nothing else ([ADR 0016](../docs/adr/0016-scope-see-del-pse.md)).
 Built with Quarkus on top of
 [xhandler-rust](https://github.com/project-openubl/xhandler-rust).
 

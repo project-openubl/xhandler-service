@@ -165,7 +165,7 @@ public class AdminResource {
     }
 
     /** The companies of a tenant, to hold them; the read is in the tenant's audit log. */
-    @Operation(operationId = "adminListTenantCompanies", summary = "Empresas de una organización (queda en su auditoría)")
+    @Operation(operationId = "adminListTenantCompanies", summary = "Empresas de una organización (queda auditado)")
     @GET
     @Path("/tenants/{tenantId}/companies")
     @Transactional

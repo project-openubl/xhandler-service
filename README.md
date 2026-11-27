@@ -5,7 +5,9 @@
 # xhandler-service
 
 Plataforma de comprobantes electrónicos SUNAT: emitir, firmar, enviar, entregar y reportar, como
-software propio del emisor o como PSE.
+software propio del emisor (SEE-Del Contribuyente) o como PSE. Ese es todo su alcance
+([ADR 0016](./docs/adr/0016-scope-see-del-pse.md)): no es OSE, no factura planes ni gestiona
+solicitudes de datos personales.
 
 | Directorio | Qué es |
 |---|---|
