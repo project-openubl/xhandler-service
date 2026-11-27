@@ -1,4 +1,4 @@
-# The api role (DESIGN.md §4, §25.1): REST, SOAP (OSE) and emit. One pod = the
+# The api role (DESIGN.md §4, §25.1): REST and emit. One pod = the
 # Quarkus app + the Rust engine sidecar over localhost. Jobs run in the worker
 # deployment (worker.yaml), from the same images with XHANDLER_ROLE=worker.
 apiVersion: apps/v1
@@ -56,7 +56,7 @@ spec:
               value: 127.0.0.1:8090
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: http://otel-collector:4318
-            # SUNAT and third-party OSEs through the egress proxy (§16): static
+            # SUNAT through the egress proxy (§16): static
             # egress IPs, private ranges denied
             - name: HTTPS_PROXY
               value: http://egress-proxy:3128
