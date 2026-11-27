@@ -45,7 +45,6 @@ import { getMutationErrorMessage } from "@app/utils/apiError";
 import { tenantStatusLabel } from "@app/utils/tenantPresentation";
 
 import { BulkRetryModal } from "./components/BulkRetryModal";
-import { RegisterDataSubjectRequestModal } from "./components/RegisterDataSubjectRequestModal";
 import { SuppressEmailModal } from "./components/SuppressEmailModal";
 import { TenantCompaniesPanel } from "./components/TenantCompaniesPanel";
 import {
@@ -58,7 +57,7 @@ interface IPlatformTenantDetailProps {
   tenantId: string;
 }
 
-type OpenModal = "retry" | "suppress" | "data-subject" | null;
+type OpenModal = "retry" | "suppress" | null;
 
 const formatDate = (value: string | undefined, format: string) =>
   value ? dayjs(value).format(format) : "-";
@@ -354,14 +353,6 @@ const PlatformTenantDetailContent: React.FC<IPlatformTenantDetailProps> = ({
                             Cancelar salida
                           </GatedButton>
                         </ActionListItem>
-                        <ActionListItem>
-                          <Button
-                            variant="secondary"
-                            onClick={() => setOpenModal("data-subject")}
-                          >
-                            Registrar solicitud de datos personales
-                          </Button>
-                        </ActionListItem>
                       </ActionListGroup>
                     </ActionList>
                   </StackItem>
@@ -391,12 +382,6 @@ const PlatformTenantDetailContent: React.FC<IPlatformTenantDetailProps> = ({
       ) : null}
       {openModal === "suppress" ? (
         <SuppressEmailModal
-          tenant={tenant}
-          onClose={() => setOpenModal(null)}
-        />
-      ) : null}
-      {openModal === "data-subject" ? (
-        <RegisterDataSubjectRequestModal
           tenant={tenant}
           onClose={() => setOpenModal(null)}
         />

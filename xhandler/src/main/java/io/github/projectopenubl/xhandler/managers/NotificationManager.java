@@ -52,10 +52,8 @@ public class NotificationManager {
     @Transactional(Transactional.TxType.MANDATORY)
     public void publish(UUID tenantId, String kind, String title, String body, UUID documentId) {
         java.util.Optional<NotificationProvider.NotificationPreference> preference = notificationProvider.getNotificationPreference(kind);
-        // Legal notices (data-subject requests) can't be muted
-        boolean mandatory = kind.startsWith("privacy.");
-        boolean email = mandatory || preference.isEmpty() || Boolean.TRUE.equals(preference.get().email());
-        boolean inApp = mandatory || preference.isEmpty() || Boolean.TRUE.equals(preference.get().inApp());
+        boolean email = preference.isEmpty() || Boolean.TRUE.equals(preference.get().email());
+        boolean inApp = preference.isEmpty() || Boolean.TRUE.equals(preference.get().inApp());
         if (inApp) {
             notificationProvider.addNotification(Ids.newId(), tenantId, kind, title, body, documentId);
         }

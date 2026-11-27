@@ -2,7 +2,6 @@
 export const AUDIT_OBJECT_TYPE_LABELS: Record<string, string> = {
   company: "Empresa",
   credential: "Credencial",
-  data_subject_request: "Solicitud de datos personales",
   document: "Comprobante",
   document_draft: "Borrador",
   email: "Correo",

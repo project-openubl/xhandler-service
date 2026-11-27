@@ -17,7 +17,6 @@ import {
   adminListTenantCompanies,
   adminListTenants,
   type AdminListTenantsData,
-  adminRegisterDataSubjectRequest,
   adminReleaseCompanySending,
   adminReleaseTenantSending,
   adminRetryTenantDocuments,
@@ -28,9 +27,7 @@ import {
   type BulkRetry,
   type CompanySending,
   type Count,
-  type DataSubjectRequestForwarded,
   type EmailSuppression,
-  type NewRequest,
   type PageAdminTenant,
   type TenantArchivePlan,
   type TenantAuditHold,
@@ -344,28 +341,3 @@ export const useAdminCancelTenantExitMutation = (
     onError: options?.onError,
   });
 };
-
-/**
- * `POST /data-protection/tenants/{id}/data-subject-requests`: a request that reached the
- * platform, forwarded to the tenant at once (DESIGN.md §16).
- */
-export const useAdminRegisterDataSubjectRequestMutation = (
-  tenantId: string,
-  options?: IMutationCallbacks<
-    DataSubjectRequestForwarded,
-    NewRequest,
-    XhandlerAxiosError
-  >,
-) =>
-  useMutation<DataSubjectRequestForwarded, XhandlerAxiosError, NewRequest>({
-    mutationFn: async (body) =>
-      (
-        await adminRegisterDataSubjectRequest({
-          path: { tenantId },
-          body,
-          throwOnError: true,
-        })
-      ).data,
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-  });

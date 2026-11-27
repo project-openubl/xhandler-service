@@ -139,7 +139,6 @@ class OpenApiTest {
                 Map.entry("getNotificationSettings", "NotificationSettings"),
                 Map.entry("updateNotificationSettings", "NotificationSettings"),
                 Map.entry("exitTenant", "ExitView"),
-                Map.entry("getDataSubjectPersonalData", "PersonalData"),
                 Map.entry("updateMember", "MemberView"),
                 Map.entry("updateSeries", "SeriesView"));
         expected.forEach((id, schema) -> assertEquals("#/components/schemas/" + schema,
@@ -148,7 +147,6 @@ class OpenApiTest {
                 operation("listAdapterTokens").at("/responses/200/content/application~1json/schema/items/$ref").asString());
         assertEquals(Set.of("status", "delete_after"), names(spec.at("/components/schemas/ExitView/properties")));
         assertEquals(Set.of("company_id", "emission_mode"), names(spec.at("/components/schemas/RevokedView/properties")));
-        assertEquals(Set.of("request", "documents", "drafts"), names(spec.at("/components/schemas/PersonalData/properties")));
         assertEquals(Set.of("id", "kind", "label", "created_by", "created_at", "revoked_at"),
                 names(spec.at("/components/schemas/AdapterTokenView/properties")));
     }

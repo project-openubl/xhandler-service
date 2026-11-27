@@ -2,20 +2,12 @@
 
 ## Data-subject requests (access, rectification, cancellation, opposition)
 
-The tenant is the controller. A request that reaches the platform (email, support) is registered
-and forwarded to the tenant at once (our duty: within 3 days):
-
-```bash
-curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  $URL/api/admin/v1/data-protection/tenants/$TENANT/data-subject-requests \
-  -d '{"subject_doc_type":"1","subject_doc_number":"12345678","kind":"access","details":"recibido por correo"}'
-```
-
-The tenant sees it (`GET /api/v1/tenants/{t}/data-subject-requests`), gets what the platform
-holds about the person (`…/{id}/personal-data`) and closes it with its answer (`…/{id}/close`).
-Terms: 20 days for access, 10 for the others; the tenant is reminded 2 days before, and overdue
-requests are logged for the platform. Electronic documents can't be erased while tax law requires
-keeping them; cancellation is answered on that basis by the tenant.
+The service holds no request records: data-subject requests are out of its scope (DESIGN.md §16).
+The tenant is the controller. A request that reaches the platform (email, support) is forwarded
+to the tenant's notification email within 3 days (our duty as processor), with the person's
+identity document and what they ask. The tenant answers with its own tools (document list,
+exports). Electronic documents can't be erased while tax law requires keeping them; cancellation
+is answered on that basis by the tenant.
 
 ## Tenant exit
 

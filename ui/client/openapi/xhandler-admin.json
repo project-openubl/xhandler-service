@@ -147,20 +147,6 @@
           }
         }
       },
-      "DataSubjectRequestForwarded" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "$ref" : "#/components/schemas/UUID"
-          },
-          "tenant_id" : {
-            "$ref" : "#/components/schemas/UUID"
-          },
-          "forwarded" : {
-            "type" : "boolean"
-          }
-        }
-      },
       "DocumentState" : {
         "type" : "object",
         "properties" : {
@@ -315,33 +301,6 @@
         "properties" : {
           "name" : {
             "type" : "string"
-          }
-        }
-      },
-      "NewRequest" : {
-        "type" : "object",
-        "required" : [ "subject_doc_type", "subject_doc_number", "kind" ],
-        "properties" : {
-          "subject_doc_type" : {
-            "type" : "string",
-            "pattern" : "[0-9A-Z]{1,2}"
-          },
-          "subject_doc_number" : {
-            "type" : "string",
-            "pattern" : "\\S",
-            "maxLength" : 20
-          },
-          "subject_name" : {
-            "type" : "string",
-            "maxLength" : 200
-          },
-          "kind" : {
-            "type" : "string",
-            "pattern" : "access|rectification|cancellation|opposition"
-          },
-          "details" : {
-            "type" : "string",
-            "maxLength" : 2000
           }
         }
       },
@@ -762,72 +721,6 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/TenantAuditHold"
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "Bad Request"
-          },
-          "401" : {
-            "description" : "Sin token o con un token inválido (sin cuerpo)."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "tags" : [ "Tenant Lifecycle Admin Resource" ],
-        "security" : [ {
-          "bearer" : [ ]
-        } ]
-      }
-    },
-    "/api/admin/v1/data-protection/tenants/{tenantId}/data-subject-requests" : {
-      "post" : {
-        "summary" : "Registra una solicitud ARCO recibida por la plataforma y la deriva a la organización",
-        "operationId" : "adminRegisterDataSubjectRequest",
-        "parameters" : [ {
-          "name" : "tenantId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "$ref" : "#/components/schemas/UUID"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/NewRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/DataSubjectRequestForwarded"
                 }
               }
             }

@@ -28,5 +28,5 @@ api() { # api METHOD PATH [JSON]
 | [region-failover.md](region-failover.md) | Losing the primary region |
 | [pse-rejected-rate.md](pse-rejected-rate.md) | `PseRejectedRateHigh` |
 | [breach.md](breach.md) | A suspected personal-data breach |
-| [data-protection.md](data-protection.md) | Data-subject requests, tenant exit, retention, tax-audit holds |
+| [data-protection.md](data-protection.md) | Forwarding data-subject requests, tenant exit, retention, tax-audit holds |
 | [load-tests.md](load-tests.md) | Before GA and after capacity changes |

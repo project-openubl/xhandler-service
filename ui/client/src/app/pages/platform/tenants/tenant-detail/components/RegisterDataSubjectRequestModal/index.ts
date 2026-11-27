@@ -1,1 +1,0 @@
-export { RegisterDataSubjectRequestModal } from "./RegisterDataSubjectRequestModal";

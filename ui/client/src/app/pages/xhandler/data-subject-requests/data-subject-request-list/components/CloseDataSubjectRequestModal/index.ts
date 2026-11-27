@@ -1,1 +1,0 @@
-export { CloseDataSubjectRequestModal } from "./CloseDataSubjectRequestModal";
