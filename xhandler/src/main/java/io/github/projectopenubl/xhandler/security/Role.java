@@ -9,15 +9,10 @@ public enum Role {
     OWNER,
     ADMIN,
     OPERATOR,
-    VIEWER,
-    /** A platform operator with an approved support session: read-only (DESIGN.md §26.1). */
-    SUPPORT;
+    VIEWER;
 
-    /** True when this role may do what {@code minimum} allows. SUPPORT only reads. */
+    /** True when this role may do what {@code minimum} allows. */
     public boolean allows(Role minimum) {
-        if (this == SUPPORT) {
-            return minimum == VIEWER;
-        }
         return ordinal() <= minimum.ordinal();
     }
 

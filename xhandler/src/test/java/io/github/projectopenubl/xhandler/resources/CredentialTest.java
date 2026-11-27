@@ -134,6 +134,6 @@ class CredentialTest {
     }
 
     private static TenantScope platform(UUID tenant) {
-        return new TenantScope(tenant, new Actor("client", "test", false, false), Role.OWNER);
+        return new TenantScope(tenant, new Actor("client", "test", false), Role.OWNER);
     }
 }

@@ -1,10 +1,6 @@
 package io.github.projectopenubl.xhandler.security;
 
 import io.github.projectopenubl.xhandler.resources.exceptions.ApiException;
-import io.github.projectopenubl.xhandler.managers.AuditManager;
-import io.vertx.core.http.HttpServerRequest;
-import jakarta.enterprise.inject.Instance;
-import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
 import io.github.projectopenubl.xhandler.models.MembershipProvider;
 import jakarta.transaction.Transactional;
@@ -22,14 +18,10 @@ public class TenantAccess {
 
     private final MembershipProvider membership;
     private final CurrentActor currentActor;
-    private final AuditManager auditor;
-    private final Instance<HttpServerRequest> request;
 
-    public TenantAccess(MembershipProvider membership, CurrentActor currentActor, AuditManager auditor, Instance<HttpServerRequest> request) {
+    public TenantAccess(MembershipProvider membership, CurrentActor currentActor) {
         this.membership = membership;
         this.currentActor = currentActor;
-        this.auditor = auditor;
-        this.request = request;
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
@@ -43,13 +35,7 @@ public class TenantAccess {
             throw ApiException.forbidden();
         }
         setTenant(tenantId);
-        TenantScope scope = new TenantScope(tenantId, actor, role);
-        if (role == Role.SUPPORT) {
-            // Every access by a platform operator is audited (DESIGN.md §26.1)
-            HttpServerRequest http = request.get();
-            auditor.record(scope, "support.access", "tenant", tenantId, Map.of("method", http.method().name(), "path", http.path()));
-        }
-        return scope;
+        return new TenantScope(tenantId, actor, role);
     }
 
     /**
@@ -74,11 +60,6 @@ public class TenantAccess {
                 return viaPartner;
             }
             return viaPartner != null && viaPartner.ordinal() < tenantRole.ordinal() ? viaPartner : tenantRole;
-        }
-        if (actor.platformSupport()) {
-            if (membership.hasSupportSession(tenantId, actor.subject())) {
-                return Role.SUPPORT;
-            }
         }
         return null;
     }

@@ -7,7 +7,7 @@ RS 199-2015 art. 7: rejected CDRs of documents the platform signs as PSE must st
 curl -s -H "Authorization: Bearer $TOKEN" "$URL/api/admin/v1/pse/rejected-rate" | jq
 ```
 
-- Find which tenants and codes drive it (SQL on `document` with `emission_mode = 'pse'`, through a
-  support session) and help them fix their data; repeated rejections from one tenant may justify
+- Find which tenants and codes drive it (the admin API's identifiers and codes; the tenant shares
+  the documents) and help them fix their data; repeated rejections from one tenant may justify
   pausing its PSE mode (`PUT …/pse/mode` back to software, with notice).
 - Validation gaps on our side (a rule the engine doesn't check yet) are bugs: add the rule (R3).

@@ -6,10 +6,6 @@
   "roles": {
     "realm": [
       {
-        "name": "platform-support",
-        "description": "Platform operators: read-only tenant access through approved support sessions"
-      },
-      {
         "name": "platform-admin",
         "description": "Platform administrators"
       },
@@ -242,9 +238,8 @@
       "email": "carol@example.com",
       "emailVerified": true,
       "firstName": "Carol",
-      "lastName": "Support",
+      "lastName": "User",
       "realmRoles": [
-        "platform-support",
         "search"
       ],
       "credentials": [

@@ -28,7 +28,7 @@ public class AuditManager {
         AuditLogModel entry = auditLogProvider.newAuditLog(Ids.newId());
         entry.setAt(Instant.now());
         entry.setTenantId(scope.tenantId());
-        entry.setActor(scope.actor().auditName() + (scope.role() == io.github.projectopenubl.xhandler.security.Role.SUPPORT ? " (support)" : ""));
+        entry.setActor(scope.actor().auditName());
         entry.setAction(action);
         entry.setObjectType(objectType);
         entry.setObjectId(objectId == null ? null : objectId.toString());

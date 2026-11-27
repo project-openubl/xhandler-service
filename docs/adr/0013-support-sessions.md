@@ -1,7 +1,7 @@
 ---
 name: support-sessions
 description: Platform support asks an organization for a session from its own Acceso de soporte page (shown only to tokens with the platform-support role); the organization's administrators approve, reject or revoke it on Soporte; platform screens are shown from the token's realm roles but never trusted for access.
-status: Accepted
+status: Superseded by 0015
 ---
 
 # 0013. Support sessions: operators ask, organizations approve

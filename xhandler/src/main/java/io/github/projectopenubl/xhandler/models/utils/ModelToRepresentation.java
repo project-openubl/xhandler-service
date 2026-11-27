@@ -8,7 +8,6 @@ import io.github.projectopenubl.xhandler.models.DocumentModel;
 import io.github.projectopenubl.xhandler.models.JobModel;
 import io.github.projectopenubl.xhandler.models.SeriesModel;
 import io.github.projectopenubl.xhandler.models.SigningKeyModel;
-import io.github.projectopenubl.xhandler.models.SupportSessionModel;
 import io.github.projectopenubl.xhandler.models.TenantMemberModel;
 import io.github.projectopenubl.xhandler.models.TenantModel;
 import io.github.projectopenubl.xhandler.models.WebhookDeliveryModel;
@@ -22,7 +21,6 @@ import io.github.projectopenubl.xhandler.representations.idm.DraftRepresentation
 import io.github.projectopenubl.xhandler.representations.idm.JobRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.MemberRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.SeriesRepresentation;
-import io.github.projectopenubl.xhandler.representations.idm.SessionRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.TenantRepresentation;
 import io.github.projectopenubl.xhandler.representations.idm.WebhookRepresentation;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -62,11 +60,6 @@ public class ModelToRepresentation {
 
     public MemberRepresentation toRepresentation(TenantMemberModel m) {
         return new MemberRepresentation(m.getId(), m.getKind(), m.getSubject(), m.getRole());
-    }
-
-    public SessionRepresentation toRepresentation(SupportSessionModel s) {
-        return new SessionRepresentation(s.getId(), s.getOperator(), s.getReason(), s.getRequestedAt(), s.getApprovedBy(), s.getExpiresAt(),
-                s.getRevokedAt());
     }
 
     public JobRepresentation toRepresentation(JobModel j) {

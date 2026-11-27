@@ -11,7 +11,6 @@ public enum ModelType {
     JOB,
     SERIES,
     SIGNING_KEY,
-    SUPPORT_SESSION,
     TENANT,
     TENANT_MEMBER,
     WEBHOOK_DELIVERY,

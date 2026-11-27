@@ -36,8 +36,8 @@ import {
 import { auditDetailPairs, auditObjectTypeLabel } from "./auditPresentation";
 
 /**
- * The organization's audit log, newest first: who did what to which object, support sessions
- * and reads of secrets and personal data included (DESIGN.md §16, §26.1). Administrators only.
+ * The organization's audit log, newest first: who did what to which object, reads of secrets
+ * and personal data included (DESIGN.md §16). Administrators only.
  */
 export const AuditList: React.FC = () => {
   const { can } = useTenantRole();
@@ -126,7 +126,7 @@ export const AuditList: React.FC = () => {
             ? "No hay más registros"
             : "Aún no hay registros de auditoría"
         }
-        body="Aquí aparecerán los cambios, las sesiones de soporte y las lecturas de secretos y datos personales."
+        body="Aquí aparecerán los cambios y las lecturas de secretos y datos personales."
       />
     ),
   });
@@ -138,8 +138,7 @@ export const AuditList: React.FC = () => {
       <PageSection>
         <Content component={ContentVariants.h1}>Auditoría</Content>
         <Content component={ContentVariants.p}>
-          Quién hizo qué en esta organización, del más reciente al más antiguo,
-          incluidas las sesiones de soporte de la plataforma.
+          Quién hizo qué en esta organización, del más reciente al más antiguo.
         </Content>
       </PageSection>
       <PageSection>

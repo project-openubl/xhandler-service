@@ -2,29 +2,22 @@ import { useMyTenantsQuery } from "@app/queries/xhandler/tenants";
 
 import { useSelectedTenantId } from "./useSelectedTenantId";
 
-/** Membership roles of a tenant, strongest first (xhandler's `Role`); `support` only reads. */
-export const TENANT_ROLES = [
-  "owner",
-  "admin",
-  "operator",
-  "viewer",
-  "support",
-] as const;
+/** Membership roles of a tenant, strongest first (xhandler's `Role`). */
+export const TENANT_ROLES = ["owner", "admin", "operator", "viewer"] as const;
 
 export type TenantRole = (typeof TENANT_ROLES)[number];
 
 /** The roles an action can require, as the API's `TenantAccess.enter(…, minimum)` does. */
-export type MinimumTenantRole = Exclude<TenantRole, "support">;
+export type MinimumTenantRole = TenantRole;
 
 export const TENANT_ROLE_LABELS: Record<TenantRole, string> = {
   owner: "Propietario",
   admin: "Administrador",
   operator: "Operador",
   viewer: "Lector",
-  support: "Soporte",
 };
 
-/** Mirrors `Role#allows`: a stronger role does what a weaker one may; support only reads. */
+/** Mirrors `Role#allows`: a stronger role does what a weaker one may. */
 export const tenantRoleAllows = ({
   role,
   minimum,
@@ -32,7 +25,6 @@ export const tenantRoleAllows = ({
   role: string | undefined;
   minimum: MinimumTenantRole;
 }): boolean => {
-  if (role === "support") return minimum === "viewer";
   const index = TENANT_ROLES.indexOf(role as TenantRole);
   return index >= 0 && index <= TENANT_ROLES.indexOf(minimum);
 };

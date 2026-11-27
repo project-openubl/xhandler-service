@@ -9,7 +9,6 @@ export const AUDIT_OBJECT_TYPE_LABELS: Record<string, string> = {
   sender_domain: "Dominio de envío",
   series: "Serie",
   signing_key: "Certificado",
-  support_session: "Sesión de soporte",
   tenant: "Organización",
   tenant_member: "Miembro",
   webhook: "Webhook",

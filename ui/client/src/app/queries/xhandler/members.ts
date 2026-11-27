@@ -26,7 +26,7 @@ export const MEMBER_KINDS = ["user", "client"] as const;
 
 export type MemberKind = (typeof MEMBER_KINDS)[number];
 
-/** Roles a member can be given (`AddMember.role`); owner and support aren't granted here. */
+/** Roles a member can be given (`AddMember.role`); the owner isn't granted here. */
 export const ASSIGNABLE_MEMBER_ROLES = ["admin", "operator", "viewer"] as const;
 
 export type AssignableMemberRole = (typeof ASSIGNABLE_MEMBER_ROLES)[number];

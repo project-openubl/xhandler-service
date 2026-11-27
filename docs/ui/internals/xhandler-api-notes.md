@@ -10,7 +10,7 @@ Behaviour of the xhandler API that shaped the code. The contract is `docs/DESIGN
   ([ADR 0006](../../adr/0006-api-error-display.md)).
 - **Tenancy.** Every tenant route is `/tenants/{tenantId}/…`; a foreign and an unknown tenant
   are both `404`. `GET /tenants` lists the user's memberships with their `role`
-  (`owner > admin > operator > viewer`, `support` reads only), which the UI uses to gate actions
+  (`owner > admin > operator > viewer`), which the UI uses to gate actions
   (`useTenantRole`, mirroring `Role#allows`).
 - **Pages** answer `{ items, limit, offset }` with no total; `limit`/`offset` are query params.
 - **Jobs** (`/tenants/{t}/jobs`) are Pulp-like: `state` in `waiting | running | completed |

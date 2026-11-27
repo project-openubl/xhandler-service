@@ -16,9 +16,9 @@ describe("realmRolesOf", () => {
   it("reads realm_access.roles", () => {
     expect(
       realmRolesOf(
-        token({ realm_access: { roles: ["platform-support", "search"] } }),
+        token({ realm_access: { roles: ["platform-admin", "search"] } }),
       ),
-    ).toEqual(["platform-support", "search"]);
+    ).toEqual(["platform-admin", "search"]);
   });
 
   it("reads non-ASCII claims (base64url, UTF-8)", () => {

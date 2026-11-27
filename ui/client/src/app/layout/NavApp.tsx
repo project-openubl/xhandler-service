@@ -22,7 +22,6 @@ const GROUP_OF_SEGMENT: Record<string, string> = {
   organizaciones: "comprobantes",
   socios: "comprobantes",
   estado: "comprobantes",
-  soporte: "comprobantes",
   plataforma: "plataforma",
   padron: "padron",
   perfil: "cuenta",
@@ -106,7 +105,6 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
     { to: "/organizaciones/$tenantId/correo", label: "Correo" },
     { to: "/organizaciones/$tenantId/exportaciones", label: "Exportaciones" },
     { to: "/organizaciones/$tenantId/auditoria", label: "Auditoría" },
-    { to: "/organizaciones/$tenantId/soporte", label: "Soporte" },
   ] as const;
 
   // Platform console (ADR 0012): only for platform admins, while xhandler answers.
@@ -161,11 +159,6 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
                   isActive={!!matchRoute({ to: "/socios", fuzzy: true })}
                 >
                   <Link to="/socios">Socios</Link>
-                </NavItem>
-              ) : null}
-              {platformRoles.has("platform-support") ? (
-                <NavItem isActive={!!matchRoute({ to: "/soporte" })}>
-                  <Link to="/soporte">Acceso de soporte</Link>
                 </NavItem>
               ) : null}
               {tenantId ? (
