@@ -42,8 +42,8 @@ import tools.jackson.core.JacksonException;
  * A tenant leaving (DESIGN.md §13): a full export first — XML, CDR, PDF and metadata of every
  * document, plus the receptions — in parts of at most {@link Export#PART_DOCUMENTS} documents and
  * an index; then the exit itself, once no document waits for SUNAT and the export covers every
- * document. The tenant becomes {@code exited}: its members can still read it (exports, data-subject
- * requests) but not emit, and its data is deleted 2 years later (the processor's limit, DS
+ * document. The tenant becomes {@code exited}: its members can still read it (exports) but not
+ * emit, and its data is deleted 2 years later (the processor's limit, DS
  * 016-2024-JUS art. 31.2) unless it bought the archive plan or a tax audit holds it.
  */
 @Path("/api/v1/tenants/{tenantId}")

@@ -6,7 +6,6 @@ import static io.restassured.RestAssured.given;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasItem;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -32,7 +31,7 @@ import java.util.zip.ZipInputStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-/** P11: data-subject requests, export and exit, deletion with evidence, retention, health metrics. */
+/** P11: export and exit, deletion with evidence, retention, health metrics. */
 @QuarkusTest
 @QuarkusTestResource(EngineStub.class)
 class DataProtectionTest {
@@ -94,37 +93,6 @@ class DataProtectionTest {
     }
 
     @Test
-    void data_subject_requests_reach_the_tenant_with_what_we_hold() {
-        UUID tenant = newTenant("Privacidad " + UUID.randomUUID());
-        UUID company = companies.verified(tenant, "fake");
-        String dni = String.valueOf(10_000_000 + (int) (Math.random() * 89_999_999));
-        docs.pending(tenant, company, "fake:bill", d -> {
-            d.setStatus("accepted");
-            d.setCustomerTipo("1");
-            d.setCustomerNumero(dni);
-            d.setCustomerNombre("PERSONA NATURAL");
-        });
-        // A person writes to the platform: an admin registers it and it reaches the tenant at once
-        String id = as("olga").body(Map.of("subject_doc_type", "1", "subject_doc_number", dni, "kind", "access"))
-                .post("/api/admin/v1/data-protection/tenants/" + tenant + "/data-subject-requests").then().statusCode(200).extract().path("id").toString();
-        as("alice").body(Map.of("subject_doc_type", "1", "subject_doc_number", dni, "kind", "access"))
-                .post("/api/admin/v1/data-protection/tenants/" + tenant + "/data-subject-requests").then().statusCode(403);
-        String base = "/api/v1/tenants/" + tenant + "/data-subject-requests";
-        as("alice").get(base).then().statusCode(200).body("items.id", hasItem(id)).body("items.channel", hasItem("platform"))
-                .body("limit", equalTo(50)).body("offset", equalTo(0));
-        as("alice").get(base + "?status=open&limit=1").then().statusCode(200).body("items.size()", equalTo(1)).body("limit", equalTo(1));
-        as("alice").get("/api/v1/tenants/" + tenant + "/notifications").then().body("items.kind", hasItem("privacy.request"));
-        as("alice").get(base + "/" + id + "/personal-data").then().statusCode(200).body("documents.size()", equalTo(1))
-                .body("documents[0].nombre", equalTo("PERSONA NATURAL"));
-        as("bob").get(base).then().statusCode(404);
-        as("alice").body(Map.of("resolution", "Se entregó la información.")).post(base + "/" + id + "/close").then().statusCode(200)
-                .body("status", equalTo("closed"));
-        as("alice").body(Map.of("resolution", "otra vez")).post(base + "/" + id + "/close").then().statusCode(404);
-        as("alice").get(base + "?status=open").then().body("items.id", org.hamcrest.Matchers.not(hasItem(id)));
-        as("alice").get(base + "?status=closed").then().body("items.id", hasItem(id));
-    }
-
-    @Test
     void a_tenant_exports_leaves_and_is_deleted_with_evidence() throws Exception {
         String name = "Salida " + UUID.randomUUID();
         UUID tenant = newTenant(name);
@@ -171,7 +139,7 @@ class DataProtectionTest {
         assertTrue(names.stream().anyMatch(n -> n.startsWith("fake/" + ruc + "-01-")), names.toString());
         as("alice").body(Map.of("confirm_name", "otro")).post(base + "/exit").then().statusCode(422);
         as("alice").body(Map.of("confirm_name", name)).post(base + "/exit").then().statusCode(200).body("status", equalTo("exited"));
-        // Exited: still readable (exports, data-subject requests) but no new documents
+        // Exited: still readable (exports) but no new documents
         as("alice").get(base + "/exports").then().statusCode(200);
         as("alice").body(Map.of("document", Map.of("kind", "Invoice", "spec", Map.of("cliente", Map.of("tipo_documento_identidad", "6",
                         "numero_documento_identidad", "20111111111", "nombre", "X"), "detalles", List.of()))))

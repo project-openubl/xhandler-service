@@ -1,1 +1,0 @@
-export { CreateDataSubjectRequestModal } from "./CreateDataSubjectRequestModal";

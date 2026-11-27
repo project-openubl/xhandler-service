@@ -105,10 +105,6 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
     // Documents and data (U1b)
     { to: "/organizaciones/$tenantId/correo", label: "Correo" },
     { to: "/organizaciones/$tenantId/exportaciones", label: "Exportaciones" },
-    {
-      to: "/organizaciones/$tenantId/datos-personales",
-      label: "Datos personales",
-    },
     { to: "/organizaciones/$tenantId/auditoria", label: "Auditoría" },
     { to: "/organizaciones/$tenantId/soporte", label: "Soporte" },
   ] as const;

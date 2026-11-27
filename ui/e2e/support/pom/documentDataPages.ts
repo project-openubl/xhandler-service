@@ -82,20 +82,6 @@ export class ExportsPage extends DataViewList {
   }
 }
 
-export class DataSubjectRequestsPage extends DataViewList {
-  constructor(page: Page) {
-    super(
-      page,
-      "Solicitudes de datos personales",
-      "Tabla de solicitudes de datos personales",
-    );
-  }
-
-  async goto(tenantId: string) {
-    await this.page.goto(`/organizaciones/${tenantId}/datos-personales`);
-  }
-}
-
 export class EmailSettingsPage extends DataViewList {
   constructor(page: Page) {
     super(page, "Correo", "Tabla de dominios remitentes");

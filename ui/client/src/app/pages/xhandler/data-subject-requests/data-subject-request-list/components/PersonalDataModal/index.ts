@@ -1,1 +1,0 @@
-export { PersonalDataModal } from "./PersonalDataModal";

@@ -6,7 +6,6 @@ import static io.github.projectopenubl.xhandler.Api.as;
 import static io.github.projectopenubl.xhandler.Api.tenantOf;
 import static io.github.projectopenubl.xhandler.xml.EngineStub.Reply;
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
@@ -249,7 +248,7 @@ class DraftTest {
     }
 
     @Test
-    void drafts_hold_personal_data_until_purged_after_deletion() {
+    void deleted_drafts_are_purged_after_30_days() {
         String dni = String.valueOf(10_000_000 + ThreadLocalRandom.current().nextInt(89_999_999));
         Map<String, Object> spec = new HashMap<>(Map.of(
                 "moneda", "PEN",
@@ -261,13 +260,9 @@ class DraftTest {
         as("alice").delete(base + "/drafts/" + deleted).then().statusCode(204);
         as("alice").delete(base + "/drafts/" + expired).then().statusCode(204);
 
-        // The person's data includes the drafts naming them, deleted ones too
-        String request = as("alice").body(Map.of("subject_doc_type", "1", "subject_doc_number", dni, "kind", "access"))
-                .post(base + "/data-subject-requests").then().statusCode(200).extract().path("id");
-        as("alice").get(base + "/data-subject-requests/" + request + "/personal-data").then().statusCode(200)
-                .body("drafts.id", containsInAnyOrder(kept, deleted, expired))
-                .body("drafts.find { it.id == '" + deleted + "' }.deleted_at", notNullValue())
-                .body("drafts.find { it.id == '" + kept + "' }.nombre", equalTo("PERSONA NATURAL"));
+        // Deleted drafts are kept, marked, until the purge
+        assertEquals(1, count("SELECT count(*) FROM xhandler.document_draft WHERE id = :id AND deleted_at IS NOT NULL",
+                Map.of("id", UUID.fromString(deleted))));
 
         // 30 days after deletion a draft is purged for good; younger deletions and live drafts stay
         QuarkusTransaction.requiringNew().run(() -> {
@@ -281,8 +276,6 @@ class DraftTest {
         assertEquals(0, count("SELECT count(*) FROM xhandler.document_draft WHERE id = :id", Map.of("id", UUID.fromString(expired))));
         assertEquals(2, count("SELECT count(*) FROM xhandler.document_draft WHERE id IN (:a, :b)",
                 Map.of("a", UUID.fromString(kept), "b", UUID.fromString(deleted))));
-        as("alice").get(base + "/data-subject-requests/" + request + "/personal-data").then()
-                .body("drafts.id", containsInAnyOrder(kept, deleted));
     }
 
     long count(String sql, Map<String, Object> params) {

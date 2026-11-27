@@ -7,7 +7,7 @@ describe("notificationKindLabel", () => {
     expect(notificationKindLabel("certificate.expiring")).toBe(
       "Certificado por vencer",
     );
-    expect(notificationKindLabel("privacy.request")).toBe("privacy.request");
+    expect(notificationKindLabel("other.kind")).toBe("other.kind");
     expect(notificationKindLabel(undefined)).toBe("-");
   });
 });
