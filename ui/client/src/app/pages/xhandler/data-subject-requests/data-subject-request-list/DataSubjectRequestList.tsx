@@ -35,6 +35,12 @@ import {
   toDataSubjectRequestRow,
   useDataSubjectRequestsListQuery,
 } from "@app/queries/xhandler/data-subject-requests";
+import {
+  DATA_SUBJECT_REQUEST_KIND_LABELS,
+  DATA_SUBJECT_REQUEST_STATUS_LABELS,
+  isOverdue,
+  subjectDocTypeLabel,
+} from "@app/utils/dataSubjectRequestPresentation";
 import type { DataViewTh } from "@app/utils/dataViewTypes";
 import {
   estimateItemCount,
@@ -45,12 +51,6 @@ import {
 import { CloseDataSubjectRequestModal } from "./components/CloseDataSubjectRequestModal";
 import { CreateDataSubjectRequestModal } from "./components/CreateDataSubjectRequestModal";
 import { PersonalDataModal } from "./components/PersonalDataModal";
-import {
-  DATA_SUBJECT_REQUEST_KIND_LABELS,
-  DATA_SUBJECT_REQUEST_STATUS_LABELS,
-  isOverdue,
-  subjectDocTypeLabel,
-} from "./dataSubjectRequestPresentation";
 
 type OpenDialog =
   | { kind: "create" }

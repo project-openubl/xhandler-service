@@ -6485,7 +6485,7 @@
         } ],
         "requestBody" : {
           "content" : {
-            "application/x-www-form-urlencoded" : {
+            "multipart/form-data" : {
               "schema" : {
                 "type" : "object",
                 "properties" : {
@@ -6517,9 +6517,6 @@
                 }
               }
             }
-          },
-          "400" : {
-            "description" : "Bad Request"
           },
           "401" : {
             "description" : "Sin token o con un token inválido (sin cuerpo)."

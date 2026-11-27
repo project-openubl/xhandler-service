@@ -6,7 +6,7 @@ from them. Records describe the product, never the code.
 **For AI agents:** before changing a screen or a flow, pick the records that apply from their
 `description` (`grep -H '^description:' docs/adr/0*.md`) and follow their `## Rules`. The
 rules are a pass/fail checklist for how the running UI behaves. Where a rule maps to code, a
-self-contained code rule in [.rulesync/rules/](../../ui/.rulesync/rules/) restates it for the code.
+self-contained code rule in [.rulesync/rules/](../../.rulesync/rules/) restates it for the code.
 
 To change a decision, add a new record with the next number, set the old one's `status` to
 `Superseded by NNNN`, and update the code rules that cover the changed behaviour.
@@ -28,6 +28,9 @@ issuing); its task ADRs become [0007](0007-job-reporting.md).
 | [0008](0008-view-state-persistence.md)            | Where a screen's view state (lists) is kept                         |
 | [0009](0009-manual-issuing-drafts.md)             | Manual issuing goes through drafts without a number                 |
 | [0010](0010-public-lookup-captcha.md)             | The OSE validity page verifies with the provider's CAPTCHA widget   |
+| [0011](0011-self-service-organizations.md)        | People create their own free organization from Organizaciones       |
+| [0012](0012-platform-console-admin-api.md)        | Platform admins use the admin API through its own OpenAPI document  |
+| [0013](0013-support-sessions.md)                  | Support sessions: operators ask, organizations approve              |
 
 ## Template
 

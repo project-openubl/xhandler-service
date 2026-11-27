@@ -51,6 +51,14 @@ public class JpaBillingProvider implements BillingProvider {
     }
 
     @Override
+    public List<PlanRow> getPlans() {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em.createNativeQuery("SELECT code, name, production_per_month, beta_per_day, sandbox_per_day, custom_smtp, webhooks "
+                + "FROM xhandler.plan ORDER BY production_per_month NULLS LAST, code").getResultList();
+        return rows.stream().map(JpaBillingProvider::plan).toList();
+    }
+
+    @Override
     public PlanRow getFreePlan() {
         return plan((Object[]) em.createNativeQuery("SELECT code, name, production_per_month, beta_per_day, sandbox_per_day, custom_smtp, webhooks "
                 + "FROM xhandler.plan WHERE code = 'free'").getSingleResult());

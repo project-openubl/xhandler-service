@@ -4,6 +4,7 @@ import {
   queryOptions,
   useMutation,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 
 import {
@@ -12,6 +13,7 @@ import {
   listReceptions,
   type ListReceptionsData,
   type PageReceptionView,
+  receiveDocument,
   type ReceptionView,
 } from "@app/client/xhandler";
 import { useSelectedTenantId } from "@app/hooks/useSelectedTenantId";
@@ -194,6 +196,47 @@ export const useReceptionFileDownloadMutation = (
         fallbackName: `${reception.id ?? "recepcion"}.${kind === "cdr" ? "zip" : kind}`,
       }),
     onSuccess: options?.onSuccess,
+    onError: options?.onError,
+  });
+};
+
+/** The files of one supplier document: its XML, and optionally its PDF and SUNAT's CDR. */
+export interface IReceptionUpload {
+  xml: File;
+  pdf?: File;
+  cdr?: File;
+}
+
+/**
+ * `POST …/companies/{id}/receptions` (operator, multipart `xml`, `pdf`, `cdr`): stores a
+ * supplier's document issued to the company and checks it with SUNAT; `201` with the
+ * reception, `409` when it was already received.
+ */
+export const useReceptionUploadMutation = (
+  companyId: string,
+  options?: IMutationCallbacks<
+    ReceptionView,
+    IReceptionUpload,
+    XhandlerAxiosError
+  >,
+) => {
+  const tenantId = useSelectedTenantId();
+  const queryClient = useQueryClient();
+  return useMutation<ReceptionView, XhandlerAxiosError, IReceptionUpload>({
+    mutationFn: async (upload) =>
+      (
+        await receiveDocument({
+          path: { tenantId, companyId },
+          body: upload,
+          throwOnError: true,
+        })
+      ).data,
+    onSuccess: async (data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: receptionKeys.list(tenantId, companyId),
+      });
+      await options?.onSuccess?.(data, variables);
+    },
     onError: options?.onError,
   });
 };

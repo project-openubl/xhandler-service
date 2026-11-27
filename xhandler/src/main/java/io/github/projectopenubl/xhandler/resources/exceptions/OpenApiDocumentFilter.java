@@ -25,10 +25,11 @@ import org.eclipse.microprofile.openapi.models.responses.APIResponses;
  *       {@code PageDocumentView}), not after Java class names, so the names SDKs see stay stable.
  * </ul>
  *
- * <p>Runs at build time, so the stored document ({@code target/openapi}) and {@code /q/openapi}
- * are the same.
+ * <p>Runs at build time on both documents, the public one and the admin one ({@code
+ * AdminOpenApi}), so the stored documents ({@code target/openapi}, {@code target/openapi-admin})
+ * and what {@code /q/openapi} and {@code /q/openapi-admin} serve are the same.
  */
-@OpenApiFilter(stages = OpenApiFilter.RunStage.BUILD)
+@OpenApiFilter(stages = OpenApiFilter.RunStage.BUILD, documentNames = OpenApiFilter.FILTER_RUN_FOR_ANY_DOCUMENT)
 public class OpenApiDocumentFilter implements OASFilter {
 
     static final String SECURITY_SCHEME = "bearer";

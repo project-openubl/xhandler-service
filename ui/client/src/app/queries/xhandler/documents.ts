@@ -16,15 +16,23 @@ import {
   downloadDocumentFile,
   emailDocument,
   type EmailRequest,
+  emitDocument,
+  type EmitRequest,
+  emitSfsDocument,
   type Event,
   getDocument,
+  holdDocument,
   listDocumentEvents,
   listDocuments,
   type ListDocumentsData,
+  markDocumentDelivered,
   type PageDocumentView,
   type Queued,
+  releaseDocument,
   retryDocument,
   revokeDocumentAccessLinks,
+  type SfsRequest,
+  uploadUblDocument,
   voidDocument,
   type VoidRequest,
 } from "@app/client/xhandler";
@@ -97,6 +105,13 @@ export const isDocumentRetryable = (document: DocumentView): boolean =>
     document.status === "unknown" ||
     document.status === "exception") &&
   document.code_class !== "ticket_lost";
+
+/** Not yet definitive (DESIGN.md §9.1): only those can be held; the API answers 409 otherwise. */
+export const isDocumentHoldable = (document: DocumentView): boolean =>
+  document.status === "draft" ||
+  document.status === "pending_send" ||
+  document.status === "in_progress" ||
+  document.status === "unknown";
 
 /** The §9.3 voiding guards the UI can see: accepted, not delivered, not a summary or a guía. */
 export const isDocumentVoidable = (document: DocumentView): boolean =>
@@ -286,6 +301,117 @@ export const useDocumentRetryMutation = (
     onSuccess: async (data, document) => {
       await invalidate(document.id ?? "");
       await options?.onSuccess?.(data, document);
+    },
+    onError: options?.onError,
+  });
+};
+
+/** A document action that answers the updated document: invalidates its detail and events. */
+const useDocumentActionMutation = (
+  action: (args: {
+    path: { tenantId: string; documentId: string };
+    throwOnError: true;
+  }) => Promise<{ data: DocumentView }>,
+  options?: IMutationCallbacks<DocumentView, DocumentView, XhandlerAxiosError>,
+) => {
+  const tenantId = useSelectedTenantId();
+  const invalidate = useInvalidateDocument();
+  return useMutation<DocumentView, XhandlerAxiosError, DocumentView>({
+    mutationFn: async (document) =>
+      (
+        await action({
+          path: { tenantId, documentId: document.id ?? "" },
+          throwOnError: true,
+        })
+      ).data,
+    onSuccess: async (data, document) => {
+      await invalidate(document.id ?? "");
+      await options?.onSuccess?.(data, document);
+    },
+    onError: options?.onError,
+  });
+};
+
+/** `POST …/documents/{id}/hold` (operator): no automatic attempt until released; 409 when final. */
+export const useDocumentHoldMutation = (
+  options?: IMutationCallbacks<DocumentView, DocumentView, XhandlerAxiosError>,
+) => useDocumentActionMutation(holdDocument, options);
+
+/** `POST …/documents/{id}/release` (operator): clears the hold; a pending send is attempted now. */
+export const useDocumentReleaseMutation = (
+  options?: IMutationCallbacks<DocumentView, DocumentView, XhandlerAxiosError>,
+) => useDocumentActionMutation(releaseDocument, options);
+
+/**
+ * `POST …/documents/{id}/delivered` (operator): the issuer attests the buyer received it
+ * (DESIGN.md §9.3); from then on it can't be voided.
+ */
+export const useDocumentMarkDeliveredMutation = (
+  options?: IMutationCallbacks<DocumentView, DocumentView, XhandlerAxiosError>,
+) => useDocumentActionMutation(markDocumentDelivered, options);
+
+/** One upload of a document built outside the console (DESIGN.md §5), for one company. */
+export type IDocumentUploadVariables = { companyId: string } & (
+  | { format: "ubl"; file: File }
+  | { format: "sfs"; body: SfsRequest; idempotencyKey: string }
+  | { format: "json"; body: EmitRequest; idempotencyKey: string }
+);
+
+/**
+ * `POST …/companies/{id}/documents/ubl` (an XML, signed if unsigned), `…/documents/sfs` (the
+ * SFS TXT files, keeping their number) or `…/documents` (xbuilder JSON, numbered by the
+ * service). Operator; each answers `201` with the document, which SUNAT receives later.
+ */
+export const useDocumentUploadMutation = (
+  options?: IMutationCallbacks<
+    DocumentView,
+    IDocumentUploadVariables,
+    XhandlerAxiosError
+  >,
+) => {
+  const tenantId = useSelectedTenantId();
+  const queryClient = useQueryClient();
+  return useMutation<
+    DocumentView,
+    XhandlerAxiosError,
+    IDocumentUploadVariables
+  >({
+    mutationFn: async (variables) => {
+      const path = { tenantId, companyId: variables.companyId };
+      switch (variables.format) {
+        case "ubl":
+          return (
+            await uploadUblDocument({
+              path,
+              body: variables.file,
+              throwOnError: true,
+            })
+          ).data;
+        case "sfs":
+          return (
+            await emitSfsDocument({
+              path,
+              body: variables.body,
+              headers: { "Idempotency-Key": variables.idempotencyKey },
+              throwOnError: true,
+            })
+          ).data;
+        case "json":
+          return (
+            await emitDocument({
+              path,
+              body: variables.body,
+              headers: { "Idempotency-Key": variables.idempotencyKey },
+              throwOnError: true,
+            })
+          ).data;
+      }
+    },
+    onSuccess: async (data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: documentKeys.list(tenantId),
+      });
+      await options?.onSuccess?.(data, variables);
     },
     onError: options?.onError,
   });

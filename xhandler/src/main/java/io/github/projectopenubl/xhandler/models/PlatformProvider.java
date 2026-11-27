@@ -18,11 +18,33 @@ public interface PlatformProvider {
 
     record JobSummary(String name, String state, String worker, String error) {}
 
+    /** A tenant as the platform sees it: account metadata, not its documents. */
+    record TenantRow(UUID id, String name, String plan, String planSource, String status, UUID partnerId, String partnerName,
+            String createdBy, Instant createdAt, boolean sendingPaused, boolean auditHold, boolean archivePlan, Instant deleteAfter,
+            long companies) {}
+
+    record PartnerRow(UUID id, String name, String status, Instant createdAt, long members, long tenants) {}
+
+    record PartnerMemberRow(String kind, String subject, String role, Instant createdAt) {}
+
     /** The tenant of a document, whichever tenant it is (SECURITY DEFINER). */
     Optional<UUID> getDocumentTenant(UUID documentId);
 
 
     void createPartner(UUID id, String name);
+
+    /** Tenants of the whole platform, newest first, filtered by name or id prefix (SECURITY DEFINER). */
+    List<TenantRow> getTenants(String query, int limit, int offset);
+
+    /** One tenant of the platform, deleted ones excluded (SECURITY DEFINER). */
+    Optional<TenantRow> getTenant(UUID id);
+
+    /** Every partner with its member and tenant counts (SECURITY DEFINER). */
+    List<PartnerRow> getPartners();
+
+    boolean existsPartner(UUID id);
+
+    List<PartnerMemberRow> getPartnerMembers(UUID partnerId);
 
     /** False when the partner does not exist. */
     boolean setPartnerMember(UUID partnerId, String kind, String subject, String role);

@@ -33,6 +33,51 @@ public class JpaPlatformProvider implements PlatformProvider {
                 .getSingleResult();
     }
 
+    private static final String TENANT_COLUMNS = "id, name, plan, plan_source, status, partner_id, partner_name, created_by, created_at, "
+            + "sending_paused, audit_hold, archive_plan, delete_after, companies";
+
+    @Override
+    public List<TenantRow> getTenants(String query, int limit, int offset) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em.createNativeQuery("SELECT " + TENANT_COLUMNS + " FROM xhandler.admin_tenants(:q, :l, :o)")
+                .setParameter("q", query == null ? "" : query).setParameter("l", limit).setParameter("o", offset).getResultList();
+        return rows.stream().map(JpaPlatformProvider::tenant).toList();
+    }
+
+    @Override
+    public Optional<TenantRow> getTenant(UUID id) {
+        return getTenants(id.toString(), 1, 0).stream().filter(t -> t.id().equals(id)).findFirst();
+    }
+
+    @Override
+    public List<PartnerRow> getPartners() {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em.createNativeQuery("SELECT id, name, status, created_at, members, tenants FROM xhandler.admin_partners()")
+                .getResultList();
+        return rows.stream().map(r -> new PartnerRow((UUID) r[0], (String) r[1], (String) r[2], Times.toInstant(r[3]),
+                ((Number) r[4]).longValue(), ((Number) r[5]).longValue())).toList();
+    }
+
+    @Override
+    public boolean existsPartner(UUID id) {
+        return !em.createNativeQuery("SELECT 1 FROM xhandler.partner WHERE id = :id").setParameter("id", id).getResultList().isEmpty();
+    }
+
+    @Override
+    public List<PartnerMemberRow> getPartnerMembers(UUID partnerId) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em.createNativeQuery(
+                        "SELECT kind, subject, role, created_at FROM xhandler.partner_member WHERE partner_id = :p ORDER BY created_at, subject")
+                .setParameter("p", partnerId).getResultList();
+        return rows.stream().map(r -> new PartnerMemberRow((String) r[0], (String) r[1], (String) r[2], Times.toInstant(r[3]))).toList();
+    }
+
+    private static TenantRow tenant(Object[] r) {
+        return new TenantRow((UUID) r[0], (String) r[1], (String) r[2], (String) r[3], (String) r[4], (UUID) r[5], (String) r[6],
+                (String) r[7], Times.toInstant(r[8]), Boolean.TRUE.equals(r[9]), Boolean.TRUE.equals(r[10]), Boolean.TRUE.equals(r[11]),
+                Times.toInstant(r[12]), ((Number) r[13]).longValue());
+    }
+
     @Override
     public boolean setPartnerMember(UUID partnerId, String kind, String subject, String role) {
         Object set = em.createNativeQuery("SELECT xhandler.set_partner_member(:p, :k, :s, :r)")

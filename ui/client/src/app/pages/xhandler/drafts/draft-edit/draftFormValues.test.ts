@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { DraftView } from "@app/client/xhandler";
 
-import { toDraftInput, toFormValues } from "./draftFormValues";
+import {
+  toDraftInput,
+  toFormValues,
+  withDefaultTipoCambio,
+} from "./draftFormValues";
 
 const draft: DraftView = {
   id: "d1",
@@ -110,5 +114,58 @@ describe("toDraftInput", () => {
       tipo_nota: "01",
       descripcion_sustento: "Anulación",
     });
+  });
+
+  it("writes the exchange rate in a foreign currency only", () => {
+    const usd = toDraftInput({
+      draft,
+      values: { ...toFormValues(draft), tipo_cambio: "3.752" },
+    });
+    expect(usd.spec).toMatchObject({ moneda: "USD", tipo_cambio: 3.752 });
+
+    const pen = toDraftInput({
+      draft: { ...draft, spec: { ...draft.spec, tipo_cambio: 3.7 } },
+      values: { ...toFormValues(draft), moneda: "PEN", tipo_cambio: "3.7" },
+    });
+    expect(pen.spec).not.toHaveProperty("tipo_cambio");
+
+    const empty = toDraftInput({
+      draft: { ...draft, spec: { ...draft.spec, tipo_cambio: 3.7 } },
+      values: { ...toFormValues(draft), tipo_cambio: "" },
+    });
+    expect(empty.spec).not.toHaveProperty("tipo_cambio");
+  });
+
+  it("reads a stored exchange rate", () => {
+    expect(
+      toFormValues({ ...draft, spec: { ...draft.spec, tipo_cambio: 3.71 } })
+        .tipo_cambio,
+    ).toBe("3.71");
+  });
+});
+
+describe("withDefaultTipoCambio", () => {
+  it("fills SUNAT's rate only for a foreign-currency draft without one", () => {
+    const usd = { ...toFormValues(draft), tipo_cambio: "" };
+    expect(
+      withDefaultTipoCambio({ values: usd, defaultTipoCambio: "3.752" })
+        .tipo_cambio,
+    ).toBe("3.752");
+    expect(
+      withDefaultTipoCambio({
+        values: { ...usd, tipo_cambio: "3.8" },
+        defaultTipoCambio: "3.752",
+      }).tipo_cambio,
+    ).toBe("3.8");
+    expect(
+      withDefaultTipoCambio({
+        values: { ...usd, moneda: "PEN" },
+        defaultTipoCambio: "3.752",
+      }).tipo_cambio,
+    ).toBe("");
+    expect(
+      withDefaultTipoCambio({ values: usd, defaultTipoCambio: undefined })
+        .tipo_cambio,
+    ).toBe("");
   });
 });

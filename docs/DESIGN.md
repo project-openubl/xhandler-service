@@ -945,14 +945,15 @@ How it runs (P11):
 - **Health and status**: `/q/health` (liveness/readiness) for Kubernetes. `/api/v1/status` reports versions (service, engine, xhandler-rust revision), online workers, database, storage and HSM health, queue depth, and SUNAT availability per environment (`sunat`: each SUNAT service's breaker state and pause, §24.2; `available` when every service seen answers; third-party OSE endpoints are left out).
 - **SLOs**: 99.96% availability for OSE intake, and OSE forwarding under 1 hour at the 100th percentile. Dashboards and alerts for both.
 - **Engine performance budget** (per document, typical invoice, one core): build + validate (XSD + rules) + sign-prepare under 5 ms at p99, excluding the HSM signature. It is tracked with `criterion` benchmarks. CI gates on **instruction counts** (`iai-callgrind`), which are stable on shared runners, failing on a regression above 10%. Wall-clock benchmarks run nightly on dedicated hardware.
-- **Admin API** (`/api/admin/v1`, Keycloak realm role `platform-admin`, e.g. the `xhandler-admin` service account): platform operations over HTTP, so operators need no database credentials and every action on tenant data is audited in the tenant's log. There is no dedicated CLI: the runbooks call it with `curl` through a small `api` shell helper (`docs/runbooks/README.md`). Operations:
+- **Admin API** (`/api/admin/v1`, Keycloak realm role `platform-admin`, e.g. the `xhandler-admin` service account): platform operations over HTTP, so operators need no database credentials and every action on tenant data is audited in the tenant's log. There is no dedicated CLI: the runbooks call it with `curl` through a small `api` shell helper (`docs/runbooks/README.md`), and the UI's **Plataforma** section calls it for platform admins (ADR 0012). It has its **own OpenAPI document**, never the public one: every admin resource carries the SmallRye profile `admin` (`x-smallrye-profile-admin`), the public document excludes that profile and the named document `admin` includes only it; it is stored at build time in `target/openapi-admin/openapi.json` (the UI generates its admin client from it) and served at `/q/openapi-admin` to platform admins only. Admin operationIds start with `admin` (operationIds are unique across both documents) and bodies are typed records (`representations/idm/admin/`). Operations:
   - `POST keys/rotate` (re-wrap every secret and key with the current master key);
   - `POST documents/{id}/retry`, `POST tenants/{id}/retry` (one document, or in bulk by filter);
   - `POST …/hold` / `…/release` (document, company, tenant, endpoint);
   - `GET endpoints`, `PUT endpoints/{id}` (breaker, cap and hold per SUNAT endpoint);
   - `POST jobs/{id}/cancel`, `POST jobs/purge`;
   - `POST repair/{task}` (`partitions`: create missing partitions now; `requeue-stuck`: make due any non-definitive document no automatic attempt would pick up);
-  - `GET migrations`.
+  - `GET migrations`;
+  - reads for the console: `GET tenants?q=&limit=&offset=` and `GET tenants/{id}` (every tenant's account metadata: name, plan and its source, status, partner, holds, company count; through the `admin_tenants` SECURITY DEFINER function), `GET tenants/{id}/companies` (recorded in the tenant's audit log as `tenant.companies_listed`), `GET partners` (with member and tenant counts, `admin_partners`), `GET partners/{id}/members`, `GET plans`, `GET billing/issuer`, `GET pse/certificate`, `GET ose/cdr-certificate`.
   Resetting a Keycloak user's password is done in Keycloak itself (admin console or `kcadm.sh`).
 - **Runbooks**: a stuck queue, SUNAT outage, HSM outage, a certificate expiring, a breach.
 
@@ -1024,7 +1025,7 @@ xhandler-ui (`ui/` at the root of this monorepo, separate container) is the only
 - **Guidance**:
   - the root `AGENTS.md` (the only agent guide of the monorepo);
   - `docs/adr/` (what the UI does, each ADR with `## Rules`; design changes need a new or superseding ADR);
-  - `.rulesync/` rules and skills generated into `.claude/` and `.cursor/`;
+  - `.rulesync/` rules and skills (at the repository root) generated into the root `.claude/` and `.cursor/`;
   - `docs/ui/` (internals, scripts, tech stack, environment variables).
 - **Tooling**: oxlint/oxfmt for the fast loop; ESLint, tsc and Prettier as the gate; husky and commitlint; PatternFly skills.
 - **Adaptations**: Pulp-specific rules are rewritten (e.g. `pulp-api` → `xhandler-api`). Plugin concepts are adapted where useful (document types as data, after pulp-ui-2 ADR 0001) or dropped, and the U0 ADRs record which.
@@ -1324,7 +1325,7 @@ P11 load tests run at these figures, including an outage followed by a drain.
 
 ### 26.2 Developer experience
 
-- A public API reference generated from the OpenAPI spec (`/q/openapi`, `/q/swagger-ui`, public). The admin API is left out of it and of the SDKs.
+- A public API reference generated from the OpenAPI spec (`/q/openapi`, `/q/swagger-ui`, public). The admin API is left out of it and of the SDKs; its own document (`/q/openapi-admin`, platform admins only, §15) feeds only the UI's platform console.
 - SDKs generated for **TypeScript and Java** in v1 (`sdk/generate.sh`, CI workflow `sdk.yml`); other languages later, from the same OpenAPI spec. Publishing them to npm and Maven Central is part of the release process.
 - Quickstarts in Spanish: `docs/quickstarts/`.
 - **Sandbox**: every new tenant starts on the **SUNAT fake**, with deterministic answers (accepted, rejected, 1033, outage). SUNAT beta is opt-in and uses the tenant's own SOL user. The shared demo credential would give every free tenant a single slot (N = 1), about one document per second for the whole platform.

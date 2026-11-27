@@ -1,0 +1,1 @@
+export { LookupError } from "./LookupError";

@@ -7,16 +7,16 @@ Run from `ui/`. Workspace scripts run with `-w <workspace>` or `-ws`.
 | Script                    | What it does                                                                  |
 | ------------------------- | ----------------------------------------------------------------------------- |
 | `npm ci`                  | Installs, then `prepare` runs `generate`                                      |
-| `npm run generate`        | Generates both API clients from `client/openapi/*.json` (hey-api)             |
+| `npm run generate`        | Generates the API clients from `client/openapi/*.json` (hey-api)              |
 | `npm run openapi:refresh` | Copies the specs from the Maven builds into `client/openapi/` and regenerates |
-| `npm run rules`           | Regenerates `.claude/` and `.cursor/` from `.rulesync/`                       |
+| `npm run rules`           | Regenerates the root `.claude/`, `.cursor/`, `.mcp.json` from `.rulesync/`    |
 | `npm run oxlint:sync`     | Regenerates `.oxlintrc.json` from `eslint.config.mjs`                         |
 | `npm run hooks:install`   | Points the repository's git hooks at `ui/.husky` (lint-staged + commitlint)   |
 
 `openapi:refresh` needs the backends built first, from the repository root:
 
 ```bash
-./mvnw -q -f xhandler package -DskipTests             # xhandler/target/openapi/openapi.json
+./mvnw -q -f xhandler package -DskipTests             # xhandler/target/openapi{,-admin}/openapi.json
 ./mvnw -q -pl searchpe package -DskipTests \
   -Dquarkus.smallrye-openapi.store-schema-directory=target/openapi   # searchpe/target/openapi/openapi.json
 ```

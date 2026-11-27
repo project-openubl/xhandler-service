@@ -45,15 +45,10 @@ import {
   useTenantUpdateMutation,
 } from "@app/queries/xhandler/tenants";
 import { getMutationErrorMessage } from "@app/utils/apiError";
+import { tenantStatusLabel } from "@app/utils/tenantPresentation";
 
 import { notificationEmailSchema } from "./notificationEmailSchema";
 import { tenantNameSchema } from "./tenantNameSchema";
-
-const TENANT_STATUS_LABELS: Record<string, string> = {
-  active: "Activa",
-  exited: "Salida en curso",
-  suspended: "Suspendida",
-};
 
 /** The organization's data and its notification address. */
 export const TenantSettings: React.FC = () => {
@@ -88,7 +83,7 @@ export const TenantSettings: React.FC = () => {
         <DescriptionListGroup>
           <DescriptionListTerm>Estado</DescriptionListTerm>
           <DescriptionListDescription>
-            {TENANT_STATUS_LABELS[tenant.status ?? ""] ?? tenant.status ?? "-"}
+            {tenantStatusLabel(tenant.status)}
           </DescriptionListDescription>
         </DescriptionListGroup>
         <DescriptionListGroup>

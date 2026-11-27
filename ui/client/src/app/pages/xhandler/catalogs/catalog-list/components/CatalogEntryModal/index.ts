@@ -1,0 +1,1 @@
+export { CatalogEntryModal } from "./CatalogEntryModal";

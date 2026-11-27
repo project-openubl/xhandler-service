@@ -7,6 +7,7 @@ import { Nav, NavExpandable, NavItem, NavList } from "@patternfly/react-core";
 
 import { useApiStatus } from "@app/hooks/useApiStatus";
 import { useAuth } from "@app/hooks/useAuth";
+import { usePlatformRoles } from "@app/hooks/usePlatformRoles";
 import { useSelectedTenantId } from "@app/hooks/useSelectedTenantId";
 import { useMyPartnersQuery } from "@app/queries/xhandler/partners";
 import { useMyTenantsQuery } from "@app/queries/xhandler/tenants";
@@ -21,6 +22,8 @@ const GROUP_OF_SEGMENT: Record<string, string> = {
   organizaciones: "comprobantes",
   socios: "comprobantes",
   estado: "comprobantes",
+  soporte: "comprobantes",
+  plataforma: "plataforma",
   padron: "padron",
   perfil: "cuenta",
 };
@@ -40,6 +43,7 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
   const matchRoute = useMatchRoute();
   const { xhandler, searchpe } = useApiStatus();
   const auth = useAuth();
+  const platformRoles = usePlatformRoles();
 
   // Tenant pages carry the tenant in the URL; elsewhere the last one opened (if still a
   // membership) or the only one.
@@ -78,6 +82,10 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
       label: "Recepciones",
     },
     {
+      to: "/organizaciones/$tenantId/empresas/$companyId/catalogos",
+      label: "Catálogos",
+    },
+    {
       to: "/organizaciones/$tenantId/empresas/$companyId/reportes",
       label: "Reportes",
     },
@@ -102,6 +110,18 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
       to: "/organizaciones/$tenantId/datos-personales",
       label: "Datos personales",
     },
+    { to: "/organizaciones/$tenantId/auditoria", label: "Auditoría" },
+    { to: "/organizaciones/$tenantId/soporte", label: "Soporte" },
+  ] as const;
+
+  // Platform console (ADR 0012): only for platform admins, while xhandler answers.
+  const platformLinks = [
+    { to: "/plataforma/organizaciones", label: "Organizaciones" },
+    { to: "/plataforma/socios", label: "Socios" },
+    { to: "/plataforma/envios", label: "Envío a SUNAT" },
+    { to: "/plataforma/pse", label: "PSE" },
+    { to: "/plataforma/ose", label: "OSE" },
+    { to: "/plataforma/facturacion", label: "Facturación y SIRE" },
   ] as const;
 
   const group = useLocation({
@@ -147,6 +167,11 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
                   isActive={!!matchRoute({ to: "/socios", fuzzy: true })}
                 >
                   <Link to="/socios">Socios</Link>
+                </NavItem>
+              ) : null}
+              {platformRoles.has("platform-support") ? (
+                <NavItem isActive={!!matchRoute({ to: "/soporte" })}>
+                  <Link to="/soporte">Acceso de soporte</Link>
                 </NavItem>
               ) : null}
               {tenantId ? (
@@ -223,6 +248,16 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
             <UnavailableItem isLoading={xhandler.isLoading} />
           )}
         </NavExpandable>
+
+        {xhandler.isAvailable && platformRoles.has("platform-admin") ? (
+          <NavExpandable title="Plataforma" {...groupProps("plataforma")}>
+            {platformLinks.map(({ to, label }) => (
+              <NavItem key={to} isActive={!!matchRoute({ to, fuzzy: true })}>
+                <Link to={to}>{label}</Link>
+              </NavItem>
+            ))}
+          </NavExpandable>
+        ) : null}
 
         {searchpe.isEnabled ? (
           <NavExpandable title="Padrón RUC" {...groupProps("padron")}>

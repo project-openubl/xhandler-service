@@ -1,8 +1,16 @@
 import type React from "react";
+import { useState } from "react";
 
 import { Link } from "@tanstack/react-router";
 
-import { Content, ContentVariants, PageSection } from "@patternfly/react-core";
+import {
+  Button,
+  Content,
+  ContentVariants,
+  Flex,
+  FlexItem,
+  PageSection,
+} from "@patternfly/react-core";
 import { DataView, DataViewTable } from "@patternfly/react-data-view";
 
 import { dataViewBodyStates } from "@app/components/dataViewStates";
@@ -12,12 +20,16 @@ import { TENANT_ROLE_LABELS, type TenantRole } from "@app/hooks/useTenantRole";
 import { useMyTenantsQuery } from "@app/queries/xhandler/tenants";
 import type { DataViewTh } from "@app/utils/dataViewTypes";
 
+import { CreateTenantModal } from "./components/CreateTenantModal";
+
 /**
  * The organizations (tenants) the user belongs to, the top of partner → tenant → company
- * (ADR 0002). The API answers every membership at once, so the table doesn't page.
+ * (ADR 0002). The API answers every membership at once, so the table doesn't page. Anyone can
+ * create their own free organization from here (ADR 0011).
  */
 export const TenantList: React.FC = () => {
   const { data, isLoading, error } = useMyTenantsQuery();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const columns: DataViewTh[] = [
     { cell: "Organización", props: { width: 70 } },
@@ -54,7 +66,7 @@ export const TenantList: React.FC = () => {
     emptyState: (
       <TableEmptyState
         title="Aún no perteneces a ninguna organización"
-        body="Pide a un administrador de tu organización que te invite."
+        body="Crea tu organización gratuita o pide a un administrador de una organización que te invite."
       />
     ),
   });
@@ -63,10 +75,22 @@ export const TenantList: React.FC = () => {
     <>
       <DocumentTitle title="Organizaciones" />
       <PageSection>
-        <Content component={ContentVariants.h1}>Organizaciones</Content>
-        <Content component={ContentVariants.p}>
-          Las organizaciones a las que perteneces y tu rol en cada una.
-        </Content>
+        <Flex
+          justifyContent={{ default: "justifyContentSpaceBetween" }}
+          alignItems={{ default: "alignItemsCenter" }}
+        >
+          <FlexItem>
+            <Content component={ContentVariants.h1}>Organizaciones</Content>
+            <Content component={ContentVariants.p}>
+              Las organizaciones a las que perteneces y tu rol en cada una.
+            </Content>
+          </FlexItem>
+          <FlexItem>
+            <Button variant="primary" onClick={() => setIsCreateOpen(true)}>
+              Nueva organización
+            </Button>
+          </FlexItem>
+        </Flex>
       </PageSection>
       <PageSection>
         <DataView activeState={activeState}>
@@ -78,6 +102,10 @@ export const TenantList: React.FC = () => {
           />
         </DataView>
       </PageSection>
+      <CreateTenantModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+      />
     </>
   );
 };

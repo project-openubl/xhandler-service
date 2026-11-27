@@ -2,6 +2,8 @@ import { createContext } from "react";
 
 export interface IUser {
   username: string;
+  /** Realm roles from the access token, for showing platform screens only (ADR 0013). */
+  realmRoles: string[];
 }
 
 export interface IAuthContext {

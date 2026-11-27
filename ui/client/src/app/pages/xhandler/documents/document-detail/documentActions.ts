@@ -1,5 +1,6 @@
 import type { DocumentView } from "@app/client/xhandler";
 import {
+  isDocumentHoldable,
   isDocumentRetryable,
   isDocumentVoidable,
 } from "@app/queries/xhandler/documents";
@@ -9,6 +10,9 @@ export interface IDocumentActionAvailability {
   retry: string | undefined;
   void: string | undefined;
   cancelVoid: string | undefined;
+  hold: string | undefined;
+  release: string | undefined;
+  delivered: string | undefined;
   cdr: string | undefined;
   files: string | undefined;
 }
@@ -37,6 +41,19 @@ export const documentActionAvailability = ({
     document.status === "voiding" && voidingDocument?.status === "exception"
       ? undefined
       : "Solo se cancela una anulación cuyo resumen quedó con error.",
+  hold: document.hold_reason
+    ? "El comprobante ya está retenido."
+    : isDocumentHoldable(document)
+      ? undefined
+      : "Solo se retiene un comprobante por enviar, en proceso o por confirmar.",
+  release: document.hold_reason
+    ? undefined
+    : "El comprobante no está retenido.",
+  delivered: document.delivered_at
+    ? "El comprobante ya figura como entregado."
+    : document.status === "draft"
+      ? "El borrador aún no se firmó."
+      : undefined,
   cdr: document.cdr_received_at ? undefined : "SUNAT aún no envió el CDR.",
   files:
     document.status === "draft" ? "El borrador aún no se firmó." : undefined,

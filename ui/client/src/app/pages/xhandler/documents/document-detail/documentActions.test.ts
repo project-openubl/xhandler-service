@@ -80,4 +80,49 @@ describe("documentActionAvailability", () => {
     expect(actions.files).toBeDefined();
     expect(actions.cdr).toBeDefined();
   });
+
+  it("holds a document still being sent, releases only a held one", () => {
+    const pending = { ...accepted, status: "pending_send" };
+    const actions = documentActionAvailability({
+      document: pending,
+      voidingDocument: undefined,
+    });
+    expect(actions.hold).toBeUndefined();
+    expect(actions.release).toBeDefined();
+
+    const held = documentActionAvailability({
+      document: { ...pending, hold_reason: "operator" },
+      voidingDocument: undefined,
+    });
+    expect(held.hold).toBeDefined();
+    expect(held.release).toBeUndefined();
+
+    expect(
+      documentActionAvailability({
+        document: accepted,
+        voidingDocument: undefined,
+      }).hold,
+    ).toBeDefined();
+  });
+
+  it("marks as delivered once, never a draft", () => {
+    expect(
+      documentActionAvailability({
+        document: accepted,
+        voidingDocument: undefined,
+      }).delivered,
+    ).toBeUndefined();
+    expect(
+      documentActionAvailability({
+        document: { ...accepted, delivered_at: "2026-01-02T00:00:00Z" },
+        voidingDocument: undefined,
+      }).delivered,
+    ).toBeDefined();
+    expect(
+      documentActionAvailability({
+        document: { id: "d3", status: "draft" },
+        voidingDocument: undefined,
+      }).delivered,
+    ).toBeDefined();
+  });
 });

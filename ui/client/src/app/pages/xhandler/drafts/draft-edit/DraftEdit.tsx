@@ -4,6 +4,7 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 
 import { yupResolver } from "@hookform/resolvers/yup";
 import { Link, useNavigate } from "@tanstack/react-router";
+import dayjs from "dayjs";
 
 import {
   ActionGroup,
@@ -41,6 +42,7 @@ import { DocumentTitle } from "@app/components/DocumentTitle";
 import { FormSubmitError } from "@app/components/FormSubmitError";
 import { GatedButton } from "@app/components/GatedButton";
 import { SunatEnvLabel } from "@app/components/SunatEnvLabel";
+import { RENDER_DATE_FORMAT } from "@app/constants";
 import { useNotifications } from "@app/hooks/useNotifications";
 import { useSelectedTenantId } from "@app/hooks/useSelectedTenantId";
 import { useSubmitError } from "@app/hooks/useSubmitError";
@@ -55,6 +57,11 @@ import {
   useDraftUpdateMutation,
   useSuspenseDraftDetailQuery,
 } from "@app/queries/xhandler/drafts";
+import { useExchangeRateQuery } from "@app/queries/xhandler/exchange-rates";
+import {
+  lookupTipo,
+  useIdentityLookupMutation,
+} from "@app/queries/xhandler/identity";
 import { useSeriesListQuery } from "@app/queries/xhandler/series";
 import { getMutationErrorMessage } from "@app/utils/apiError";
 import { draftTypeLabel } from "@app/utils/draftTypes";
@@ -71,6 +78,7 @@ import {
   TIPOS_NOTA,
   toDraftInput,
   toFormValues,
+  withDefaultTipoCambio,
 } from "./draftFormValues";
 
 const MONEDAS = [
@@ -229,17 +237,63 @@ const DraftForm: React.FC<IDraftFormProps> = ({
   // meanwhile makes the next save a 409 instead of overwriting it.
   const [editedVersion, setEditedVersion] = useState(draft.version);
 
-  const { control, handleSubmit, formState, reset } = useForm<IDraftFormValues>(
-    {
+  const { control, handleSubmit, formState, reset, setValue } =
+    useForm<IDraftFormValues>({
       resolver: yupResolver(draftFormSchema),
       defaultValues: toFormValues(draft),
       mode: "onTouched",
-    },
-  );
+    });
   // Read while rendering, so react-hook-form tracks it for the issue handler.
   const { isDirty } = formState;
   const pricesIncludeIgv = useWatch({ control, name: "precios_con_igv" });
   const isNote = useWatch({ control, name: "es_nota" });
+  const moneda = useWatch({ control, name: "moneda" });
+  const fechaEmision = useWatch({ control, name: "fecha_emision" });
+  const clienteTipo = useWatch({ control, name: "cliente_tipo" });
+  const clienteNumero = useWatch({ control, name: "cliente_numero" });
+
+  // A foreign-currency draft defaults to SUNAT's selling rate of its date (DESIGN.md §26.7).
+  const isForeignCurrency = moneda !== "PEN";
+  const rate = useExchangeRateQuery({
+    day: fechaEmision,
+    options: { enabled: isForeignCurrency },
+  });
+  // Shown as the field's placeholder; saving with the field empty writes it.
+  const defaultTipoCambio =
+    isForeignCurrency && rate.data?.venta !== undefined
+      ? String(rate.data.venta)
+      : undefined;
+  const rateHelper = rate.data
+    ? `Vacío: la venta SUNAT del ${dayjs(rate.data.day).format(RENDER_DATE_FORMAT)}.`
+    : rate.isError
+      ? "SUNAT no publicó un tipo de cambio para esa fecha: ingrésalo."
+      : "Vacío: el tipo de cambio de SUNAT del día.";
+
+  // RUC or DNI fill the buyer's name from SUNAT or RENIEC (audited, limited per hour).
+  const tipoLookup = lookupTipo(clienteTipo);
+  const lookup = useIdentityLookupMutation(draft.company_id ?? "", {
+    onSuccess: (identity) => {
+      if (identity.nombre) {
+        setValue("cliente_nombre", identity.nombre, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      }
+    },
+    onError: (error) =>
+      setSubmitError(
+        getMutationErrorMessage({
+          error,
+          fallback: "No se pudo consultar el documento",
+        }),
+      ),
+  });
+  const lookupNumero = clienteNumero.trim();
+  const lookupBlocked = !tipoLookup
+    ? "Solo se consultan RUC y DNI."
+    : !(tipoLookup === "ruc" ? /^\d{11}$/ : /^\d{8}$/).test(lookupNumero)
+      ? `Ingresa ${tipoLookup === "ruc" ? "un RUC de 11 dígitos" : "un DNI de 8 dígitos"}.`
+      : undefined;
 
   // GET …/series is unpaged (a company has a handful): read whole for the picker.
   const { data: series } = useSeriesListQuery({
@@ -307,7 +361,11 @@ const DraftForm: React.FC<IDraftFormProps> = ({
     }
   };
 
-  const onSave = handleSubmit((values) => {
+  const onSave = handleSubmit((submitted) => {
+    const values = withDefaultTipoCambio({
+      values: submitted,
+      defaultTipoCambio,
+    });
     clearSubmitError();
     updateDraft.mutate(toInput(values), {
       onSuccess: (result) => {
@@ -320,7 +378,11 @@ const DraftForm: React.FC<IDraftFormProps> = ({
   });
 
   // Saves pending changes first, then issues: two chained requests (toastr rule).
-  const issue = async (values: IDraftFormValues) => {
+  const issue = async (submitted: IDraftFormValues) => {
+    const values = withDefaultTipoCambio({
+      values: submitted,
+      defaultTipoCambio,
+    });
     setIssueTarget(null);
     clearSubmitError();
     try {
@@ -383,6 +445,19 @@ const DraftForm: React.FC<IDraftFormProps> = ({
                 isDisabled={isDisabled}
               />
             </GridItem>
+            {isForeignCurrency ? (
+              <GridItem>
+                <ControlledTextField
+                  control={control}
+                  name="tipo_cambio"
+                  label="Tipo de cambio"
+                  inputMode="decimal"
+                  placeholder={defaultTipoCambio}
+                  helperText={rateHelper}
+                  isDisabled={isDisabled}
+                />
+              </GridItem>
+            ) : null}
           </Grid>
 
           <FormFieldGroupExpandable
@@ -423,6 +498,27 @@ const DraftForm: React.FC<IDraftFormProps> = ({
                   isRequired
                   isDisabled={isDisabled}
                 />
+              </GridItem>
+              <GridItem>
+                <GatedButton
+                  variant="secondary"
+                  isLoading={lookup.isPending}
+                  onClick={() => {
+                    if (!tipoLookup) return;
+                    clearSubmitError();
+                    lookup.mutate({ tipo: tipoLookup, numero: lookupNumero });
+                  }}
+                  {...(!canWrite
+                    ? disabledProps("operator")
+                    : lookupBlocked
+                      ? {
+                          isAriaDisabled: true,
+                          tooltipProps: { content: lookupBlocked },
+                        }
+                      : { isDisabled: isBusy || lookup.isPending })}
+                >
+                  Consultar RUC/DNI
+                </GatedButton>
               </GridItem>
             </Grid>
           </FormFieldGroupExpandable>

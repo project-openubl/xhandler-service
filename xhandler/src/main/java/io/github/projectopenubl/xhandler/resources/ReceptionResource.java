@@ -22,11 +22,13 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.github.projectopenubl.xhandler.models.ReceptionProvider;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -80,6 +82,7 @@ public class ReceptionResource {
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ReceptionRepresentation.class)))
     @Operation(operationId = "receiveDocument")
     @POST
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
     public Response receive(@PathParam("tenantId") UUID tenantId, @PathParam("companyId") UUID companyId, @RestForm("xml") FileUpload xml,
             @RestForm("pdf") FileUpload pdf, @RestForm("cdr") FileUpload cdr) throws IOException {
         if (xml == null) {

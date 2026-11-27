@@ -7,6 +7,7 @@ import {
 
 import { currentPageState, oidcSignoutArgs, userManager } from "@app/oidc";
 import { useLastTenantStore } from "@app/stores/useLastTenantStore";
+import { realmRolesOf } from "@app/utils/realmRoles";
 
 import { AuthContext, type IAuthContext } from "./AuthContext";
 
@@ -65,6 +66,7 @@ const OidcAuthBridge: React.FC<IOidcAuthBridgeProps> = ({ children }) => {
               (auth.user?.profile.preferred_username as string) ??
               auth.user?.profile.sub ??
               "",
+            realmRoles: realmRolesOf(auth.user?.access_token),
           }
         : null,
       isAuthenticated: () => auth.isAuthenticated,

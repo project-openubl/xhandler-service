@@ -1,7 +1,7 @@
 # Architecture
 
 A high-level map of how the UI is structured. For the design decisions behind it see
-[docs/adr/](../../adr/); for the coding rules see [.rulesync/rules/](../../../ui/.rulesync/rules/).
+[docs/adr/](../../adr/); for the coding rules see [.rulesync/rules/](../../../.rulesync/rules/).
 
 ```mermaid
 flowchart LR
@@ -55,7 +55,7 @@ browser only gets the allowlisted keys of `CLIENT_ENV_KEYS` (`common/src/environ
 
 ## Data
 
-- Generated clients (`@app/client/xhandler`, `@app/client/searchpe`) give the request functions
+- Generated clients (`@app/client/xhandler`, `@app/client/xhandler-admin`, `@app/client/searchpe`) give the request functions
   and types ([api-clients.md](api-clients.md)).
 - TanStack Query owns server state: one module per domain in `queries/xhandler/` and
   `queries/searchpe/`, each with a key factory, `*QueryOptions` factories, hooks and mutations

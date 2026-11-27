@@ -1,6 +1,10 @@
 import { defineConfig } from "@hey-api/openapi-ts";
 
-import { patchSearchpeSpec, patchXhandlerSpec } from "./specPatches";
+import {
+  patchSearchpeSpec,
+  patchXhandlerAdminSpec,
+  patchXhandlerSpec,
+} from "./specPatches";
 
 // One generated client per backend; specs are copied from the Maven builds by
 // `npm run openapi:refresh` and patched in memory (./specPatches.ts).
@@ -11,6 +15,18 @@ export default defineConfig([
     parser: {
       patch: {
         input: (spec) => patchXhandlerSpec(spec as Parameters<typeof patchXhandlerSpec>[0]),
+      },
+    },
+    plugins: ["@hey-api/client-axios"],
+  },
+  {
+    // The admin API (platform console, ADR 0012), through the same proxy as xhandler
+    input: "./openapi/xhandler-admin.json",
+    output: { path: "src/app/client/xhandler-admin" },
+    parser: {
+      patch: {
+        input: (spec) =>
+          patchXhandlerAdminSpec(spec as Parameters<typeof patchXhandlerAdminSpec>[0]),
       },
     },
     plugins: ["@hey-api/client-axios"],

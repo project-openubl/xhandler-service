@@ -1,4 +1,9 @@
 import type { Status } from "@app/client/xhandler";
+import {
+  BREAKER_STATE_LABELS,
+  SUNAT_ENVIRONMENT_LABELS,
+  SUNAT_SERVICE_LABELS,
+} from "@app/utils/sunatEndpointPresentation";
 
 /** Job priority classes (DESIGN.md §10.5), as the status endpoint numbers them. */
 export const PRIORITY_CLASS_LABELS: Record<number, string> = {
@@ -17,27 +22,6 @@ export const componentHealth = (
   { label: "Bóveda de claves", isHealthy: status.key_vault },
   { label: "Motor", isHealthy: status.engine },
 ];
-
-/** SUNAT environments as `GET /status` names them (`SunatEnvironment.environment`). */
-export const SUNAT_ENVIRONMENT_LABELS: Record<string, string> = {
-  production: "Producción",
-  beta: "Beta",
-  fake: "Pruebas (fake)",
-};
-
-/** SUNAT web services (`SunatEndpoint.service`). */
-export const SUNAT_SERVICE_LABELS: Record<string, string> = {
-  invoice: "Comprobantes",
-  despatch: "Guías",
-  perception: "Percepciones y retenciones",
-};
-
-/** Circuit breaker states (`SunatEndpoint.breaker_state`, DESIGN.md §24.2). */
-export const BREAKER_STATE_LABELS: Record<string, string> = {
-  closed: "Responde",
-  open: "Caído",
-  half_open: "Probando",
-};
 
 export interface ISunatServiceHealth {
   label: string;
