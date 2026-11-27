@@ -120,6 +120,7 @@ export const NavApp: React.FC<INavAppProps> = ({ onSelect }) => {
     { to: "/plataforma/socios", label: "Socios" },
     { to: "/plataforma/envios", label: "Envío a SUNAT" },
     { to: "/plataforma/pse", label: "PSE" },
+    { to: "/plataforma/ose", label: "OSE" },
   ] as const;
 
   const group = useLocation({
