@@ -1,6 +1,6 @@
 ---
 name: public-and-authenticated-routes
-description: Public pages (buyer portal by capability link, OSE validity) live outside the login flow, use a bare shell and send no token; every other page requires an OIDC session and starts the login when there is none.
+description: Public pages (the buyer portal by capability link) live outside the login flow, use a bare shell and send no token; every other page requires an OIDC session and starts the login when there is none.
 status: Accepted
 ---
 
@@ -10,8 +10,7 @@ status: Accepted
 
 Most of the UI is for signed-in users of a tenant. Some pages are for anyone: the **buyer
 portal**, opened from the capability link printed in a PDF's QR code or sent by email
-(`/p/documentos/<token>`, DESIGN.md §12), and the **OSE validity** check required by
-RS 242-2018 (`/consulta-validez`). A buyer has no account, and a link must never bounce them
+(`/p/documentos/<token>`, DESIGN.md §12). A buyer has no account, and a link must never bounce them
 to a login page. The same app serves both.
 
 ## Rules

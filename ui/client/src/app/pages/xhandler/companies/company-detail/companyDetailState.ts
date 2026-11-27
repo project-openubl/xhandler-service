@@ -10,7 +10,6 @@ export const COMPANY_DETAIL_TABS = [
   "certificado",
   "series",
   "credenciales",
-  "envio",
 ] as const;
 
 export type CompanyDetailTab = (typeof COMPANY_DETAIL_TABS)[number];

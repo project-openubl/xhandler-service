@@ -43,7 +43,7 @@ interface IPlatformCertificateCardProps {
 /** Days before expiry when the platform alerts (DESIGN.md §15). */
 const EXPIRY_WARNING_DAYS = 30;
 
-/** A platform certificate (PSE or OSE CDR) and its import; the caller runs the requests. */
+/** The platform's PSE certificate and its import; the caller runs the requests. */
 export const PlatformCertificateCard: React.FC<
   IPlatformCertificateCardProps
 > = ({

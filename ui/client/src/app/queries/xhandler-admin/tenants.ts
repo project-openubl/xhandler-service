@@ -22,14 +22,12 @@ import {
   adminReleaseCompanySending,
   adminReleaseTenantSending,
   adminRetryTenantDocuments,
-  adminSetCompanyOseObligated,
   adminSetTenantArchivePlan,
   adminSetTenantAuditHold,
   adminSetTenantPlan,
   adminSuppressEmail,
   type AdminTenant,
   type BulkRetry,
-  type CompanyOseObligated,
   type CompanySending,
   type Count,
   type DataSubjectRequestForwarded,
@@ -267,44 +265,6 @@ export const useAdminCompanySendingMutation = (
       (
         await (hold ? adminHoldCompanySending : adminReleaseCompanySending)({
           path: { tenantId, companyId },
-          throwOnError: true,
-        })
-      ).data,
-    onSuccess: async (data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: adminTenantKeys.companies(tenantId),
-      });
-      await options?.onSuccess?.(data, variables);
-    },
-    onError: options?.onError,
-  });
-};
-
-export interface IAdminOseObligatedVariables {
-  companyId: string;
-  oseObligated: boolean;
-}
-
-/** `PUT …/companies/{id}/ose-obligated`: the regulatory OSE obligation (DESIGN.md §3.2). */
-export const useAdminSetOseObligatedMutation = (
-  tenantId: string,
-  options?: IMutationCallbacks<
-    CompanyOseObligated,
-    IAdminOseObligatedVariables,
-    XhandlerAxiosError
-  >,
-) => {
-  const queryClient = useQueryClient();
-  return useMutation<
-    CompanyOseObligated,
-    XhandlerAxiosError,
-    IAdminOseObligatedVariables
-  >({
-    mutationFn: async ({ companyId, oseObligated }) =>
-      (
-        await adminSetCompanyOseObligated({
-          path: { tenantId, companyId },
-          body: { ose_obligated: oseObligated },
           throwOnError: true,
         })
       ).data,

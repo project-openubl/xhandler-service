@@ -19,17 +19,6 @@ allowlisted in `CLIENT_ENV_KEYS`; anything else stays on the server.
 | `DEBUG`                   | no       | unset                                   | `1` logs the env and every proxied request                                                                                                                                          |
 | `NODE_EXTRA_CA_CERTS`     | no       | unset                                   | Extra CAs for the backends (a mounted file, only read); see below                                                                                                                   |
 | `LIBRO_RECLAMACIONES_URL` | no       | unset                                   | The platform's virtual Libro de Reclamaciones (https, Ley 32495), linked from every shell; unset (or not https) hides it                                                            |
-| `CAPTCHA_SITE_KEY`        | no       | unset                                   | The CAPTCHA provider's public site key for the OSE validity page (`/consulta-validez`); unset shows a plain "Código de verificación" field instead of the widget (development, e2e) |
-| `CAPTCHA_PROVIDER`        | no       | `hcaptcha`                              | `hcaptcha` or `turnstile` (Cloudflare); must match xhandler-service's `xhandler.captcha.verify-url`. An unknown value is treated as no site key                                     |
-
-CAPTCHA ([ADR 0010](../adr/0010-public-lookup-captcha.md)): both keys reach the browser (a site
-key is public). The server's Content-Security-Policy allows the provider's origins (hCaptcha:
-`https://hcaptcha.com https://*.hcaptcha.com`; Turnstile: `https://challenges.cloudflare.com`)
-for scripts, styles, frames and connections only while a site key is set. The secret stays in
-xhandler-service (`xhandler.captcha.secret`, with `xhandler.captcha.verify-url`
-`https://api.hcaptcha.com/siteverify` or
-`https://challenges.cloudflare.com/turnstile/v0/siteverify`); the fallback field only works
-against its test mode (`xhandler.captcha.test-mode=true`, token `test-pass`).
 
 Derived: `SEARCHPE_ENABLED` (`"true"` when `SEARCHPE_API_URL` is set, so when the server
 mounts searchpe's proxy) is what the browser sees; it never sees a backend URL.

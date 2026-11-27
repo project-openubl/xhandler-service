@@ -1,7 +1,7 @@
 ---
 name: public-lookup-captcha
 description: The public OSE validity page proves a person is asking with the CAPTCHA provider's own widget (hCaptcha or Cloudflare Turnstile, chosen by deployment), loaded only on that page; without a configured site key it falls back to a typed verification code for development and tests.
-status: Accepted
+status: Superseded by 0014
 ---
 
 # 0010. The OSE validity page verifies with the provider's CAPTCHA widget

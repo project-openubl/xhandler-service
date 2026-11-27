@@ -48,7 +48,6 @@ import { CompanySettingsForm } from "./components/CompanySettingsForm";
 import { CredentialsPanel } from "./components/CredentialsPanel";
 import { EnvironmentModal } from "./components/EnvironmentModal";
 import { LogoUploadModal } from "./components/LogoUploadModal";
-import { RoutePanel } from "./components/RoutePanel";
 import { SeriesPanel } from "./components/SeriesPanel";
 
 interface ICompanyDetailProps {
@@ -60,18 +59,12 @@ const EMISSION_MODE_LABELS: Record<string, string> = {
   pse: "PSE (firma la plataforma)",
 };
 
-const SUBMISSION_ROUTE_LABELS: Record<string, string> = {
-  sunat: "SUNAT",
-  ose: "OSE",
-};
-
 const TAB_TITLES: Record<CompanyDetailTab, string> = {
   resumen: "Resumen",
   configuracion: "Configuración",
   certificado: "Certificado",
   series: "Series",
   credenciales: "Credenciales",
-  envio: "Envío a SUNAT",
 };
 
 /** One company (RUC) of the tenant in the URL: the bottom of partner → tenant → company. */
@@ -119,13 +112,6 @@ export const CompanyDetail: React.FC<ICompanyDetailProps> = ({ companyId }) => {
       value:
         EMISSION_MODE_LABELS[company.emission_mode ?? ""] ??
         company.emission_mode ??
-        "-",
-    },
-    {
-      label: "Ruta de envío",
-      value:
-        SUBMISSION_ROUTE_LABELS[company.submission_route ?? ""] ??
-        company.submission_route ??
         "-",
     },
     {
@@ -260,12 +246,6 @@ export const CompanyDetail: React.FC<ICompanyDetailProps> = ({ companyId }) => {
             title={<TabTitleText>{TAB_TITLES.credenciales}</TabTitleText>}
           >
             <CredentialsPanel companyId={companyId} />
-          </Tab>
-          <Tab
-            eventKey="envio"
-            title={<TabTitleText>{TAB_TITLES.envio}</TabTitleText>}
-          >
-            <RoutePanel companyId={companyId} />
           </Tab>
         </Tabs>
       </PageSection>

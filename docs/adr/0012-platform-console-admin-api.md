@@ -9,7 +9,7 @@ status: Accepted
 ## Context
 
 Platform operations (partners and their members, plans set by hand, PSE authorizations and the
-PSE pool, OSE users and lists, the SIRE calendar, holds per tenant, company and SUNAT endpoint,
+PSE pool, the SIRE calendar, holds per tenant, company and SUNAT endpoint,
 data-protection holds) live in the admin API, `/api/admin/v1`, which only the realm role
 `platform-admin` may call. DESIGN.md §15 and §26.2 keep it out of the public OpenAPI document
 and the SDKs, and operators called it with `curl` from the runbooks; the UI had no screen for
@@ -31,8 +31,8 @@ document and the SDKs are unchanged.
       companies); it never shows a tenant's documents. Listing a tenant's companies is
       recorded in that tenant's audit log, and the screen says so.
 - [ ] Destructive or wide actions (holding a tenant, a company or a SUNAT endpoint, key rotation,
-      purging jobs, replacing the OSE lists) ask for confirmation naming what they affect.
-- [ ] Passwords the API shows once (a new OSE user, a reset) are shown once, with a copy
+      purging jobs) ask for confirmation naming what they affect.
+- [ ] Passwords the API shows once are shown once, with a copy
       button and a warning that they can't be seen again; secrets sent to the API (SOL
       passwords, certificate passwords) are never shown back.
 - [ ] Errors are shown as everywhere else: "No se pudo …" plus the server's `message` and

@@ -50,6 +50,25 @@
           }
         }
       },
+      "ApiError" : {
+        "type" : "object",
+        "description" : "Error de la API (AGENTS.md: `{ kind, message, detail }`).",
+        "properties" : {
+          "kind" : {
+            "type" : "string",
+            "description" : "Código estable del error, p. ej. `not_found`, `invalid_request`, `invalid_document`."
+          },
+          "message" : {
+            "type" : "string",
+            "description" : "Mensaje para personas, en español."
+          },
+          "detail" : {
+            "type" : [ "string", "null" ],
+            "description" : "Detalle opcional (p. ej. el campo inválido o el código SUNAT)."
+          }
+        },
+        "required" : [ "kind", "message", "detail" ]
+      },
       "AuditEntry" : {
         "type" : "object",
         "properties" : {
@@ -160,20 +179,6 @@
           }
         }
       },
-      "CdrResult" : {
-        "type" : "object",
-        "properties" : {
-          "result" : {
-            "type" : "string"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "cdr_zip_base64" : {
-            "type" : "string"
-          }
-        }
-      },
       "CertificateView" : {
         "type" : "object",
         "properties" : {
@@ -255,9 +260,6 @@
           },
           "has_logo" : {
             "type" : "boolean"
-          },
-          "submission_route" : {
-            "type" : "string"
           },
           "libro_reclamaciones_url" : {
             "type" : "string"
@@ -1206,385 +1208,6 @@
         "additionalProperties" : true,
         "description" : "Objeto JSON libre"
       },
-      "Ose" : {
-        "type" : "object",
-        "required" : [ "name", "invoice_url", "username", "password" ],
-        "properties" : {
-          "name" : {
-            "type" : "string",
-            "pattern" : "\\S",
-            "maxLength" : 200
-          },
-          "invoice_url" : {
-            "type" : "string",
-            "pattern" : "\\S",
-            "maxLength" : 2000
-          },
-          "perception_url" : {
-            "type" : "string",
-            "maxLength" : 2000
-          },
-          "username" : {
-            "type" : "string",
-            "pattern" : "\\S",
-            "maxLength" : 100
-          },
-          "password" : {
-            "type" : "string",
-            "pattern" : "\\S",
-            "maxLength" : 200
-          }
-        }
-      },
-      "OseLookupRequest" : {
-        "type" : "object",
-        "required" : [ "ruc", "tipo_comprobante", "serie", "numero", "captcha" ],
-        "properties" : {
-          "ruc" : {
-            "type" : "string",
-            "pattern" : "\\d{11}"
-          },
-          "tipo_comprobante" : {
-            "type" : "string",
-            "pattern" : "\\d{2}"
-          },
-          "serie" : {
-            "type" : "string",
-            "pattern" : "[A-Z0-9]{4}"
-          },
-          "numero" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "captcha" : {
-            "type" : "string",
-            "pattern" : "\\S"
-          }
-        }
-      },
-      "OseLookupResult" : {
-        "type" : "object",
-        "properties" : {
-          "state" : {
-            "type" : "string"
-          },
-          "checked_at" : {
-            "type" : "string"
-          }
-        }
-      },
-      "PageAuditEntry" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/AuditEntry"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageCompanyView" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/CompanyView"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageConformityView" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/ConformityView"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageDataSubjectRequestView" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/DataSubjectRequestView"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageDeliveryView" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/DeliveryView"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageDocumentView" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/DocumentView"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageDraftView" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/DraftView"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageEntry" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/Entry"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageJobView" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/JobView"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageNotificationView" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/NotificationView"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageReceptionView" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/ReceptionView"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageReportView" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/ReportView"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
-      "PageSirePeriodSummary" : {
-        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
-        "type" : "object",
-        "required" : [ "items", "limit", "offset" ],
-        "properties" : {
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/SirePeriodSummary"
-            },
-            "description" : "Los elementos de la página, como mucho `limit`."
-          },
-          "limit" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
-          },
-          "offset" : {
-            "type" : "integer",
-            "format" : "int32",
-            "description" : "Elementos saltados antes de esta página."
-          }
-        }
-      },
       "PartnerBrandingView" : {
         "type" : "object",
         "properties" : {
@@ -1985,39 +1608,6 @@
           }
         }
       },
-      "RouteChange" : {
-        "type" : "object",
-        "required" : [ "submission_route" ],
-        "properties" : {
-          "submission_route" : {
-            "type" : "string",
-            "pattern" : "sunat|ose"
-          },
-          "ose" : {
-            "$ref" : "#/components/schemas/Ose"
-          }
-        }
-      },
-      "RouteView" : {
-        "type" : "object",
-        "properties" : {
-          "submission_route" : {
-            "type" : "string"
-          },
-          "ose_obligated" : {
-            "type" : "boolean"
-          },
-          "ose_name" : {
-            "type" : "string"
-          },
-          "ose_invoice_url" : {
-            "type" : "string"
-          },
-          "ose_perception_url" : {
-            "type" : "string"
-          }
-        }
-      },
       "SeriesView" : {
         "type" : "object",
         "properties" : {
@@ -2329,20 +1919,6 @@
           }
         }
       },
-      "Submission" : {
-        "type" : "object",
-        "required" : [ "file_name", "content_base64" ],
-        "properties" : {
-          "file_name" : {
-            "type" : "string",
-            "pattern" : "\\S"
-          },
-          "content_base64" : {
-            "type" : "string",
-            "pattern" : "\\S"
-          }
-        }
-      },
       "SunatEndpoint" : {
         "type" : "object",
         "properties" : {
@@ -2603,24 +2179,317 @@
           }
         }
       },
-      "ApiError" : {
+      "PageAuditEntry" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
         "type" : "object",
-        "description" : "Error de la API (AGENTS.md: `{ kind, message, detail }`).",
+        "required" : [ "items", "limit", "offset" ],
         "properties" : {
-          "kind" : {
-            "type" : "string",
-            "description" : "Código estable del error, p. ej. `not_found`, `invalid_request`, `invalid_document`."
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/AuditEntry"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
           },
-          "message" : {
-            "type" : "string",
-            "description" : "Mensaje para personas, en español."
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
           },
-          "detail" : {
-            "type" : [ "string", "null" ],
-            "description" : "Detalle opcional (p. ej. el campo inválido o el código SUNAT)."
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
           }
-        },
-        "required" : [ "kind", "message", "detail" ]
+        }
+      },
+      "PageCompanyView" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CompanyView"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageConformityView" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ConformityView"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageDataSubjectRequestView" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DataSubjectRequestView"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageDeliveryView" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DeliveryView"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageDocumentView" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DocumentView"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageDraftView" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DraftView"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageEntry" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Entry"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageJobView" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/JobView"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageNotificationView" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/NotificationView"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageReceptionView" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ReceptionView"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageReportView" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ReportView"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
+      },
+      "PageSirePeriodSummary" : {
+        "description" : "Una página de resultados (`?limit=&offset=`). No incluye el total: una página con menos de `limit` elementos es la última.",
+        "type" : "object",
+        "required" : [ "items", "limit", "offset" ],
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/SirePeriodSummary"
+            },
+            "description" : "Los elementos de la página, como mucho `limit`."
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Tamaño de página aplicado (por defecto 50, máximo 200)."
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Elementos saltados antes de esta página."
+          }
+        }
       }
     },
     "securitySchemes" : {
@@ -2684,128 +2553,6 @@
         "security" : [ {
           "bearer" : [ ]
         } ]
-      }
-    },
-    "/api/v1/ose/documents" : {
-      "post" : {
-        "operationId" : "submitOseDocument",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/Submission"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "El CDR-OSE del comprobante.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/CdrResult"
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "Bad Request"
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "summary" : "Submit",
-        "tags" : [ "Ose Rest Resource" ]
-      }
-    },
-    "/api/v1/ose/documents/{ruc}-{tipo}-{serie}-{numero}/cdr" : {
-      "get" : {
-        "operationId" : "getOseCdr",
-        "parameters" : [ {
-          "name" : "numero",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        }, {
-          "name" : "ruc",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "name" : "serie",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "name" : "tipo",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "El CDR-OSE (ZIP).",
-            "content" : {
-              "application/zip" : {
-                "schema" : {
-                  "format" : "binary",
-                  "type" : "string"
-                }
-              }
-            }
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "summary" : "Cdr",
-        "tags" : [ "Ose Rest Resource" ]
       }
     },
     "/api/v1/partners" : {
@@ -3330,6 +3077,7 @@
     "/api/v1/public/lago/webhooks" : {
       "post" : {
         "operationId" : "receiveLagoWebhook",
+        "tags" : [ "Webhook" ],
         "parameters" : [ {
           "name" : "X-Lago-Signature",
           "in" : "header",
@@ -3373,8 +3121,7 @@
             }
           }
         },
-        "summary" : "Receive",
-        "tags" : [ "Webhook" ]
+        "summary" : "Receive"
       }
     },
     "/api/v1/public/lookup" : {
@@ -3426,58 +3173,6 @@
           }
         },
         "summary" : "Lookup",
-        "tags" : [ "Public Lookup Resource" ]
-      }
-    },
-    "/api/v1/public/lookup/ose" : {
-      "post" : {
-        "operationId" : "lookupOseDocument",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/OseLookupRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/OseLookupResult"
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "Bad Request"
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "summary" : "Ose",
         "tags" : [ "Public Lookup Resource" ]
       }
     },
@@ -7080,137 +6775,6 @@
         },
         "summary" : "File",
         "tags" : [ "Report Resource" ],
-        "security" : [ {
-          "bearer" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/tenants/{tenantId}/companies/{companyId}/route" : {
-      "put" : {
-        "operationId" : "setRoute",
-        "parameters" : [ {
-          "name" : "companyId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "$ref" : "#/components/schemas/UUID"
-          }
-        }, {
-          "name" : "tenantId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "$ref" : "#/components/schemas/UUID"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/RouteChange"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/RouteView"
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "Bad Request"
-          },
-          "401" : {
-            "description" : "Sin token o con un token inválido (sin cuerpo)."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "summary" : "Set",
-        "tags" : [ "Route Resource" ],
-        "security" : [ {
-          "bearer" : [ ]
-        } ]
-      },
-      "get" : {
-        "operationId" : "getRoute",
-        "parameters" : [ {
-          "name" : "companyId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "$ref" : "#/components/schemas/UUID"
-          }
-        }, {
-          "name" : "tenantId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "$ref" : "#/components/schemas/UUID"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/RouteView"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Sin token o con un token inválido (sin cuerpo)."
-          },
-          "4XX" : {
-            "description" : "Error de la solicitud: `kind` estable, `message` en español.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "5XX" : {
-            "description" : "Error del servicio (p. ej. 502 cuando falla el motor).",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "summary" : "Get",
-        "tags" : [ "Route Resource" ],
         "security" : [ {
           "bearer" : [ ]
         } ]
@@ -11689,94 +11253,21 @@
           "bearer" : [ ]
         } ]
       }
-    },
-    "/ol-ti-itcpfegem/billService" : {
-      "post" : {
-        "operationId" : "oseSoapBillServiceSunatPath",
-        "requestBody" : {
-          "content" : {
-            "text/xml" : {
-              "schema" : {
-                "type" : "string",
-                "format" : "binary"
-              }
-            },
-            "application/soap+xml" : {
-              "schema" : {
-                "type" : "string",
-                "format" : "binary"
-              }
-            },
-            "application/xml" : {
-              "schema" : {
-                "type" : "string",
-                "format" : "binary"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "text/xml" : { }
-            }
-          }
-        },
-        "summary" : "Handle",
-        "tags" : [ "Ose Soap Sunat Path" ]
-      }
-    },
-    "/ose/billService" : {
-      "post" : {
-        "operationId" : "oseSoapBillService",
-        "requestBody" : {
-          "content" : {
-            "text/xml" : {
-              "schema" : {
-                "type" : "string",
-                "format" : "binary"
-              }
-            },
-            "application/soap+xml" : {
-              "schema" : {
-                "type" : "string",
-                "format" : "binary"
-              }
-            },
-            "application/xml" : {
-              "schema" : {
-                "type" : "string",
-                "format" : "binary"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "text/xml" : { }
-            }
-          }
-        },
-        "summary" : "Handle",
-        "tags" : [ "Ose Soap Resource" ]
-      }
     }
   },
-  "info" : {
-    "title" : "xhandler-service API",
-    "version" : "v1",
-    "description" : "Comprobantes electrónicos SUNAT: emisión, envío, entrega y consulta."
-  },
+  "tags" : [ {
+    "name" : "Webhook"
+  } ],
   "servers" : [ {
     "url" : "http://localhost:8080",
     "description" : "Auto generated value"
   }, {
     "url" : "http://0.0.0.0:8080",
     "description" : "Auto generated value"
-  } ]
+  } ],
+  "info" : {
+    "title" : "xhandler-service API",
+    "version" : "v1",
+    "description" : "Comprobantes electrónicos SUNAT: emisión, envío, entrega y consulta."
+  }
 }

@@ -21,10 +21,7 @@ import { SunatEnvLabel } from "@app/components/SunatEnvLabel";
 import { TableEmptyState } from "@app/components/TableEmptyState";
 import { useNotifications } from "@app/hooks/useNotifications";
 import type { XhandlerAxiosError } from "@app/queries/utils/openapiErrorTypes";
-import {
-  useAdminCompanySendingMutation,
-  useAdminSetOseObligatedMutation,
-} from "@app/queries/xhandler-admin/tenants";
+import { useAdminCompanySendingMutation } from "@app/queries/xhandler-admin/tenants";
 import { getMutationErrorMessage } from "@app/utils/apiError";
 import type { DataViewTh } from "@app/utils/dataViewTypes";
 
@@ -32,7 +29,6 @@ import {
   type CompanyAction,
   companyActionConfirmation,
   EMISSION_MODE_LABELS,
-  SUBMISSION_ROUTE_LABELS,
 } from "./companyActions";
 
 interface ITenantCompaniesPanelProps {
@@ -89,35 +85,10 @@ export const TenantCompaniesPanel: React.FC<ITenantCompaniesPanelProps> = ({
         }),
       }),
   });
-  const oseObligated = useAdminSetOseObligatedMutation(tenantId, {
-    onSuccess: (_data, { companyId, oseObligated: obligated }) =>
-      addNotification({
-        variant: "success",
-        title: obligated
-          ? `${nameOf(companyId)} queda obligada a usar un OSE`
-          : `${nameOf(companyId)} ya no está obligada a usar un OSE`,
-      }),
-    onError: (err) =>
-      addNotification({
-        variant: "danger",
-        ...getMutationErrorMessage({
-          error: err,
-          fallback: "No se pudo cambiar la obligación de OSE",
-        }),
-      }),
-  });
-
   const run = ({ company, action }: ICompanyActionTarget) => {
     const companyId = company.id ?? "";
     const close = { onSuccess: () => setTarget(null) };
-    if (action === "hold" || action === "release") {
-      sending.mutate({ companyId, hold: action === "hold" }, close);
-    } else {
-      oseObligated.mutate(
-        { companyId, oseObligated: action === "obligate" },
-        close,
-      );
-    }
+    sending.mutate({ companyId, hold: action === "hold" }, close);
   };
 
   const actionsFor = (company: AdminCompany): IAction[] => [
@@ -130,15 +101,6 @@ export const TenantCompaniesPanel: React.FC<ITenantCompaniesPanelProps> = ({
           title: "Pausar envíos",
           onClick: () => setTarget({ company, action: "hold" }),
         },
-    company.ose_obligated
-      ? {
-          title: "Quitar obligación de OSE",
-          onClick: () => setTarget({ company, action: "unobligate" }),
-        }
-      : {
-          title: "Marcar como obligada a OSE",
-          onClick: () => setTarget({ company, action: "obligate" }),
-        },
   ];
 
   const columns: DataViewTh[] = [
@@ -146,8 +108,7 @@ export const TenantCompaniesPanel: React.FC<ITenantCompaniesPanelProps> = ({
     { cell: "Razón social", props: { width: 30 } },
     { cell: "Ambiente", props: { width: 10 } },
     { cell: "Modo", props: { width: 10 } },
-    { cell: "Envío", props: { width: 10 } },
-    { cell: "Estado", props: { width: 25 } },
+    { cell: "Estado", props: { width: 35 } },
     { cell: "" },
   ];
 
@@ -167,12 +128,6 @@ export const TenantCompaniesPanel: React.FC<ITenantCompaniesPanelProps> = ({
           "-",
       },
       {
-        cell:
-          SUBMISSION_ROUTE_LABELS[company.submission_route ?? ""] ??
-          company.submission_route ??
-          "-",
-      },
-      {
         cell: (
           <LabelGroup>
             <Label isCompact color={company.ruc_verified_at ? "green" : "grey"}>
@@ -181,11 +136,6 @@ export const TenantCompaniesPanel: React.FC<ITenantCompaniesPanelProps> = ({
             {company.sending_paused ? (
               <Label isCompact color="orange">
                 Envíos pausados
-              </Label>
-            ) : null}
-            {company.ose_obligated ? (
-              <Label isCompact color="purple">
-                Obligada a OSE
               </Label>
             ) : null}
           </LabelGroup>
@@ -264,7 +214,7 @@ export const TenantCompaniesPanel: React.FC<ITenantCompaniesPanelProps> = ({
           cancelLabel="Volver"
           confirmVariant="primary"
           titleIconVariant="warning"
-          isConfirming={sending.isPending || oseObligated.isPending}
+          isConfirming={sending.isPending}
           onConfirm={() => run(target)}
           onCancel={() => setTarget(null)}
         />
